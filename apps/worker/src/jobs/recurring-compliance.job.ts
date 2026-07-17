@@ -1,9 +1,38 @@
+export interface RecurringRequirement {
+  id: string;
+  name: string;
+  nextDueAt: Date;
+  leadTimeDays: number;
+  active: boolean;
+}
+
+export interface GeneratedTask {
+  requirementId: string;
+  title: string;
+  dueAt: Date;
+  sourceType: "COMPLIANCE";
+}
+
+export function generateComplianceTasks(
+  requirements: RecurringRequirement[],
+  now = new Date()
+): GeneratedTask[] {
+  return requirements
+    .filter((requirement) => requirement.active)
+    .filter((requirement) => {
+      const leadTime = requirement.leadTimeDays * 24 * 60 * 60 * 1000;
+      return requirement.nextDueAt.getTime() - now.getTime() <= leadTime;
+    })
+    .map((requirement) => ({
+      requirementId: requirement.id,
+      title: requirement.name,
+      dueAt: requirement.nextDueAt,
+      sourceType: "COMPLIANCE" as const
+    }));
+}
+
 export async function runRecurringComplianceJob() {
-  // Future behavior:
-  // 1. Load active compliance requirements.
-  // 2. Evaluate recurrence rules.
-  // 3. Create upcoming tasks.
-  // 4. Escalate overdue items.
-  // 5. Record an audit event.
-  console.log("Recurring compliance job completed");
+  // Database repositories will replace this empty collection when persistence is connected.
+  const generatedTasks = generateComplianceTasks([]);
+  console.log(`Recurring compliance job completed. Generated ${generatedTasks.length} tasks.`);
 }

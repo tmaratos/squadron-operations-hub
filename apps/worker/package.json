@@ -6,7 +6,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit",
     "lint": "echo \"Configure ESLint\"",
-    "test": "echo \"No tests configured yet\""
+    "test": "echo \"No tests configured yet\"",
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "@squadron/database": "workspace:*",

@@ -1,4 +1,4 @@
-import { CommandDashboard } from "@/modules/command/components/command-dashboard";
+import { CommandDashboard } from "@/modules/command";
 
 export default function HomePage() {
   return <CommandDashboard />;
