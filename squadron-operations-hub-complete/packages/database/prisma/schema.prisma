@@ -1,0 +1,195 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SquadronRole {
+  COMMANDER
+  DEPUTY_COMMANDER
+  ADMINISTRATION
+  PERSONNEL
+  FINANCE
+  LOGISTICS
+  SAFETY
+  AEROSPACE_EDUCATION
+  CADET_PROGRAMS
+  EMERGENCY_SERVICES
+  COMMUNICATIONS
+  IT_SYSTEMS
+  PUBLIC_AFFAIRS
+  RECRUITING_RETENTION
+  MEMBER
+}
+
+enum TaskStatus {
+  OPEN
+  IN_PROGRESS
+  BLOCKED
+  AWAITING_APPROVAL
+  COMPLETED
+  CANCELLED
+}
+
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+model Squadron {
+  id          String   @id @default(cuid())
+  charterCode String   @unique
+  name        String
+  timezone    String   @default("America/New_York")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships           SquadronMembership[]
+  functionalAreas       FunctionalArea[]
+  tasks                 Task[]
+  complianceRequirements ComplianceRequirement[]
+  documents             Document[]
+  discordChannels       DiscordChannel[]
+  auditEvents           AuditEvent[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships SquadronMembership[]
+  assignedTasks Task[] @relation("TaskOwner")
+  auditEvents AuditEvent[] @relation("AuditActor")
+}
+
+model SquadronMembership {
+  id         String       @id @default(cuid())
+  squadronId String
+  userId     String
+  role       SquadronRole
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+
+  squadron Squadron @relation(fields: [squadronId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([squadronId, userId, role])
+  @@index([squadronId])
+  @@index([userId])
+}
+
+model FunctionalArea {
+  id          String   @id @default(cuid())
+  squadronId  String
+  key         String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  squadron Squadron @relation(fields: [squadronId], references: [id], onDelete: Cascade)
+  tasks    Task[]
+
+  @@unique([squadronId, key])
+}
+
+model Task {
+  id               String       @id @default(cuid())
+  squadronId       String
+  functionalAreaId String?
+  ownerUserId      String?
+  title            String
+  description      String?
+  status           TaskStatus   @default(OPEN)
+  priority         TaskPriority @default(NORMAL)
+  dueAt            DateTime?
+  sourceType       String?
+  sourceReference  String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  completedAt      DateTime?
+
+  squadron       Squadron       @relation(fields: [squadronId], references: [id], onDelete: Cascade)
+  functionalArea FunctionalArea? @relation(fields: [functionalAreaId], references: [id])
+  owner           User?          @relation("TaskOwner", fields: [ownerUserId], references: [id])
+
+  @@index([squadronId, status])
+  @@index([ownerUserId])
+  @@index([dueAt])
+}
+
+model ComplianceRequirement {
+  id                String   @id @default(cuid())
+  squadronId        String
+  name              String
+  governingSource   String?
+  responsibleRole   String?
+  recurrenceRule    String?
+  requiredEvidence  Json?
+  approvalAuthority String?
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  squadron Squadron @relation(fields: [squadronId], references: [id], onDelete: Cascade)
+
+  @@index([squadronId, isActive])
+}
+
+model Document {
+  id             String   @id @default(cuid())
+  squadronId     String
+  title          String
+  category       String?
+  currentVersion Int      @default(1)
+  storageKey     String
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  squadron Squadron @relation(fields: [squadronId], references: [id], onDelete: Cascade)
+
+  @@index([squadronId, category])
+}
+
+model DiscordChannel {
+  id          String   @id @default(cuid())
+  squadronId  String
+  guildId     String
+  channelId   String
+  displayName String
+  purpose     String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  squadron Squadron @relation(fields: [squadronId], references: [id], onDelete: Cascade)
+
+  @@unique([squadronId, channelId])
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  squadronId  String
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  squadron Squadron @relation(fields: [squadronId], references: [id], onDelete: Cascade)
+  actor     User?    @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([squadronId, createdAt])
+  @@index([entityType, entityId])
+}
