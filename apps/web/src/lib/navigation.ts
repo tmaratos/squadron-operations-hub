@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   Siren,
   Sparkles,
+  UserCog,
   Users,
   Workflow
 } from "lucide-react";
@@ -79,6 +80,7 @@ export const navigationGroups: NavigationGroup[] = [
 ];
 
 export const utilityNavigation: NavigationItem[] = [
+  { label: "User Administration", href: "/admin/users", icon: UserCog },
   { label: "Notifications", href: "/notifications", icon: Activity },
   { label: "Settings", href: "/settings", icon: Settings }
 ];

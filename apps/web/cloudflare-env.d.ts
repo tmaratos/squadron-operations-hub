@@ -1,0 +1,20 @@
+interface CloudflareEnv {
+  DB: D1Database;
+  APP_NAME: string;
+  APP_URL: string;
+  MAGIC_LINK_TTL_MINUTES?: string;
+  SESSION_TTL_HOURS?: string;
+  BOOTSTRAP_OWNER_EMAILS?: string;
+  BOOTSTRAP_OWNER_PROFILES_JSON?: string;
+  APPROVER_NOTIFICATION_EMAILS?: string;
+  MAILGUN_API_KEY?: string;
+  MAILGUN_DOMAIN?: string;
+  EMAIL_FROM?: string;
+  TURNSTILE_SECRET_KEY?: string;
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY?: string;
+  GOOGLE_SERVICE_ACCOUNT_EMAIL?: string;
+  GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?: string;
+  GOOGLE_SHARED_DRIVE_ID?: string;
+  GOOGLE_ROOT_FOLDER_ID?: string;
+  GOOGLE_DRIVE_MAX_UPLOAD_MB?: string;
+}

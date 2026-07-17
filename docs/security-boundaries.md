@@ -1,12 +1,15 @@
 # Security boundaries
 
-1. Never store CAP passwords.
-2. Never scrape or automate eServices in a way that violates policy.
-3. Keep official member records in official systems.
-4. Store only the minimum local operational data necessary.
-5. Use role-based authorization at both UI and service layers.
-6. Log privileged changes.
-7. Encrypt secrets and sensitive configuration.
-8. Require explicit channel mapping for Discord.
-9. Do not expose cadet-sensitive information in Discord summaries.
-10. Keep personal data segmented by squadron and user authorization.
+1. Do not store CAP or eServices passwords.
+2. Do not scrape or automate eServices without an officially approved interface.
+3. Do not store Google account passwords.
+4. Keep Google service-account keys and email-provider API keys in Cloudflare secrets.
+5. Require manual account approval.
+6. Use single-use, expiring magic links.
+7. Hash magic-link and session tokens before database storage.
+8. Use secure, HTTP-only, SameSite cookies in production.
+9. Audit approvals, role changes, suspensions, sign-ins, and document modifications.
+10. Prevent removal of the final system owner and final account approver.
+11. Store only the minimum local operational data required.
+12. Keep sensitive cadet data out of Discord summaries and public notifications.
+13. Direct Google Drive changes remain governed by Google because existing senior members also have direct Shared Drive access.

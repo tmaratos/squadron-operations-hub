@@ -12,11 +12,11 @@ src/modules/<module-name>/
 │   └── <module>.errors.ts
 ├── repositories/
 │   ├── <module>.repository.ts
-│   └── prisma-<module>.repository.ts
+│   └── d1-<module>.repository.ts
 ├── schemas/
 ├── services/
 ├── tests/
 └── index.ts
 ```
 
-Not every folder must exist immediately. Add folders when the module has behavior that belongs there.
+Shared D1 and integration code belongs under `src/lib`. Not every folder must exist immediately; add a layer only when the module has behavior that belongs there.

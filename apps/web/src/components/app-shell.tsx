@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 import { Bell, ChevronDown, Menu, MessageSquareText, Plus, Search, X } from "lucide-react";
 import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
+import type { AuthenticatedUser } from "@/lib/auth/types";
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, user }: { children: ReactNode; user: AuthenticatedUser }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
@@ -55,7 +56,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar__footer">
-          {utilityNavigation.map((item) => {
+          {utilityNavigation.filter((item) => item.href !== "/admin/users" || ["SYSTEM_OWNER", "ACCOUNT_APPROVER"].includes(user.globalRole)).map((item) => {
             const Icon = item.icon;
             return (
               <Link key={item.href} href={item.href} className="nav-item" onClick={() => setMobileOpen(false)}>
@@ -64,6 +65,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+          <form action="/api/auth/logout" method="post" className="sidebar-logout">
+            <button type="submit" className="button button--ghost">Sign out</button>
+          </form>
           <small>Independent operational support tool</small>
         </div>
       </aside>
@@ -102,10 +106,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span>7</span>
             </button>
             <button className="profile-button">
-              <span className="profile-button__avatar">TM</span>
+              <span className="profile-button__avatar">{initials(user.fullName)}</span>
               <span className="profile-button__text">
-                <strong>2d Lt. Maratos</strong>
-                <small>Aerospace Education</small>
+                <strong>{user.fullName}</strong>
+                <small>{user.dutyTitle || formatRole(user.globalRole)}</small>
               </span>
               <ChevronDown size={16} />
             </button>
@@ -147,4 +151,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
     </div>
   );
+}
+
+
+function initials(name: string): string {
+  return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function formatRole(role: string): string {
+  return role.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
 }

@@ -1,52 +1,45 @@
 # Architecture
 
-## Why a monorepo
+## Production platform
 
-The project contains multiple independently deployable concerns:
+Squadron Operations Hub runs on Cloudflare rather than a privately owned server.
 
-- Interactive web application
-- Background automation worker
-- Database package
-- Authentication and permissions
-- Discord and communication integrations
-- Shared UI system
-- Audit logging
-- Validation
-- Future mobile or desktop clients
+- Next.js is adapted to Cloudflare Workers with OpenNext.
+- Cloudflare D1 stores authentication, privileges, audit history, and future operational records.
+- A separate scheduled Worker performs maintenance and recurring automation.
+- Google Shared Drive stores squadron documents.
+- Mailgun sends approval and magic-link email.
+- Turnstile can protect public forms.
 
-A monorepo keeps these concerns separate without forcing duplicated types and logic.
+## Trust boundaries
 
-## Modular application structure
+The browser never receives:
 
-Each operational area is a module. Modules may expose:
+- Mailgun API credentials
+- Google service-account credentials
+- D1 bindings
+- Magic-link hashes
+- Session hashes
 
-- Domain types
-- Business rules
-- Application services
-- Data repositories
-- UI components
-- API routes or server actions
-- Validation schemas
-- Tests
+All privileged operations pass through server-side route handlers and are checked against the authenticated D1 user record.
 
-The application shell should not contain functional-area business logic.
+## Authentication lifecycle
 
-## Multi-squadron readiness
+1. Applicant submits an access request.
+2. An account approver reviews the request.
+3. Approval creates or activates the user record.
+4. The user requests a sign-in link.
+5. A random token is emailed; only its SHA-256 hash is stored.
+6. The token is consumed once and creates a hashed session token.
+7. The browser receives an HTTP-only session cookie.
+8. Suspension revokes every active session for the user.
 
-Every operational record is scoped to a `squadronId`. This allows the system to begin with TN-170 but later support other units without redesigning the database.
+## Document lifecycle
 
-## Discord approach
+1. An approved user performs an action in the Documents module.
+2. The app checks the user's global role.
+3. The Worker obtains a short-lived Google access token using the service-account key.
+4. The app performs the Drive API operation with Shared Drive support enabled.
+5. The action is written to D1 audit history.
 
-Discord should be integrated, not embedded.
-
-Supported behaviors:
-
-- Link the staff channel
-- Show permitted recent-message summaries
-- Open the native Discord channel through a direct jump URL
-- Create tasks from messages
-- Post approved announcements
-- Record the Discord message URL as the task's source
-- Maintain role and channel authorization checks
-
-Discord remains the communication platform. Squadron Operations Hub becomes the operational workflow system.
+The Google Drive interface is not embedded in the app.

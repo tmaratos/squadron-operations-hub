@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "squadron-operations-automation",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-17",
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "squadron-operations-hub",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID"
+    }
+  ],
+  "triggers": {
+    "crons": ["15 9 * * *"]
+  }
+}

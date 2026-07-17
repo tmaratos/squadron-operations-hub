@@ -1,38 +1,46 @@
-# Implementation Status
+# Implementation status
 
-## Current MVP
+## Implemented and data-backed
 
-The current repository contains a navigable, responsive operations dashboard with seeded demonstration data for every planned staff section.
+- Responsive operations dashboard and module navigation
+- Cloudflare Workers/OpenNext configuration
+- D1 migrations for authentication, audit, tasks, functional areas, duty assignments, and compliance
+- Manual account-request workflow
+- System-owner and account-approver administration
+- Passwordless magic-link authentication
+- Session revocation and succession safeguards
+- Mailgun provider adapter
+- Optional Turnstile verification
+- Google Shared Drive service-account adapter
+- App-native Drive browser and CRUD API
+- Persistent task and suspense board
+- Live command metrics, priorities, deadlines, functional-area readiness, and audited activity
+- Recurring compliance requirement register
+- Scheduled task generation from due compliance requirements
+- Senior-member duty assignments and functional-area ownership
+- Scheduled authentication cleanup
 
-Implemented:
+## Demonstration-data modules
 
-- Responsive application shell and navigation
-- Command dashboard
-- Task board with local interactive task creation and status progression
-- Readiness dashboard
-- Staff, meeting, document, process, finance, logistics, safety, aerospace, cadet program, emergency services, communications, inspection, reporting, calendar, notification, public affairs, recruiting, compliance, and audit pages
-- Quick-add modal
-- Discord-oriented communications workflow design
-- Health API endpoint
-- Web app manifest
-- Expanded Prisma domain schema
-- Worker logic foundations for recurring compliance and Discord synchronization
+- Meetings and calendar
+- Inspections and corrective actions
+- Reports and exports
+- Finance and funding
+- Logistics and inventory
+- Safety incident workflow
+- Aerospace Education planning
+- Cadet Programs planning
+- Emergency Services readiness
+- Communications and Discord
+- Public Affairs
+- Recruiting and retention
 
-## Demonstration Data Boundary
+## Immediate deployment blockers
 
-The pages currently use seeded demonstration data so the entire interface can be evaluated before authentication and database actions are connected.
-
-The next engineering wave should replace module demo records with repository and service calls backed by Prisma.
-
-## Next Wave
-
-1. Authentication and first-run setup
-2. Squadron tenant selection
-3. Prisma migrations and seed data
-4. Task CRUD and audit logging
-5. Staff membership and duty assignments
-6. Compliance recurrence scheduler
-7. Document object storage
-8. Discord OAuth and bot configuration
-9. Notification delivery
-10. Deployment hardening
+- Create the D1 database and replace the Wrangler database IDs
+- Apply both D1 migrations
+- Configure Cloudflare production variables and secrets
+- Configure Mailgun sender details
+- Add the Google service account to the Shared Drive
+- Deploy the web Worker and scheduled Worker
+- Move the custom domain from the temporary GitHub Pages README to the Cloudflare Worker

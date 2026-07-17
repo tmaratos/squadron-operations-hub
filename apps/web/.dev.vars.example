@@ -1,0 +1,21 @@
+APP_URL="http://localhost:3000"
+APP_NAME="Squadron Operations Hub"
+MAGIC_LINK_TTL_MINUTES="15"
+SESSION_TTL_HOURS="12"
+GOOGLE_DRIVE_MAX_UPLOAD_MB="10"
+
+BOOTSTRAP_OWNER_EMAILS="tristan@example.org,mellard@example.org"
+BOOTSTRAP_OWNER_PROFILES_JSON='[{"email":"tristan@example.org","fullName":"Tristan Maratos","dutyTitle":"Aerospace Education Officer"},{"email":"mellard@example.org","fullName":"Steven Mellard","dutyTitle":"Squadron Commander"}]'
+APPROVER_NOTIFICATION_EMAILS="tristan@example.org,mellard@example.org"
+
+MAILGUN_DOMAIN=""
+MAILGUN_API_KEY=""
+EMAIL_FROM="Squadron Operations Hub <access@example.org>"
+
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=""
+TURNSTILE_SECRET_KEY=""
+
+GOOGLE_SERVICE_ACCOUNT_EMAIL=""
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\n...\\n-----END PRIVATE KEY-----\\n"
+GOOGLE_SHARED_DRIVE_ID=""
+GOOGLE_ROOT_FOLDER_ID=""

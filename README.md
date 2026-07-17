@@ -2,503 +2,326 @@
 
 A modular web application for managing the administrative and operational backend of a Civil Air Patrol squadron.
 
-The platform is designed so that one senior member can keep the squadron organized when staffing is limited, while still allowing additional senior members to log in, assume duty assignments, manage their functional areas, and share responsibility as the squadron grows.
+The platform is designed so one senior member can keep the unit organized when staffing is limited, while additional senior members can sign in, take ownership of functional areas, and share responsibility as the squadron grows.
 
-> This project is an independent operational management tool. It does not replace eServices, official CAP systems, or any required Wing or National Headquarters reporting platform.
+> Squadron Operations Hub is an independent operational support tool. It does not replace eServices, official CAP systems, or required Wing or National Headquarters records.
 
----
+## Current architecture
 
-## Purpose
+The production design is intentionally free-tier friendly and does not depend on a privately owned home server.
 
-Squadron Operations Hub centralizes the work that is normally scattered across email, spreadsheets, paper records, messaging platforms, shared drives, and individual members' personal notes.
+```text
+GitHub
+└── Source control and automatic builds
 
-The system is intended to answer five questions at any time:
+Cloudflare Workers
+├── Next.js web application
+├── Server-side API routes
+├── Passwordless authentication
+└── Scheduled maintenance worker
 
-1. What needs to be completed?
-2. Who is responsible for it?
-3. When is it due?
-4. What regulation, policy, or process governs it?
-5. What documentation proves that it was completed?
+Cloudflare D1
+├── Approved users and access requests
+├── Magic-link tokens and sessions
+├── Privileges and functional permissions
+└── Security audit records
 
-The long-term goal is to help squadrons preserve institutional knowledge, reduce administrative burden, improve accountability, and remain operational even when only one or two senior members are actively available.
+Google Shared Drive
+└── TN 170 Command documents and folders
+```
 
----
+## Implemented in this release
 
-## Planned Capabilities
+### Passwordless, manually approved accounts
 
-### Command Center
+- No public automatic account creation
+- New members submit an access request
+- Tristan Maratos, Steven Mellard, or another authorized approver verifies the request
+- Approved users sign in through a single-use email link
+- No passwords are stored
+- Sign-in tokens expire after a configurable period
+- Sessions are revocable and expire automatically
+- Neutral login responses do not reveal whether an email has an account
+- Optional Cloudflare Turnstile protection
 
-- Squadron readiness overview
-- Overdue items
-- Upcoming deadlines
-- Pending approvals
-- Unassigned responsibilities
-- Open risks and blockers
-- Commander action queue
-- Recent squadron activity
-- Customizable dashboard widgets
+### Administrative succession
 
-### Task and Suspense Management
+- Initial owners are bootstrapped through a protected environment variable
+- System owners can promote another approved member to `SYSTEM_OWNER`
+- The final active system owner cannot be removed
+- At least one active account approver must remain
+- Users cannot suspend, archive, or demote their own owner account
+- Suspended users lose active sessions immediately
+- Promotions, demotions, approvals, suspensions, and sign-ins are audited
 
-- Assign tasks to staff members
-- Track status, priority, due dates, and blockers
-- Create recurring operational requirements
-- Escalate overdue items
-- Link tasks to meetings, documents, Discord messages, or compliance requirements
-- Preserve task history and completion evidence
+### Google Shared Drive document interface
 
-### Staff Duty Management
+The frontend does not embed Google Drive. Users work through the application's own Documents page while server-side code performs Drive API operations against the `TN 170 Command` Shared Drive.
 
-- Assign multiple duty positions to one member
-- Create workspaces for each functional area
-- Redistribute responsibilities when additional senior members join
-- Track continuity notes and role handoffs
-- Show unstaffed functional areas
-- Maintain duty-position permissions
+Approved users can:
 
-### Functional Areas
+- Browse folders
+- Search the current folder
+- Create folders
+- Upload files
+- Rename files and folders
+- Download files
+- Open items in Google Drive when needed
+- Move items to Drive trash
 
-The architecture is designed to support independent modules for:
+The Google service account key is stored as a Cloudflare secret and is never sent to the browser or committed to GitHub.
 
-- Command
-- Administration
-- Personnel
-- Finance
+### Existing operations modules
+
+The current interface also includes the first visual and workflow foundation for:
+
+- Live command dashboard backed by D1 task and audit data
+- Persistent tasks and suspenses with assignment, due dates, status changes, and audit history
+- Recurring compliance requirements that generate tasks through the scheduled Worker
+- Senior-member duty assignments and functional-area ownership
+- Calendar and meetings
+- Readiness and inspections
+- Reports
+- Staff management
+- Compliance
+- Process library
+- Finance and funding
 - Logistics
 - Safety
 - Aerospace Education
 - Cadet Programs
 - Emergency Services
-- Communications
-- IT and Systems
+- Communications and Discord
 - Public Affairs
-- Recruiting and Retention
-- Professional Development
-- Transportation
-- Testing
-- Historian
-- Supply
-- Additional custom staff sections
+- Recruiting and retention
+- Notifications
+- Audit history
 
-### Compliance and Readiness
+The command dashboard, tasks, recurring compliance, staff assignments, account administration, audit history, and document integration are now backed by Cloudflare D1 or Google Drive. The remaining specialist modules still use demonstration records and will move to D1 one functional area at a time.
 
-- Track recurring requirements
-- Associate requirements with regulations and policies
-- Define required evidence
-- Track expiration dates
-- Generate corrective actions
-- Maintain inspection checklists
-- Calculate readiness by functional area
-- Preserve an audit trail
-
-### Documents and Process Library
-
-- Store procedures, operating instructions, templates, and continuity documents
-- Maintain current and superseded versions
-- Track document owners and review dates
-- Link documents to tasks and requirements
-- Create step-by-step process guides
-- Preserve screenshots, examples, and common mistakes
-- Reduce dependency on one member's memory
-
-### Meetings
-
-- Build staff meeting agendas
-- Record decisions
-- Assign action items
-- Track unresolved discussion items
-- Link decisions to projects, tasks, and documents
-- Generate meeting summaries
-
-### Finance and Funding
-
-This module will support the workflow surrounding official finance processes without replacing required CAP financial systems.
-
-Planned features include:
-
-- Budget planning
-- Purchase requests
-- Approval tracking
-- Reimbursement status
-- Donor relationship tracking
-- Grant opportunities
-- Sponsorship pipelines
-- Fundraising projects
-- Vendor records
-- Supporting documentation
-
-### Logistics and Inventory
-
-- Equipment inventory
-- Assigned equipment
-- Low-stock alerts
-- Inspection dates
-- Maintenance records
-- Supply requests
-- Storage locations
-- Chain-of-custody history
-- Replacement planning
-
-### Discord Integration
-
-Discord will be integrated as a communication source, not embedded as the primary application interface.
-
-Planned functionality includes:
-
-- Link approved Discord channels
-- Display authorized recent-message summaries
-- Open the native Discord channel through direct links
-- Create tasks from Discord messages
-- Attach Discord message links as task sources
-- Post approved announcements
-- Route operational notifications to designated channels
-- Maintain authorization and channel-access boundaries
-
-### Notifications and Automation
-
-A separate worker service will handle:
-
-- Recurring task generation
-- Due-date reminders
-- Overdue escalation
-- Expiring-document alerts
-- Training renewal notices
-- Inventory alerts
-- Scheduled reports
-- Discord synchronization
-- Future email and calendar integrations
-
----
-
-## Technology Stack
-
-### Web Application
-
-- Next.js
-- React
-- TypeScript
-
-### Data and Validation
-
-- PostgreSQL
-- Prisma ORM
-- Zod
-
-### Repository Architecture
-
-- pnpm workspaces
-- Turborepo
-- Feature-based modules
-- Shared internal packages
-
-### Integrations
-
-- Discord API
-- Future email integration
-- Future calendar integration
-- Future notification adapters
-
-### Deployment
-
-The project is intended to support self-hosting through Docker, with the web application, PostgreSQL database, worker service, and supporting infrastructure deployed together.
-
----
-
-## Repository Structure
+## Repository structure
 
 ```text
 squadron-operations-hub/
 ├── apps/
 │   ├── web/
-│   │   └── src/
-│   │       ├── app/
-│   │       └── modules/
-│   │           ├── command/
-│   │           ├── tasks/
-│   │           ├── compliance/
-│   │           ├── staff/
-│   │           ├── meetings/
-│   │           ├── documents/
-│   │           ├── process-library/
-│   │           ├── finance/
-│   │           ├── logistics/
-│   │           ├── safety/
-│   │           ├── aerospace-education/
-│   │           ├── cadet-programs/
-│   │           ├── emergency-services/
-│   │           ├── communications/
-│   │           ├── inspections/
-│   │           ├── reports/
-│   │           ├── calendar/
-│   │           └── notifications/
+│   │   ├── migrations/
+│   │   ├── public/
+│   │   ├── src/
+│   │   │   ├── app/
+│   │   │   ├── components/
+│   │   │   ├── lib/
+│   │   │   └── modules/
+│   │   ├── open-next.config.ts
+│   │   └── wrangler.jsonc
 │   └── worker/
-│       └── src/jobs/
-├── packages/
-│   ├── database/
-│   ├── auth/
-│   ├── ui/
-│   ├── validation/
-│   ├── audit/
-│   ├── integrations/
-│   └── config/
+│       ├── src/
+│       └── wrangler.jsonc
 ├── docs/
-├── docker-compose.yml
+├── packages/
 ├── package.json
-├── pnpm-workspace.yaml
-└── turbo.json
+└── pnpm-workspace.yaml
 ```
 
----
+## Technology stack
 
-## Architecture Principles
+- Next.js 15
+- React 19
+- TypeScript
+- OpenNext for Cloudflare
+- Cloudflare Workers
+- Cloudflare D1
+- Cloudflare Turnstile
+- Google Drive API
+- Mailgun transactional email
+- pnpm workspaces
 
-### Modular by Functional Area
-
-Each operational area is implemented as an independent feature module. Modules may contain their own:
-
-- Components
-- Domain types
-- Business rules
-- Services
-- Repositories
-- Validation schemas
-- Server actions
-- Tests
-
-This prevents the application from becoming one large, tightly coupled codebase.
-
-### Multi-Squadron Ready
-
-Operational records are scoped by `squadronId`. The system can begin with a single squadron and later expand to support additional units without redesigning the entire database.
-
-### Role-Based Access Control
-
-Users will receive access based on their squadron membership and assigned responsibilities. Sensitive functions will be protected at both the user-interface and service layers.
-
-### Auditability
-
-Privileged actions and significant changes will be logged with:
-
-- Acting user
-- Timestamp
-- Entity affected
-- Action performed
-- Supporting metadata
-
-### Integration Isolation
-
-External services such as Discord, email, and calendar platforms are accessed through adapters. Business logic should not depend directly on any one provider.
-
-### Operational Support, Not Official-System Replacement
-
-The application may track workflow around official requirements, but official CAP data and required records must remain in approved systems.
-
----
-
-## Local Development
+## Local development
 
 ### Prerequisites
 
-Install:
-
 - Node.js 22 or newer
 - pnpm
-- Docker Desktop
 - Git
+- A Cloudflare account
 
-### Clone the Repository
+### Install
 
 ```bash
 git clone https://github.com/tmaratos/squadron-operations-hub.git
 cd squadron-operations-hub
-```
-
-### Install Dependencies
-
-```bash
+corepack enable
 pnpm install
 ```
 
-### Configure Environment Variables
+### Create local configuration
 
-Copy the example environment file:
-
-```bash
-cp .env.example .env
-```
-
-Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Update the values in `.env`.
-
-### Start PostgreSQL and Redis
+Copy the example secrets file:
 
 ```bash
-docker compose up -d
+cp apps/web/.dev.vars.example apps/web/.dev.vars
 ```
 
-### Generate the Prisma Client
+Update the local values. Never commit `.dev.vars`.
+
+### Configure the local D1 database
+
+Replace `REPLACE_WITH_D1_DATABASE_ID` in both Wrangler configuration files after creating the production D1 database. Local emulation will still use a local database when running through Wrangler.
+
+Apply migrations locally:
 
 ```bash
-pnpm --filter @squadron/database generate
+pnpm db:migrate:local
 ```
 
-### Run Database Migrations
-
-```bash
-pnpm --filter @squadron/database migrate
-```
-
-### Start Development Services
+### Run the Next.js development server
 
 ```bash
 pnpm dev
 ```
 
-The web application will normally be available at:
+Open:
 
 ```text
 http://localhost:3000
 ```
 
----
+When Mailgun is not configured and the app is not running in production, the login form returns a development-only sign-in link so the authentication flow can be tested locally.
 
-## Environment Variables
+### Preview in the Cloudflare Workers runtime
 
-```env
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/squadron_ops
-
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=http://localhost:3000
-
-DISCORD_BOT_TOKEN=
-DISCORD_APPLICATION_ID=
-DISCORD_GUILD_ID=
-DISCORD_STAFF_CHANNEL_ID=
-
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASSWORD=
-EMAIL_FROM=
+```bash
+pnpm preview
 ```
 
-Never commit real credentials, tokens, private member information, or production environment files.
+## Cloudflare deployment
 
----
+### 1. Create D1
 
-## Development Roadmap
+Create a D1 database named:
 
-### Phase 1: Operational Core
+```text
+squadron-operations-hub
+```
 
-- [ ] Authentication and initial setup
-- [ ] Squadron profile
-- [ ] User memberships
-- [ ] Duty-position assignments
-- [ ] Command dashboard
-- [ ] Task and suspense tracking
-- [ ] Functional-area registry
-- [ ] Audit logging
-- [ ] Recurring requirements
-- [ ] Discord channel linking
+Place its database ID in:
 
-### Phase 2: Continuity and Administration
+- `apps/web/wrangler.jsonc`
+- `apps/worker/wrangler.jsonc`
 
-- [ ] Process library
-- [ ] Document management
-- [ ] Staff handoff notes
-- [ ] Meeting agendas
-- [ ] Decision log
-- [ ] Approval workflows
-- [ ] Notification center
-- [ ] Calendar integration
-- [ ] Contact directory
+Apply the migration remotely:
 
-### Phase 3: Functional-Area Modules
+```bash
+pnpm db:migrate:remote
+```
 
-- [ ] Finance and funding
-- [ ] Logistics and inventory
-- [ ] Safety
-- [ ] Aerospace Education
-- [ ] Cadet Programs
-- [ ] Emergency Services
-- [ ] Communications
-- [ ] IT and Systems
-- [ ] Public Affairs
-- [ ] Recruiting and Retention
+### 2. Configure production variables
 
-### Phase 4: Readiness and Automation
+Set these as normal Worker variables:
 
-- [ ] Self-inspection checklists
-- [ ] Readiness scoring
-- [ ] Corrective-action tracking
-- [ ] Scheduled reports
-- [ ] Escalation rules
-- [ ] Automation recipes
-- [ ] Custom dashboards
+```text
+APP_URL
+APP_NAME
+MAGIC_LINK_TTL_MINUTES
+SESSION_TTL_HOURS
+BOOTSTRAP_OWNER_EMAILS
+BOOTSTRAP_OWNER_PROFILES_JSON
+APPROVER_NOTIFICATION_EMAILS
+MAILGUN_DOMAIN
+EMAIL_FROM
+NEXT_PUBLIC_TURNSTILE_SITE_KEY
+GOOGLE_SERVICE_ACCOUNT_EMAIL
+GOOGLE_SHARED_DRIVE_ID
+GOOGLE_ROOT_FOLDER_ID
+GOOGLE_DRIVE_MAX_UPLOAD_MB
+```
 
-### Phase 5: Platform Expansion
+Set these as encrypted Cloudflare secrets:
 
-- [ ] Multiple squadrons
-- [ ] Group and Wing views
-- [ ] Reusable process templates
-- [ ] Progressive web app support
-- [ ] Mobile optimization
-- [ ] Optional operational assistant
+```text
+MAILGUN_API_KEY
+TURNSTILE_SECRET_KEY
+GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+```
 
----
+`BOOTSTRAP_OWNER_EMAILS` contains the initial owner addresses. `BOOTSTRAP_OWNER_PROFILES_JSON` can provide their names and duty titles. The first time either address requests a sign-in link, the app creates the approved owner record automatically.
 
-## Security Boundaries
+### 3. Deploy the web application
 
-- Do not store CAP or eServices passwords.
-- Do not automate official systems in violation of policy.
-- Store only the minimum operational data required.
-- Protect sensitive member information.
-- Use role-based authorization.
-- Log privileged actions.
-- Encrypt production secrets.
-- Explicitly authorize Discord channel mappings.
-- Keep cadet-sensitive data out of Discord summaries.
-- Separate data by squadron and user authorization.
+```bash
+pnpm deploy
+```
 
----
+### 4. Deploy the scheduled worker
 
-## Project Status
+```bash
+pnpm deploy:worker
+```
 
-The repository now contains a functional, responsive MVP interface covering the full planned operational structure.
+The scheduled worker removes expired authentication tokens and sessions each day and generates task records from active recurring compliance requirements.
 
-Implemented in the current MVP:
+### 5. Connect the domain
 
-- Responsive command-center shell and navigation
-- Command dashboard with readiness, deadlines, activity, notifications, and quick actions
-- Interactive task board with local task creation and status progression
-- Readiness and functional-area scoring views
-- Staff, meetings, documents, processes, finance, logistics, safety, aerospace education, cadet programs, emergency services, communications, inspections, reports, calendar, notifications, public affairs, recruiting, compliance, and audit modules
-- Quick-add workflow launcher
-- Discord REST integration adapter
-- Health API endpoint and web-app manifest
-- Expanded Prisma domain schema
-- Docker definitions for the web app, worker, PostgreSQL, and Redis
-- Worker foundations for recurring compliance and Discord synchronization
+After the Worker is verified at its `workers.dev` address, connect:
 
-The current screens use seeded demonstration data so the complete workflow can be reviewed before authentication and database actions are connected. See `docs/implementation-status.md` for the next engineering wave.
+```text
+tn170adminhub.tristanmaratos.com
+```
 
----
+The existing GitHub Pages deployment is only a temporary README landing page and should be removed after the Worker custom domain is active.
+
+## Google Shared Drive setup
+
+1. Create a Google Cloud project.
+2. Enable the Google Drive API.
+3. Create a service account.
+4. Generate a JSON key.
+5. Add the service account email to `TN 170 Command` as **Content manager**.
+6. Store the service account email and private key in Cloudflare.
+7. Add the Shared Drive ID to `GOOGLE_SHARED_DRIVE_ID`.
+8. Optionally set `GOOGLE_ROOT_FOLDER_ID` to restrict the app to one folder inside the Shared Drive.
+
+All Drive operations are performed server-side. The private key must never be placed in a public variable or frontend file.
+
+## Roles
+
+| Role | Purpose |
+|---|---|
+| `SYSTEM_OWNER` | Full control, succession, integrations, account approval |
+| `ACCOUNT_APPROVER` | Approve, reject, suspend, and reactivate accounts |
+| `ADMINISTRATOR` | Broad operational administration without owner succession powers |
+| `STAFF_MEMBER` | Normal senior-member operational access |
+| `READ_ONLY` | View access without document modification |
+
+Functional-area permissions are stored separately so future releases can restrict finance, logistics, safety, and other modules without changing a user's global role.
+
+## Security boundaries
+
+- No CAP or eServices passwords are stored.
+- No Google password is stored.
+- Google Drive credentials stay server-side.
+- Login links are single-use and short-lived.
+- Session cookies are HTTP-only, secure in production, and SameSite=Lax.
+- Privileged changes are written to an audit log.
+- The final owner and final approver are protected from removal.
+- Real cadet or sensitive squadron information should not be entered until the remaining operational modules are connected to D1 and reviewed for their specific data-handling requirements.
+
+## Next engineering wave
+
+1. Deploy the authentication and D1 foundation to Cloudflare.
+2. Connect Mailgun and Turnstile.
+3. Add the Google service account to `TN 170 Command`.
+4. Verify document CRUD through the app.
+5. Replace mock Tasks and Suspenses with D1-backed CRUD.
+6. Connect Discord channels and create tasks from Discord messages.
+7. Move meetings, compliance, readiness, finance, and logistics into D1.
+8. Revisit an official eServices integration only after CAP responds to ticket `#110898`.
 
 ## Maintainer
 
-**Tristan Maratos**
-
+**Tristan Maratos**  
 GitHub: `@tmaratos`
-
----
 
 ## License
 
-No license has been selected yet.
-
-Until a license is added, all rights are reserved by the project owner.
+No license has been selected. All rights are reserved by the project owner until a license is added.

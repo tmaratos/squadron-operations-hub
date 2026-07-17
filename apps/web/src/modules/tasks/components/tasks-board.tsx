@@ -1,91 +1,135 @@
 "use client";
 
-import { useMemo, useState, type ChangeEvent } from "react";
-import { Filter, Plus, Search } from "lucide-react";
+import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { AlertCircle, Filter, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import { StatusPill } from "@/components/status-pill";
-import { priorityItems } from "@/lib/mock-data";
-import type { PriorityItem, Tone } from "@/lib/types";
+import type { FunctionalAreaRecord, OperationalTask, TaskPriority, TaskStatus } from "@/lib/operations/types";
+import type { Tone } from "@/lib/types";
 
-const columns = ["Open", "In Progress", "Awaiting Approval", "Completed"] as const;
-type Column = (typeof columns)[number];
-
-interface BoardTask extends PriorityItem {
-  column: Column;
-}
-
-const initialTasks: BoardTask[] = [
-  ...priorityItems.map((item, index) => ({ ...item, column: index === 2 ? "In Progress" as const : index === 0 ? "Awaiting Approval" as const : "Open" as const })),
-  {
-    id: "task-discord-policy",
-    title: "Document Discord onboarding process",
-    subtitle: "Continuity procedure",
-    category: "Communications",
-    due: "Jul 22, 2026",
-    dueDetail: "5 days",
-    status: "In Progress",
-    tone: "info",
-    assignedTo: "2d Lt. Maratos",
-    column: "In Progress"
-  },
-  {
-    id: "task-complete-1",
-    title: "Publish July squadron calendar",
-    subtitle: "Communications",
-    category: "Administration",
-    due: "Jul 10, 2026",
-    dueDetail: "Completed Jul 9",
-    status: "Completed",
-    tone: "success",
-    assignedTo: "2d Lt. Maratos",
-    column: "Completed"
-  }
+const columns: Array<{ status: TaskStatus; label: string }> = [
+  { status: "OPEN", label: "Open" },
+  { status: "IN_PROGRESS", label: "In Progress" },
+  { status: "BLOCKED", label: "Blocked" },
+  { status: "AWAITING_APPROVAL", label: "Awaiting Approval" },
+  { status: "COMPLETED", label: "Completed" }
 ];
 
-export function TasksBoard() {
-  const [tasks, setTasks] = useState<BoardTask[]>(initialTasks);
+const statusSequence: TaskStatus[] = ["OPEN", "IN_PROGRESS", "AWAITING_APPROVAL", "COMPLETED"];
+
+interface UserOption {
+  id: string;
+  fullName: string;
+  dutyTitle: string | null;
+}
+
+export function TasksBoard({
+  initialTasks,
+  functionalAreas,
+  users,
+  canEdit,
+  canDelete
+}: {
+  initialTasks: OperationalTask[];
+  functionalAreas: FunctionalAreaRecord[];
+  users: UserOption[];
+  canEdit: boolean;
+  canDelete: boolean;
+}) {
+  const [tasks, setTasks] = useState(initialTasks);
   const [query, setQuery] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [notice, setNotice] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
 
   const visibleTasks = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return tasks;
-    return tasks.filter((task) => [task.title, task.category, task.assignedTo].some((value) => value.toLowerCase().includes(normalized)));
+    if (!normalized) return tasks.filter((task) => task.status !== "CANCELLED");
+    return tasks.filter((task) => {
+      if (task.status === "CANCELLED") return false;
+      return [task.title, task.description ?? "", task.functionalAreaName, task.ownerName ?? "Unassigned", task.priority]
+        .some((value) => value.toLowerCase().includes(normalized));
+    });
   }, [query, tasks]);
 
-  function addTask(formData: FormData) {
-    const title = String(formData.get("title") ?? "").trim();
-    if (!title) return;
-    const category = String(formData.get("category") ?? "Command");
-    const assignedTo = String(formData.get("owner") ?? "Unassigned");
-    const tone: Tone = "neutral";
-    setTasks((current) => [
-      {
-        id: crypto.randomUUID(),
-        title,
-        subtitle: "Manually created",
-        category,
-        due: String(formData.get("due") || "No due date"),
-        dueDetail: "New task",
-        status: "Open",
-        tone,
-        assignedTo,
-        column: "Open"
-      },
-      ...current
-    ]);
-    setShowForm(false);
+  const activeTasks = tasks.filter((task) => !["COMPLETED", "CANCELLED"].includes(task.status));
+  const overdue = activeTasks.filter((task) => task.dueOn && task.dueOn < today()).length;
+
+  async function addTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!canEdit || creating) return;
+    setCreating(true);
+    setNotice(null);
+
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    try {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: String(formData.get("title") ?? ""),
+          description: String(formData.get("description") ?? "") || null,
+          priority: String(formData.get("priority") ?? "NORMAL"),
+          functionalAreaKey: String(formData.get("functionalAreaKey") ?? "command"),
+          ownerUserId: String(formData.get("ownerUserId") ?? "") || null,
+          dueOn: String(formData.get("dueOn") ?? "") || null,
+          requiresApproval: formData.get("requiresApproval") === "on"
+        })
+      });
+      const payload = await response.json() as { task?: OperationalTask; message?: string };
+      if (!response.ok || !payload.task) throw new Error(payload.message || "The task could not be created.");
+      setTasks((current) => [payload.task!, ...current]);
+      form.reset();
+      setShowForm(false);
+      setNotice({ tone: "success", message: payload.message || "Task created." });
+    } catch (error) {
+      setNotice({ tone: "danger", message: error instanceof Error ? error.message : "The task could not be created." });
+    } finally {
+      setCreating(false);
+    }
   }
 
-  function advanceTask(taskId: string) {
-    setTasks((current) => current.map((task) => {
-      if (task.id !== taskId) return task;
-      const currentIndex = columns.indexOf(task.column);
-      const next = columns[Math.min(currentIndex + 1, columns.length - 1)];
-      return { ...task, column: next, status: next, tone: next === "Completed" ? "success" : next === "Awaiting Approval" ? "warning" : "info" };
-    }));
+  async function updateStatus(task: OperationalTask, status: TaskStatus) {
+    if (!canEdit || busyTaskId) return;
+    setBusyTaskId(task.id);
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status })
+      });
+      const payload = await response.json() as { task?: OperationalTask; message?: string };
+      if (!response.ok || !payload.task) throw new Error(payload.message || "The task could not be updated.");
+      setTasks((current) => current.map((item) => item.id === task.id ? payload.task! : item));
+      setNotice({ tone: "success", message: payload.message || "Task updated." });
+    } catch (error) {
+      setNotice({ tone: "danger", message: error instanceof Error ? error.message : "The task could not be updated." });
+    } finally {
+      setBusyTaskId(null);
+    }
+  }
+
+  async function removeTask(task: OperationalTask) {
+    if (!canDelete || busyTaskId) return;
+    if (!window.confirm(`Permanently delete “${task.title}”? This action will be audited.`)) return;
+    setBusyTaskId(task.id);
+    setNotice(null);
+    try {
+      const response = await fetch(`/api/tasks/${task.id}`, { method: "DELETE" });
+      const payload = await response.json() as { message?: string };
+      if (!response.ok) throw new Error(payload.message || "The task could not be deleted.");
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      setNotice({ tone: "success", message: payload.message || "Task deleted." });
+    } catch (error) {
+      setNotice({ tone: "danger", message: error instanceof Error ? error.message : "The task could not be deleted." });
+    } finally {
+      setBusyTaskId(null);
+    }
   }
 
   return (
@@ -93,52 +137,122 @@ export function TasksBoard() {
       <PageHeader
         eyebrow="Command workflow"
         title="Tasks and Suspenses"
-        description="Assign, prioritize, escalate, and complete work across every squadron staff section."
-        actions={<button className="button button--primary" onClick={() => setShowForm((value) => !value)}><Plus size={16} /> New task</button>}
+        description="Assign, prioritize, escalate, and complete work across every squadron staff section. Changes are saved to Cloudflare D1 and recorded in the audit log."
+        actions={canEdit ? (
+          <button className="button button--primary" onClick={() => setShowForm((value) => !value)}>
+            <Plus size={16} /> New task
+          </button>
+        ) : undefined}
       />
 
       <section className="metric-grid metric-grid--four">
-        <MetricCard label="Open" value={tasks.filter((task) => task.column === "Open").length} detail="Not yet started" tone="info" />
-        <MetricCard label="In Progress" value={tasks.filter((task) => task.column === "In Progress").length} detail="Actively being worked" tone="warning" />
-        <MetricCard label="Awaiting Approval" value={tasks.filter((task) => task.column === "Awaiting Approval").length} detail="Commander review" tone="warning" />
-        <MetricCard label="Completed" value={tasks.filter((task) => task.column === "Completed").length} detail="Current board" tone="success" />
+        <MetricCard label="Active" value={activeTasks.length} detail="Not completed or cancelled" tone="info" />
+        <MetricCard label="Overdue" value={overdue} detail="Past the assigned due date" tone={overdue ? "danger" : "success"} />
+        <MetricCard label="Blocked" value={tasks.filter((task) => task.status === "BLOCKED").length} detail="Needs intervention" tone="danger" />
+        <MetricCard label="Awaiting Approval" value={tasks.filter((task) => task.status === "AWAITING_APPROVAL").length} detail="Ready for review" tone="warning" />
       </section>
 
-      {showForm ? (
-        <SectionCard title="Create task" description="This demo stores new tasks in local page state until database actions are connected.">
-          <form className="task-form" action={addTask}>
-            <label>Title<input name="title" required placeholder="What needs to be completed?" /></label>
-            <label>Functional area<select name="category"><option>Command</option><option>Finance</option><option>Logistics</option><option>Safety</option><option>Aerospace Education</option><option>Communications</option></select></label>
-            <label>Owner<input name="owner" placeholder="Unassigned" /></label>
-            <label>Due date<input name="due" type="date" /></label>
-            <div><button className="button button--primary" type="submit">Create task</button><button className="button button--ghost" type="button" onClick={() => setShowForm(false)}>Cancel</button></div>
+      {notice ? (
+        <div className={`inline-notice inline-notice--${notice.tone}`} role="status">
+          <AlertCircle size={17} />
+          <span>{notice.message}</span>
+        </div>
+      ) : null}
+
+      {showForm && canEdit ? (
+        <SectionCard title="Create task" description="Create a durable suspense item that can be reassigned and tracked after staff turnover.">
+          <form className="task-form task-form--expanded" onSubmit={addTask}>
+            <label className="task-form__title">Title<input name="title" required minLength={3} maxLength={180} placeholder="What needs to be completed?" /></label>
+            <label>Functional area<select name="functionalAreaKey" defaultValue="command">{functionalAreas.map((area) => <option key={area.key} value={area.key}>{area.name}</option>)}</select></label>
+            <label>Owner<select name="ownerUserId" defaultValue=""><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.fullName}{user.dutyTitle ? `, ${user.dutyTitle}` : ""}</option>)}</select></label>
+            <label>Priority<select name="priority" defaultValue="NORMAL"><option value="LOW">Low</option><option value="NORMAL">Normal</option><option value="HIGH">High</option><option value="CRITICAL">Critical</option></select></label>
+            <label>Due date<input name="dueOn" type="date" /></label>
+            <label className="task-form__description">Description<textarea name="description" maxLength={5000} rows={3} placeholder="Context, expected result, or completion evidence..." /></label>
+            <label className="checkbox-field"><input name="requiresApproval" type="checkbox" /> Commander or administrator approval required before completion</label>
+            <div>
+              <button className="button button--primary" type="submit" disabled={creating}>{creating ? <LoaderCircle className="spin" size={16} /> : null}{creating ? "Creating..." : "Create task"}</button>
+              <button className="button button--ghost" type="button" onClick={() => setShowForm(false)}>Cancel</button>
+            </div>
           </form>
         </SectionCard>
       ) : null}
 
       <div className="task-toolbar">
-        <label><Search size={17} /><input value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="Search tasks..." /></label>
-        <button className="button button--secondary"><Filter size={16} /> Filters</button>
+        <label><Search size={17} /><input value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="Search tasks, owners, or staff sections..." /></label>
+        <button className="button button--secondary" type="button"><Filter size={16} /> Filters</button>
       </div>
 
-      <section className="kanban-board">
-        {columns.map((column) => (
-          <div className="kanban-column" key={column}>
-            <header><strong>{column}</strong><span>{visibleTasks.filter((task) => task.column === column).length}</span></header>
-            <div>
-              {visibleTasks.filter((task) => task.column === column).map((task) => (
-                <article className="task-card" key={task.id}>
-                  <div className="task-card__top"><span>{task.category}</span><StatusPill label={task.status} tone={task.tone} /></div>
-                  <h3>{task.title}</h3>
-                  <p>{task.subtitle}</p>
-                  <dl><div><dt>Due</dt><dd>{task.due}</dd></div><div><dt>Owner</dt><dd>{task.assignedTo}</dd></div></dl>
-                  {column !== "Completed" ? <button onClick={() => advanceTask(task.id)}>Advance status</button> : null}
-                </article>
-              ))}
-            </div>
-          </div>
-        ))}
-      </section>
+      {tasks.length === 0 ? (
+        <SectionCard title="No tasks yet" description="Create the first operational task to begin building the squadron's shared suspense tracker.">
+          <div className="empty-state"><strong>The task board is ready.</strong><span>Use New task to add the first assignment.</span></div>
+        </SectionCard>
+      ) : (
+        <section className="kanban-board kanban-board--five">
+          {columns.map((column) => {
+            const columnTasks = visibleTasks.filter((task) => task.status === column.status);
+            return (
+              <div className="kanban-column" key={column.status}>
+                <header><strong>{column.label}</strong><span>{columnTasks.length}</span></header>
+                <div>
+                  {columnTasks.map((task) => (
+                    <article className={`task-card task-card--${task.priority.toLowerCase()}`} key={task.id}>
+                      <div className="task-card__top"><span>{task.functionalAreaName}</span><StatusPill label={formatStatus(task.status)} tone={toneForStatus(task.status)} /></div>
+                      <h3>{task.title}</h3>
+                      <p>{task.description || `${formatPriority(task.priority)} priority task`}</p>
+                      <dl>
+                        <div><dt>Due</dt><dd className={task.dueOn && task.dueOn < today() && !["COMPLETED", "CANCELLED"].includes(task.status) ? "text-danger" : ""}>{task.dueOn ? formatDate(task.dueOn) : "No due date"}</dd></div>
+                        <div><dt>Owner</dt><dd>{task.ownerName || "Unassigned"}</dd></div>
+                      </dl>
+                      <div className="task-card__actions">
+                        {canEdit && task.status !== "COMPLETED" ? (
+                          <button disabled={busyTaskId === task.id} onClick={() => updateStatus(task, nextStatus(task))}>
+                            {busyTaskId === task.id ? "Saving..." : task.status === "BLOCKED" ? "Return to work" : `Move to ${formatStatus(nextStatus(task))}`}
+                          </button>
+                        ) : null}
+                        {canEdit && task.status !== "BLOCKED" && !["COMPLETED", "CANCELLED"].includes(task.status) ? <button className="task-card__secondary" disabled={busyTaskId === task.id} onClick={() => updateStatus(task, "BLOCKED")}>Block</button> : null}
+                        {canDelete ? <button className="task-card__delete" disabled={busyTaskId === task.id} aria-label={`Delete ${task.title}`} onClick={() => removeTask(task)}><Trash2 size={14} /></button> : null}
+                      </div>
+                    </article>
+                  ))}
+                  {columnTasks.length === 0 ? <div className="kanban-empty">No matching tasks</div> : null}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
     </div>
   );
+}
+
+function nextStatus(task: OperationalTask): TaskStatus {
+  if (task.status === "BLOCKED") return "IN_PROGRESS";
+  const currentIndex = statusSequence.indexOf(task.status);
+  if (currentIndex < 0 || currentIndex >= statusSequence.length - 1) return "COMPLETED";
+  if (task.status === "IN_PROGRESS" && !task.requiresApproval) return "COMPLETED";
+  return statusSequence[currentIndex + 1];
+}
+
+function toneForStatus(status: TaskStatus): Tone {
+  if (status === "COMPLETED") return "success";
+  if (status === "BLOCKED" || status === "CANCELLED") return "danger";
+  if (status === "AWAITING_APPROVAL") return "warning";
+  if (status === "IN_PROGRESS") return "info";
+  return "neutral";
+}
+
+function formatStatus(status: TaskStatus): string {
+  return status.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
+}
+
+function formatPriority(priority: TaskPriority): string {
+  return priority[0] + priority.slice(1).toLowerCase();
+}
+
+function formatDate(date: string): string {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
+}
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
 }

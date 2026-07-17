@@ -3,16 +3,18 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "dev": "turbo dev",
-    "build": "turbo build",
-    "lint": "turbo lint",
-    "typecheck": "turbo typecheck",
-    "test": "turbo test",
+    "dev": "pnpm --filter @squadron/web dev",
+    "build": "pnpm --filter @squadron/web build",
+    "preview": "pnpm --filter @squadron/web cf:preview",
+    "deploy": "pnpm --filter @squadron/web cf:deploy",
+    "deploy:worker": "pnpm --filter @squadron/worker deploy",
+    "typecheck": "pnpm --filter @squadron/web typecheck && pnpm --filter @squadron/worker typecheck",
+    "db:migrate:local": "pnpm --filter @squadron/web db:migrate:local",
+    "db:migrate:remote": "pnpm --filter @squadron/web db:migrate:remote",
     "format": "prettier --write ."
   },
   "devDependencies": {
     "prettier": "^3.4.2",
-    "turbo": "^2.3.3",
     "typescript": "^5.7.2"
   }
 }
