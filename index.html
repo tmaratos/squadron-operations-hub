@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="TN-170 Squadron Operations Hub">
+  <title>Command Dashboard | Squadron Operations Hub</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#06111f">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">TN</div>
+      <div><h1>TN-170 Oak Ridge Composite SQ</h1><p>Squadron Operations Hub</p></div>
+      <button class="sidebar-close" data-close-menu aria-label="Close navigation">×</button>
+    </div>
+
+    <nav>
+      <div class="nav-group-title">Operations</div>
+      <a class="nav-link active" href="index.html"><span class="nav-icon">⌂</span><span>Command Center</span></a>
+      <a class="nav-link" href="tasks.html"><span class="nav-icon">☷</span><span>Tasks &amp; Assignments</span><b>18</b></a>
+      <a class="nav-link" href="calendar.html"><span class="nav-icon">□</span><span>Calendar</span></a>
+      <a class="nav-link" href="meetings.html"><span class="nav-icon">♙</span><span>Meetings</span></a>
+      <a class="nav-link" href="reports.html"><span class="nav-icon">▥</span><span>Reports</span></a>
+      <a class="nav-link" href="inspections.html"><span class="nav-icon">◈</span><span>Inspections</span></a>
+      <a class="nav-link" href="compliance.html"><span class="nav-icon">◉</span><span>Readiness</span></a>
+      <a class="nav-link" href="communications.html"><span class="nav-icon">▧</span><span>Connected Apps</span><em>NEW</em></a>
+
+      <div class="nav-group-title">Staff Sections</div>
+      <a class="nav-link" href="staff.html"><span class="nav-icon">♧</span><span>Administration</span><i>⌄</i></a>
+      <a class="nav-link" href="users.html"><span class="nav-icon">♙</span><span>Personnel</span><i>⌄</i></a>
+      <a class="nav-link" href="finance.html"><span class="nav-icon">▣</span><span>Finance</span><i>⌄</i></a>
+      <a class="nav-link" href="logistics.html"><span class="nav-icon">◇</span><span>Logistics</span><i>⌄</i></a>
+      <a class="nav-link" href="safety.html"><span class="nav-icon">△</span><span>Safety</span><i>⌄</i></a>
+      <a class="nav-link" href="aerospace-education.html"><span class="nav-icon">✧</span><span>Aerospace Education</span><i>⌄</i></a>
+      <a class="nav-link" href="cadet-programs.html"><span class="nav-icon">♜</span><span>Cadet Programs</span><i>⌄</i></a>
+      <a class="nav-link" href="emergency-services.html"><span class="nav-icon">⚕</span><span>Emergency Services</span><i>⌄</i></a>
+      <a class="nav-link" href="communications.html"><span class="nav-icon">▤</span><span>Communications</span><i>⌄</i></a>
+      <a class="nav-link" href="settings.html"><span class="nav-icon">▦</span><span>IT / Systems</span><i>⌄</i></a>
+      <a class="nav-link" href="public-affairs.html"><span class="nav-icon">◌</span><span>Public Affairs</span><i>⌄</i></a>
+      <a class="nav-link" href="recruiting.html"><span class="nav-icon">⬡</span><span>Recruiting &amp; Retention</span><i>⌄</i></a>
+
+      <div class="nav-group-title">Resources</div>
+      <a class="nav-link" href="documents.html"><span class="nav-icon">▧</span><span>Document Library</span></a>
+      <a class="nav-link" href="process-library.html"><span class="nav-icon">▤</span><span>Process Library</span></a>
+      <a class="nav-link" href="documents.html"><span class="nav-icon">▥</span><span>Forms &amp; Templates</span></a>
+      <a class="nav-link" href="staff.html"><span class="nav-icon">◎</span><span>Contacts Directory</span></a>
+      <a class="nav-link" href="logistics.html"><span class="nav-icon">▦</span><span>Equipment &amp; Supply</span></a>
+    </nav>
+
+    <div class="sidebar-footer"><a href="settings.html">? &nbsp; Help &amp; Support</a></div>
+  </aside>
+
+  <button class="overlay" data-close-menu aria-label="Close navigation"></button>
+
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="menu-btn" id="menuBtn" aria-label="Open navigation">☰</button>
+        <div class="mobile-brand"><strong>TN-170</strong><span>Operations Hub</span></div>
+      </div>
+
+      <label class="global-search">
+        <span>⌕</span><input id="globalSearch" placeholder="Search everything..."><kbd>Ctrl K</kbd>
+      </label>
+
+      <div class="top-actions">
+        <button class="top-action" data-toast="Quick Add is ready for backend connection."><span>☑</span> Quick Add</button>
+        <a class="top-action badged" href="communications.html"><span>▱</span> Messages<b>3</b></a>
+        <a class="top-action badged warning-badge" href="notifications.html"><span>⌁</span> Alerts<b>7</b></a>
+        <a class="profile" href="users.html"><span class="profile-seal">TN</span><span><strong>2d Lt. Maratos</strong><small>Commander</small></span><i>⌄</i></a>
+      </div>
+    </header>
+
+    <div class="content command-content">
+      <section class="dashboard-head">
+        <div><h2>Command Dashboard</h2><p>Saturday, July 18, 2026</p></div>
+        <div class="dashboard-controls">
+          <button class="view-btn"><span>♙</span> Commander View <i>⌄</i></button>
+          <a href="staff.html">My Duty Positions</a>
+          <a class="btn secondary" href="settings.html">⚙ Customize Dashboard</a>
+        </div>
+      </section>
+
+      <section class="metric-grid">
+        <article class="metric-card danger"><div class="metric-top"><strong>18</strong><span>!</span></div><h3>Overdue Items</h3><p>Require immediate attention</p><div class="metric-line"><i style="width:67%"></i></div></article>
+        <article class="metric-card warning"><div class="metric-top"><strong>7</strong><span>◷</span></div><h3>Due This Week</h3><p>Upcoming deadlines</p><div class="metric-line"><i style="width:52%"></i></div></article>
+        <article class="metric-card warning"><div class="metric-top"><strong>5</strong><span>♧</span></div><h3>Awaiting Approval</h3><p>Items pending your review</p><div class="metric-line"><i style="width:43%"></i></div></article>
+        <article class="metric-card info"><div class="metric-top"><strong>12</strong><span>▧</span></div><h3>Open Tasks</h3><p>Active assignments</p><div class="metric-line"><i style="width:49%"></i></div></article>
+        <article class="metric-card success"><div class="metric-top"><strong>93%</strong><span>✓</span></div><h3>Readiness Score</h3><p>Overall squadron</p><div class="metric-line"><i style="width:93%"></i></div></article>
+      </section>
+
+      <section class="connected-workspace card">
+        <div class="workspace-header"><div><h3>Connected Workspace</h3><span>One workspace. All the tools we use.</span></div><small>About 15 senior members connected</small></div>
+        <div class="workspace-apps">
+          <a class="workspace-app" href="communications.html"><span class="app-icon discord">◉</span><div><strong>Discord</strong><small>3 new staff messages</small></div><i></i></a>
+          <a class="workspace-app" href="documents.html"><span class="app-icon drive">▲</span><div><strong>Drive</strong><small>AE lesson plans updated</small></div><i></i></a>
+          <a class="workspace-app" href="calendar.html"><span class="app-icon calendar">▣</span><div><strong>Calendar</strong><small>Next event Tue 1900</small></div><i></i></a>
+          <button class="workspace-app" data-toast="eServices integration is awaiting official API guidance."><span class="app-icon eservices">e</span><div><strong>eServices</strong><small>Open exact module</small></div><i></i></button>
+          <a class="workspace-app" href="communications.html"><span class="app-icon band">b</span><div><strong>BAND</strong><small>2 new posts</small></div><i></i></a>
+          <a class="workspace-app" href="reports.html"><span class="app-icon attendance">♟</span><div><strong>Attendance</strong><small>92% recorded</small></div><i></i></a>
+        </div>
+      </section>
+
+      <div class="dashboard-grid">
+        <div class="dashboard-main-column">
+          <section class="card panel priority-panel">
+            <div class="panel-head"><h3>Priority Items</h3><a href="tasks.html">View All</a></div>
+            <div class="table-wrap"><table><thead><tr><th>Item</th><th>Category</th><th>Due Date</th><th>Status</th><th>Assigned To</th><th></th></tr></thead><tbody>
+              <tr><td><strong>July Finance Report</strong><small>Monthly requirement</small></td><td><span class="tag green-tag">Finance</span></td><td>Jul 15, 2026<small class="red-text">3 days overdue</small></td><td><span class="status bad">Overdue</span></td><td>2d Lt. Maratos</td><td>⋮</td></tr>
+              <tr><td><strong>Safety Briefing</strong><small>Quarterly requirement</small></td><td><span class="tag amber-tag">Safety</span></td><td>Jul 15, 2026<small class="red-text">3 days overdue</small></td><td><span class="status bad">Overdue</span></td><td>2d Lt. Maratos</td><td>⋮</td></tr>
+              <tr><td><strong>Inventory Check</strong><small>Monthly requirement</small></td><td><span class="tag blue-tag">Logistics</span></td><td>Jul 20, 2026<small class="amber-text">2 days</small></td><td><span class="status warning">Due Soon</span></td><td>Unassigned</td><td>⋮</td></tr>
+              <tr><td><strong>Unit Training Plan</strong><small>Quarterly requirement</small></td><td><span class="tag purple-tag">Personnel</span></td><td>Jul 31, 2026<small class="amber-text">13 days</small></td><td><span class="status open">In Progress</span></td><td>Capt. Jones</td><td>⋮</td></tr>
+              <tr><td><strong>Website Content Review</strong><small>Quarterly requirement</small></td><td><span class="tag blue-tag">Comm</span></td><td>Aug 5, 2026<small>18 days</small></td><td><span class="status neutral">Open</span></td><td>Lt. Smith</td><td>⋮</td></tr>
+            </tbody></table></div>
+          </section>
+
+          <section class="card panel">
+            <div class="panel-head"><h3>Functional Area Status</h3><a href="compliance.html">View All</a></div>
+            <div class="area-grid">
+              <article><span class="area-icon blue-bg">▧</span><div><strong>Administration</strong><small>On Track</small><div class="mini-progress"><i style="width:92%"></i></div></div><b>92%</b></article>
+              <article><span class="area-icon purple-bg">♧</span><div><strong>Personnel</strong><small>On Track</small><div class="mini-progress"><i style="width:95%"></i></div></div><b>95%</b></article>
+              <article><span class="area-icon amber-bg">◉</span><div><strong>Finance</strong><small>At Risk</small><div class="mini-progress warning-progress"><i style="width:72%"></i></div></div><b>72%</b></article>
+              <article><span class="area-icon blue-bg">▦</span><div><strong>Logistics</strong><small>On Track</small><div class="mini-progress"><i style="width:88%"></i></div></div><b>88%</b></article>
+              <article><span class="area-icon amber-bg">◈</span><div><strong>Safety</strong><small>At Risk</small><div class="mini-progress warning-progress"><i style="width:75%"></i></div></div><b>75%</b></article>
+              <article><span class="area-icon blue-bg">◎</span><div><strong>Aerospace Ed</strong><small>On Track</small><div class="mini-progress"><i style="width:90%"></i></div></div><b>90%</b></article>
+              <article><span class="area-icon green-bg">★</span><div><strong>Cadet Programs</strong><small>On Track</small><div class="mini-progress"><i style="width:93%"></i></div></div><b>93%</b></article>
+              <article><span class="area-icon red-bg">⌾</span><div><strong>Emergency Services</strong><small>On Track</small><div class="mini-progress"><i style="width:91%"></i></div></div><b>91%</b></article>
+              <article><span class="area-icon cyan-bg">◉</span><div><strong>Communications</strong><small>On Track</small><div class="mini-progress"><i style="width:89%"></i></div></div><b>89%</b></article>
+              <article><span class="area-icon gray-bg">▣</span><div><strong>IT / Systems</strong><small>On Track</small><div class="mini-progress"><i style="width:94%"></i></div></div><b>94%</b></article>
+              <article><span class="area-icon purple-bg">⚑</span><div><strong>Public Affairs</strong><small>On Track</small><div class="mini-progress"><i style="width:87%"></i></div></div><b>87%</b></article>
+              <article><span class="area-icon green-bg">▦</span><div><strong>Recruiting</strong><small>On Track</small><div class="mini-progress"><i style="width:86%"></i></div></div><b>86%</b></article>
+            </div>
+          </section>
+        </div>
+
+        <section class="card panel activity-panel">
+          <div class="panel-head"><h3>Recent Activity</h3><a href="audit.html">View All</a></div>
+          <div class="activity-list">
+            <article><span class="activity-icon green-bg">✓</span><div><b class="green-text">Task completed</b><strong>CAPF 42 Updates</strong><small>by Lt. Smith</small></div><time>2 hours ago</time></article>
+            <article><span class="activity-icon green-bg">▧</span><div><b class="green-text">Document approved</b><strong>Safety Briefing – Jul 2026</strong><small>by 2d Lt. Maratos</small></div><time>4 hours ago</time></article>
+            <article><span class="activity-icon blue-bg">♧</span><div><b class="blue-text">New task assigned</b><strong>Update Equipment Inventory</strong><small>to MSgt. Brown</small></div><time>Yesterday</time></article>
+            <article><span class="activity-icon purple-bg">□</span><div><b class="purple-text">Meeting created</b><strong>Staff Meeting – Jul</strong><small>by 2d Lt. Maratos</small></div><time>Yesterday</time></article>
+            <article><span class="activity-icon green-bg">▥</span><div><b class="green-text">Report submitted</b><strong>June Monthly Report</strong><small>by Capt. Jones</small></div><time>2 days ago</time></article>
+            <article><span class="activity-icon blue-bg">↥</span><div><b class="blue-text">Document uploaded</b><strong>PT Test Results – Jul 2026</strong><small>by TSgt. Davis</small></div><time>2 days ago</time></article>
+          </div>
+        </section>
+
+        <aside class="dashboard-rail">
+          <section class="card panel"><div class="panel-head"><h3>Upcoming Deadlines</h3><a href="calendar.html">View Calendar</a></div><div class="deadline-list">
+            <article><span class="date-box red-date"><b>JUL</b><strong>20</strong></span><div><strong>Inventory Check</strong><small>Monthly Requirement</small><em class="amber-text">2 days</em></div></article>
+            <article><span class="date-box"><b>JUL</b><strong>31</strong></span><div><strong>Unit Training Plan</strong><small>Quarterly Requirement</small><em class="amber-text">13 days</em></div></article>
+            <article><span class="date-box"><b>AUG</b><strong>5</strong></span><div><strong>Website Content Review</strong><small>Quarterly Requirement</small><em class="amber-text">18 days</em></div></article>
+            <article><span class="date-box"><b>AUG</b><strong>15</strong></span><div><strong>Emergency Services Drill</strong><small>Monthly Requirement</small><em class="amber-text">28 days</em></div></article>
+            <article><span class="date-box"><b>AUG</b><strong>31</strong></span><div><strong>Membership Report</strong><small>Monthly Requirement</small><em class="amber-text">44 days</em></div></article>
+          </div></section>
+
+          <section class="card panel"><div class="panel-head"><h3>Notifications</h3><a href="notifications.html">View All</a></div><div class="notification-list">
+            <article><span>⚠</span><div><strong>CPPT for 2 members expires this month</strong><small>View Training Records</small></div><time>1h ago</time></article>
+            <article><span class="blue-text">◉</span><div><strong>6 overdue tasks need attention</strong><small>View All Overdue</small></div><time>2h ago</time></article>
+            <article><span>⚠</span><div><strong>Inventory item “Rocket Motors” is low</strong><small>View Inventory</small></div><time>5h ago</time></article>
+          </div></section>
+
+          <section class="card panel"><div class="panel-head"><h3>Calendar Preview</h3><a href="calendar.html">View Calendar</a></div><div class="calendar-list">
+            <article><span class="date-box red-date"><b>JUL</b><strong>21</strong></span><div><strong>Staff Meeting</strong><small>Tue, 1830 – 2030</small></div><i>□</i></article>
+            <article><span class="date-box red-date"><b>JUL</b><strong>22</strong></span><div><strong>PT Test</strong><small>Wed, 0800 – 1200</small></div><i>□</i></article>
+            <article><span class="date-box red-date"><b>JUL</b><strong>25</strong></span><div><strong>Aerospace Activity</strong><small>Sat, 1300 – 1900</small></div><i>□</i></article>
+          </div></section>
+        </aside>
+      </div>
+
+      <section class="card quick-actions-panel"><h3>Quick Actions</h3><div class="quick-actions-grid">
+        <a href="tasks.html"><span>☑</span><div><strong>Create Task</strong><small>Assign to staff</small></div></a>
+        <a href="meetings.html"><span>□</span><div><strong>Schedule Meeting</strong><small>Add to calendar</small></div></a>
+        <a href="documents.html"><span>▧</span><div><strong>Add Document</strong><small>Upload &amp; share</small></div></a>
+        <a href="safety.html"><span>△</span><div><strong>Log Incident</strong><small>Safety reporting</small></div></a>
+        <a href="reports.html"><span>⌁</span><div><strong>Submit Report</strong><small>Official reporting</small></div></a>
+        <a href="tasks.html"><span>♙</span><div><strong>Request Approval</strong><small>Send for review</small></div></a>
+        <a href="communications.html"><span>▱</span><div><strong>Message Staff</strong><small>Secure comms</small></div></a>
+        <a href="calendar.html"><span>□</span><div><strong>View Calendar</strong><small>Open schedule</small></div></a>
+      </div></section>
+    </div>
+  </main>
+</div>
+<div class="toast" role="status"></div>
+<script src="assets/app.js"></script>
+</body>
+</html>
