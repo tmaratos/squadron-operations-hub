@@ -1,0 +1,23 @@
+{
+  "name": "tn170-squadron-ops-api",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "types": "wrangler types",
+    "check": "tsc --noEmit",
+    "seed:emails": "node scripts/generate-member-emails.mjs",
+    "prepare:config": "node scripts/prepare-wrangler.mjs",
+    "config:check": "node scripts/prepare-wrangler.mjs --check",
+    "bootstrap:owners": "node scripts/bootstrap-owners.mjs",
+    "db:migrate:local": "npm run prepare:config && wrangler d1 migrations apply DB --local --config wrangler.generated.jsonc",
+    "db:migrate:remote": "npm run prepare:config && wrangler d1 migrations apply DB --remote --config wrangler.generated.jsonc",
+    "ci": "npm run check && npm run config:check && npm run db:migrate:local"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "wrangler": "^4.0.0"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tn170-squadron-ops-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "tn170adminhub.tristanmaratos.com/api/*",
+      "zone_name": "tristanmaratos.com"
+    }
+  ],
+  "vars": {
+    "PUBLIC_APP_URL": "https://tn170adminhub.tristanmaratos.com",
+    "SESSION_COOKIE": "soh_session",
+    "MAGIC_LINK_TTL_MINUTES": "15",
+    "SESSION_TTL_DAYS": "7",
+    "MAIL_MODE": "mailgun",
+    "MAILGUN_BASE_URL": "https://api.mailgun.net",
+    "MAIL_FROM": "TN-170 Squadron Operations Hub <no-reply@tristanmaratos.com>"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tn170-squadron-ops",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": [
+      "17 3 * * *"
+    ]
+  },
+  "secrets": {
+    "required": [
+      "MAILGUN_API_KEY",
+      "MAILGUN_DOMAIN"
+    ]
+  }
+}

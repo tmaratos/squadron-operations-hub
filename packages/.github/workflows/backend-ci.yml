@@ -1,0 +1,44 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "cloudflare/worker/**"
+      - ".github/workflows/backend-*.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "cloudflare/worker/**"
+      - ".github/workflows/backend-*.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: cloudflare/worker
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: cloudflare/worker/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate TypeScript and local database
+        run: npm run ci
