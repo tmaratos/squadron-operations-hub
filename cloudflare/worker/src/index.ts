@@ -1,7 +1,8 @@
 import { authenticate, logout, requestMagicLink, verifyMagicLink } from "./auth";
 import { buildDashboard } from "./rules";
+import { runMaintenance } from "./maintenance";
 import { createTask, listTasks, taskAction, updateTask } from "./tasks";
-import type { AuthUser, Env, TaskPriority, UserRole, UserStatus } from "./types";
+import type { Env, ExecutionContext, ScheduledController, TaskPriority, UserRole, UserStatus } from "./types";
 import {
   accessRequestAction,
   listAccessRequests,
@@ -10,7 +11,7 @@ import {
   submitAccessRequest,
   updateUser
 } from "./users";
-import { HttpError, json, readJson, verifyWriteOrigin } from "./utils";
+import { clientIp, HttpError, json, readJson, verifyWriteOrigin } from "./utils";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -21,7 +22,13 @@ export default {
 
       if (request.method === "OPTIONS") return new Response(null, { status: 204 });
       if (path === "/api/health" && request.method === "GET") {
-        return json({ ok: true, service: "tn170-squadron-ops-api", time: new Date().toISOString() });
+        await env.DB.prepare("SELECT 1 AS ok").first();
+        return json({
+          ok: true,
+          service: "tn170-squadron-ops-api",
+          database: "connected",
+          time: new Date().toISOString()
+        });
       }
 
       if (path === "/api/auth/request-link" && request.method === "POST") {
@@ -43,7 +50,7 @@ export default {
           requestedArea?: string;
           reason?: string;
         }>(request);
-        return json(await submitAccessRequest(env, body), 202);
+        return json(await submitAccessRequest(env, body, clientIp(request)), 202);
       }
 
       const user = await authenticate(request, env);
@@ -117,5 +124,13 @@ export default {
       console.error(error);
       return json({ error: "INTERNAL_ERROR", message: "The server could not complete the request." }, 500);
     }
+  },
+
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    context: ExecutionContext
+  ): Promise<void> {
+    context.waitUntil(runMaintenance(env));
   }
 };

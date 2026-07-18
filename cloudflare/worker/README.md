@@ -87,3 +87,14 @@ Actionable task statuses are `OPEN`, `IN_PROGRESS`, and `BLOCKED`.
 - Scores are deterministic and return a contribution breakdown through `/api/dashboard`.
 
 This is a rules engine, not a generative model. It is intentionally predictable, inexpensive, and auditable.
+
+
+## Production automation
+
+The repository includes three GitHub Actions workflows:
+
+- `Backend CI` validates TypeScript and all D1 migrations.
+- `Bootstrap Production Backend` performs the one-time owner activation and first deployment.
+- `Deploy Backend` applies migrations and deploys every merged backend change.
+
+See `../../docs/PRODUCTION_BACKEND_SETUP.md` for the exact Cloudflare and GitHub secret configuration.

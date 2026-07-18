@@ -26,5 +26,20 @@
       "database_id": "REPLACE_WITH_D1_DATABASE_ID",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": [
+      "17 3 * * *"
+    ]
+  },
+  "secrets": {
+    "required": [
+      "MAILGUN_API_KEY",
+      "MAILGUN_DOMAIN"
+    ]
+  }
 }

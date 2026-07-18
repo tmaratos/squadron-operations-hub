@@ -80,3 +80,13 @@ export interface TaskRow {
   created_at: string;
   updated_at: string;
 }
+
+
+export interface ExecutionContext {
+  waitUntil(promise: Promise<unknown>): void;
+}
+
+export interface ScheduledController {
+  scheduledTime: number;
+  cron: string;
+}

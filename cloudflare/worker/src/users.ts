@@ -1,4 +1,5 @@
 import { audit } from "./auth";
+import { enforceRateLimit } from "./maintenance";
 import type { AuthUser, Env, UserRole, UserStatus } from "./types";
 import { HttpError, normalizeEmail, nowIso } from "./utils";
 
@@ -63,8 +64,10 @@ export async function updateUser(
 
 export async function submitAccessRequest(
   env: Env,
-  input: { fullName?: string; email?: string; capid?: string; requestedArea?: string; reason?: string }
+  input: { fullName?: string; email?: string; capid?: string; requestedArea?: string; reason?: string },
+  clientIdentifier: string
 ) {
+  await enforceRateLimit(env, "access-request-ip", clientIdentifier, 5, 3600);
   const fullName = input.fullName?.trim();
   const email = normalizeEmail(input.email || "");
   const capid = input.capid?.trim();

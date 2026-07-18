@@ -6,20 +6,34 @@ export function json(data: unknown, status = 200, headers: HeadersInit = {}): Re
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "permissions-policy": "camera=(), microphone=(), geolocation=()",
+      "x-frame-options": "DENY",
       ...headers
     }
   });
 }
 
 export function redirect(location: string, headers: HeadersInit = {}): Response {
-  return new Response(null, { status: 302, headers: { location, ...headers } });
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location,
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "x-frame-options": "DENY",
+      ...headers
+    }
+  });
 }
 
 export async function readJson<T>(request: Request): Promise<T> {
   const contentType = request.headers.get("content-type") || "";
   if (!contentType.includes("application/json")) throw new HttpError(415, "Expected application/json.");
   try {
-    return await request.json<T>();
+    return await request.json() as T;
   } catch {
     throw new HttpError(400, "Invalid JSON body.");
   }

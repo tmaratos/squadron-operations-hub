@@ -1,4 +1,5 @@
 import { sendMagicLink } from "./email";
+import { enforceRateLimit } from "./maintenance";
 import type { AuthUser, Env, UserRow } from "./types";
 import {
   addDays,
@@ -27,6 +28,9 @@ interface MagicLinkRow {
 
 export async function requestMagicLink(request: Request, env: Env, emailInput: string): Promise<Response> {
   const email = normalizeEmail(emailInput);
+  await enforceRateLimit(env, "auth-link-ip", clientIp(request), 10, 600);
+  if (email) await enforceRateLimit(env, "auth-link-email", email, 5, 600);
+
   const generic = {
     ok: true,
     message: "If that email is approved, a secure sign-in link will be sent shortly."
