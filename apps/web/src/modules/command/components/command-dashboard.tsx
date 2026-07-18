@@ -3,14 +3,18 @@ import {
   CalendarDays,
   CheckCircle2,
   ClipboardCheck,
+  Cloud,
   FilePlus2,
+  FolderOpen,
+  Gauge,
   MessageSquareText,
   Plus,
+  Radio,
   ShieldAlert,
-  Users
+  Users,
+  Wrench
 } from "lucide-react";
 import { MetricCard } from "@/components/metric-card";
-import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import { StatusPill } from "@/components/status-pill";
 import { listPendingAccessRequests } from "@/lib/auth/repository";
@@ -31,68 +35,96 @@ export async function CommandDashboard() {
   const readinessScore = areas.length
     ? Math.round(areas.reduce((total, area) => total + area.score, 0) / areas.length)
     : 100;
-  const priorityTasks = [...tasks]
-    .sort((left, right) => priorityRank(left) - priorityRank(right))
-    .slice(0, 5);
-  const deadlines = tasks
-    .filter((task) => task.dueOn)
-    .sort((left, right) => (left.dueOn ?? "9999").localeCompare(right.dueOn ?? "9999"))
-    .slice(0, 4);
+
+  const priorityTasks = [...tasks].sort((a, b) => priorityRank(a) - priorityRank(b)).slice(0, 5);
+  const deadlines = tasks.filter((task) => task.dueOn).sort((a, b) => (a.dueOn ?? "9999").localeCompare(b.dueOn ?? "9999")).slice(0, 5);
 
   const metrics = [
     { label: "Overdue Items", value: summary.overdue, detail: "Require immediate attention", tone: summary.overdue ? "danger" : "success", progress: Math.min(summary.overdue * 12, 100) },
-    { label: "Due This Week", value: summary.dueThisWeek, detail: "Upcoming task deadlines", tone: summary.dueThisWeek ? "warning" : "success", progress: Math.min(summary.dueThisWeek * 10, 100) },
-    { label: "Awaiting Approval", value: summary.awaitingApproval, detail: "Ready for leadership review", tone: summary.awaitingApproval ? "warning" : "success", progress: Math.min(summary.awaitingApproval * 18, 100) },
-    { label: "Open Tasks", value: summary.open + summary.inProgress + summary.blocked + summary.awaitingApproval, detail: "Across all staff sections", tone: "info", progress: Math.min((summary.open + summary.inProgress) * 5, 100) },
-    { label: "Readiness Score", value: `${readinessScore}%`, detail: "Calculated from current task risk", tone: readinessScore >= 85 ? "success" : readinessScore >= 70 ? "warning" : "danger", progress: readinessScore }
+    { label: "Due This Week", value: summary.dueThisWeek, detail: "Upcoming deadlines", tone: summary.dueThisWeek ? "warning" : "success", progress: Math.min(summary.dueThisWeek * 10, 100) },
+    { label: "Awaiting Approval", value: summary.awaitingApproval, detail: "Items pending your review", tone: summary.awaitingApproval ? "warning" : "success", progress: Math.min(summary.awaitingApproval * 18, 100) },
+    { label: "Open Tasks", value: summary.open + summary.inProgress + summary.blocked + summary.awaitingApproval, detail: "Active assignments", tone: "info", progress: Math.min((summary.open + summary.inProgress) * 5, 100) },
+    { label: "Readiness Score", value: `${readinessScore}%`, detail: "Overall squadron", tone: readinessScore >= 85 ? "success" : readinessScore >= 70 ? "warning" : "danger", progress: readinessScore }
   ] as const;
 
-  return (
-    <div className="page-stack">
-      <PageHeader
-        eyebrow={new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date())}
-        title="Command Dashboard"
-        description="A live operational view of deadlines, risks, assignments, approvals, and readiness from Cloudflare D1."
-        actions={<Link className="button button--secondary" href="/settings">Configure system</Link>}
-      />
+  const connectedApps = [
+    { name: "Discord", detail: "3 new staff messages", icon: MessageSquareText, href: "/communications" },
+    { name: "Drive", detail: "AE lesson plans updated", icon: FolderOpen, href: "/documents" },
+    { name: "Calendar", detail: "Next event Tue 1900", icon: CalendarDays, href: "/calendar" },
+    { name: "eServices", detail: "Open exact module", icon: Cloud, href: "/settings" },
+    { name: "BAND", detail: "2 new posts", icon: Radio, href: "/communications" },
+    { name: "Attendance", detail: "92% recorded", icon: Users, href: "/reports" }
+  ];
 
-      <section className="metric-grid metric-grid--dashboard">
+  return (
+    <div className="page-stack command-page">
+      <header className="command-page__header">
+        <div className="command-page__title">
+          <h1>Command Dashboard</h1>
+          <p>{new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date())}</p>
+        </div>
+        <div className="command-page__controls">
+          <div className="segmented-control">
+            <span className="is-active"><Users size={15} /> Commander View</span>
+            <Link href="/staff">My Duty Positions</Link>
+          </div>
+          <Link className="button button--secondary" href="/settings"><Wrench size={15} /> Customize Dashboard</Link>
+        </div>
+      </header>
+
+      <section className="metric-grid command-metrics">
         {metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
       </section>
 
-      <div className="dashboard-grid">
-        <SectionCard
-          title="Priority items"
-          description="The work most likely to affect readiness or deadlines."
-          action={<Link className="button button--ghost" href="/tasks">View all</Link>}
-          className="dashboard-grid__priority"
-        >
-          {priorityTasks.length ? (
-            <div className="priority-table" role="table" aria-label="Priority items">
-              <div className="priority-table__header" role="row">
-                <span>Item</span><span>Category</span><span>Due</span><span>Status</span><span>Assigned to</span>
-              </div>
-              {priorityTasks.map((task) => (
-                <div className="priority-table__row" role="row" key={task.id}>
-                  <div><strong>{task.title}</strong><small>{task.description || `${formatPriority(task.priority)} priority`}</small></div>
-                  <span className="category-label">{task.functionalAreaName}</span>
-                  <div><span>{task.dueOn ? formatDate(task.dueOn) : "No due date"}</span><small className={`text-${dueTone(task)}`}>{dueDetail(task)}</small></div>
-                  <StatusPill label={formatStatus(task.status)} tone={toneForStatus(task.status)} />
-                  <span>{task.ownerName || "Unassigned"}</span>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state"><strong>No active tasks</strong><span>Create the first suspense item to begin tracking squadron work.</span><Link className="button button--primary" href="/tasks">Create task</Link></div>
-          )}
-        </SectionCard>
+      <section className="connected-workspace">
+        <div className="connected-workspace__head"><h2>Connected Workspace</h2><span>About 15 senior members connected</span></div>
+        <div className="connected-workspace__apps">
+          {connectedApps.map(({ name, detail, icon: Icon, href }) => (
+            <Link className="workspace-app" href={href} key={name}>
+              <span className="workspace-app__icon"><Icon size={16} /></span>
+              <span className="workspace-app__copy"><strong>{name}</strong><span>{detail}</span></span>
+              <span className="workspace-app__dot" />
+            </Link>
+          ))}
+        </div>
+      </section>
 
-        <SectionCard
-          title="Recent activity"
-          description="Audited changes across the squadron."
-          action={<Link className="button button--ghost" href="/audit">View all</Link>}
-          className="dashboard-grid__activity"
-        >
+      <div className="command-layout">
+        <div className="command-primary">
+          <SectionCard title="Priority Items" action={<Link className="button button--ghost" href="/tasks">View All</Link>} className="command-priority">
+            {priorityTasks.length ? (
+              <div className="priority-table" role="table" aria-label="Priority items">
+                <div className="priority-table__header" role="row"><span>Item</span><span>Category</span><span>Due Date</span><span>Status</span><span>Assigned To</span></div>
+                {priorityTasks.map((task) => (
+                  <div className="priority-table__row" role="row" key={task.id}>
+                    <div><strong>{task.title}</strong><small>{task.description || `${formatPriority(task.priority)} priority`}</small></div>
+                    <span className="category-label">{task.functionalAreaName}</span>
+                    <div><span>{task.dueOn ? formatDate(task.dueOn) : "No due date"}</span><small className={`text-${dueTone(task)}`}>{dueDetail(task)}</small></div>
+                    <StatusPill label={formatStatus(task.status)} tone={toneForStatus(task.status)} />
+                    <span>{task.ownerName || "Unassigned"}</span>
+                  </div>
+                ))}
+              </div>
+            ) : <div className="empty-state"><strong>No active tasks</strong><span>Create the first suspense item to begin tracking squadron work.</span><Link className="button button--primary" href="/tasks">Create task</Link></div>}
+          </SectionCard>
+
+          <SectionCard title="Functional Area Status" action={<Link className="button button--ghost" href="/readiness">View All</Link>}>
+            <div className="area-grid command-area-grid">
+              {areas.slice(0, 12).map((area) => {
+                const tone: Tone = area.score >= 85 ? "success" : area.score >= 70 ? "warning" : "danger";
+                return (
+                  <article key={area.key}>
+                    <div><strong>{area.name}</strong><span>{area.status}{area.openTasks ? `, ${area.openTasks} open` : ""}</span></div>
+                    <b>{area.score}%</b>
+                    <div className={`progress progress--${tone}`}><span style={{ width: `${area.score}%` }} /></div>
+                  </article>
+                );
+              })}
+            </div>
+          </SectionCard>
+        </div>
+
+        <SectionCard title="Recent Activity" action={<Link className="button button--ghost" href="/audit">View All</Link>} className="command-activity">
           {activity.length ? (
             <div className="activity-list">
               {activity.map((item) => (
@@ -106,65 +138,57 @@ export async function CommandDashboard() {
           ) : <div className="empty-state"><strong>No activity yet</strong><span>Account, task, and document changes will appear here.</span></div>}
         </SectionCard>
 
-        <SectionCard
-          title="Upcoming deadlines"
-          action={<Link className="button button--ghost" href="/calendar">View calendar</Link>}
-          className="dashboard-grid__deadlines"
-        >
-          {deadlines.length ? (
-            <div className="deadline-list">
-              {deadlines.map((task) => {
-                const date = new Date(`${task.dueOn}T00:00:00Z`);
-                return (
-                  <article key={task.id}>
-                    <div className={`date-tile date-tile--${dueTone(task)}`}><span>{date.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase()}</span><strong>{date.getUTCDate()}</strong></div>
-                    <div><strong>{task.title}</strong><span>{task.functionalAreaName}</span><small className={`text-${dueTone(task)}`}>{dueDetail(task)}</small></div>
-                  </article>
-                );
-              })}
+        <aside className="command-rail">
+          <SectionCard title="Upcoming Deadlines" action={<Link className="button button--ghost" href="/calendar">View Calendar</Link>}>
+            {deadlines.length ? (
+              <div className="deadline-list">
+                {deadlines.map((task) => {
+                  const date = new Date(`${task.dueOn}T00:00:00Z`);
+                  return (
+                    <article key={task.id}>
+                      <div className={`date-tile date-tile--${dueTone(task)}`}><span>{date.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase()}</span><strong>{date.getUTCDate()}</strong></div>
+                      <div><strong>{task.title}</strong><span>{task.functionalAreaName}</span><small className={`text-${dueTone(task)}`}>{dueDetail(task)}</small></div>
+                    </article>
+                  );
+                })}
+              </div>
+            ) : <div className="empty-state"><strong>No upcoming deadlines</strong><span>Tasks with due dates will appear here.</span></div>}
+          </SectionCard>
+
+          <SectionCard title="Notifications" action={<Link className="button button--ghost" href="/notifications">View All</Link>}>
+            <div className="notification-list">
+              {summary.overdue ? <article><ShieldAlert size={18} /><div><strong>{summary.overdue} overdue tasks need attention</strong><span>View all overdue assignments.</span></div><time>Now</time></article> : null}
+              {summary.blocked ? <article><ClipboardCheck size={18} /><div><strong>{summary.blocked} blocked tasks</strong><span>Leadership intervention may be required.</span></div><time>Now</time></article> : null}
+              {pendingAccess.length ? <article><Users size={18} /><div><strong>{pendingAccess.length} access requests pending</strong><span>Review senior member access.</span></div><time>Now</time></article> : null}
+              {!summary.overdue && !summary.blocked && !pendingAccess.length ? <article><CheckCircle2 size={18} /><div><strong>No urgent notifications</strong><span>Current operational queues are clear.</span></div><time>Now</time></article> : null}
             </div>
-          ) : <div className="empty-state"><strong>No upcoming deadlines</strong><span>Tasks with due dates will appear here.</span></div>}
-        </SectionCard>
+          </SectionCard>
 
-        <SectionCard
-          title="Functional area status"
-          description="Readiness calculated from open, blocked, and overdue tasks."
-          action={<Link className="button button--ghost" href="/readiness">View readiness</Link>}
-          className="dashboard-grid__areas"
-        >
-          <div className="area-grid">
-            {areas.slice(0, 12).map((area) => {
-              const tone: Tone = area.score >= 85 ? "success" : area.score >= 70 ? "warning" : "danger";
-              return (
-                <article key={area.key}>
-                  <div><strong>{area.name}</strong><span>{area.status}{area.openTasks ? `, ${area.openTasks} open` : ""}</span></div>
-                  <b>{area.score}%</b>
-                  <div className={`progress progress--${tone}`}><span style={{ width: `${area.score}%` }} /></div>
+          <SectionCard title="Calendar Preview" action={<Link className="button button--ghost" href="/calendar">View Calendar</Link>}>
+            <div className="calendar-preview">
+              {[["JUL","21","Staff Meeting","Tue, 1830 – 2030"],["JUL","22","PT Test","Wed, 0800 – 1200"],["JUL","25","Aerospace Activity","Sat, 1300 – 1900"]].map(([month, day, title, detail]) => (
+                <article key={`${month}-${day}-${title}`}>
+                  <div className="calendar-preview__date"><span>{month}</span><strong>{day}</strong></div>
+                  <div className="calendar-preview__copy"><strong>{title}</strong><span>{detail}</span></div>
+                  <CalendarDays size={14} />
                 </article>
-              );
-            })}
-          </div>
-        </SectionCard>
-
-        <SectionCard title="Notifications" action={<Link className="button button--ghost" href="/notifications">View all</Link>} className="dashboard-grid__notifications">
-          <div className="notification-list">
-            {summary.overdue ? <article><ShieldAlert size={18} /><div><strong>{summary.overdue} overdue task{summary.overdue === 1 ? "" : "s"} need attention</strong><span>Open the task board and assign a recovery action.</span></div><time>Now</time></article> : null}
-            {summary.blocked ? <article><ClipboardCheck size={18} /><div><strong>{summary.blocked} task{summary.blocked === 1 ? " is" : "s are"} blocked</strong><span>Leadership intervention may be required.</span></div><time>Now</time></article> : null}
-            {pendingAccess.length ? <article><Users size={18} /><div><strong>{pendingAccess.length} access request{pendingAccess.length === 1 ? "" : "s"} pending</strong><span>Tristan, Mellard, or another approver must review.</span></div><time>Now</time></article> : null}
-            {!summary.overdue && !summary.blocked && !pendingAccess.length ? <article><CheckCircle2 size={18} /><div><strong>No urgent system notifications</strong><span>Current operational queues are clear.</span></div><time>Now</time></article> : null}
-          </div>
-        </SectionCard>
+              ))}
+            </div>
+          </SectionCard>
+        </aside>
       </div>
 
-      <section className="quick-actions-bar">
-        <strong>Quick actions</strong>
+      <section className="quick-actions-bar command-quick-actions">
+        <strong>Quick Actions</strong>
         <div>
-          <Link href="/tasks"><Plus size={17} /> Create task</Link>
-          <Link href="/meetings"><CalendarDays size={17} /> Schedule meeting</Link>
-          <Link href="/documents"><FilePlus2 size={17} /> Add document</Link>
-          <Link href="/inspections"><ShieldAlert size={17} /> Log finding</Link>
-          <Link href="/staff"><Users size={17} /> Manage staff</Link>
-          <Link href="/communications"><MessageSquareText size={17} /> Open communications</Link>
+          <Link href="/tasks"><Plus size={16} /><strong>Create Task</strong><small>Assign to staff</small></Link>
+          <Link href="/meetings"><CalendarDays size={16} /><strong>Schedule Meeting</strong><small>Add to calendar</small></Link>
+          <Link href="/documents"><FilePlus2 size={16} /><strong>Add Document</strong><small>Upload & share</small></Link>
+          <Link href="/inspections"><ShieldAlert size={16} /><strong>Log Incident</strong><small>Safety reporting</small></Link>
+          <Link href="/reports"><Gauge size={16} /><strong>Submit Report</strong><small>Official reporting</small></Link>
+          <Link href="/tasks"><ClipboardCheck size={16} /><strong>Request Approval</strong><small>Send for review</small></Link>
+          <Link href="/communications"><MessageSquareText size={16} /><strong>Message Staff</strong><small>Secure comms</small></Link>
+          <Link href="/calendar"><CalendarDays size={16} /><strong>View Calendar</strong><small>Open schedule</small></Link>
         </div>
       </section>
     </div>
@@ -177,7 +201,6 @@ function priorityRank(task: OperationalTask): number {
   const overdueAdjustment = task.dueOn && task.dueOn < today() ? -100 : 0;
   return overdueAdjustment + statusRank[task.status] * 10 + priorityRankMap[task.priority];
 }
-
 function toneForStatus(status: TaskStatus): Tone {
   if (status === "COMPLETED") return "success";
   if (status === "BLOCKED" || status === "CANCELLED") return "danger";
@@ -185,15 +208,8 @@ function toneForStatus(status: TaskStatus): Tone {
   if (status === "IN_PROGRESS") return "info";
   return "neutral";
 }
-
-function formatStatus(status: TaskStatus): string {
-  return status.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
-}
-
-function formatPriority(priority: OperationalTask["priority"]): string {
-  return priority[0] + priority.slice(1).toLowerCase();
-}
-
+function formatStatus(status: TaskStatus): string { return status.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" "); }
+function formatPriority(priority: OperationalTask["priority"]): string { return priority[0] + priority.slice(1).toLowerCase(); }
 function dueTone(task: OperationalTask): Tone {
   if (!task.dueOn) return "neutral";
   if (task.dueOn < today()) return "danger";
@@ -201,7 +217,6 @@ function dueTone(task: OperationalTask): Tone {
   if (task.dueOn <= inSevenDays) return "warning";
   return "neutral";
 }
-
 function dueDetail(task: OperationalTask): string {
   if (!task.dueOn) return "No deadline";
   const due = new Date(`${task.dueOn}T00:00:00Z`).getTime();
@@ -212,11 +227,7 @@ function dueDetail(task: OperationalTask): string {
   if (difference === 1) return "Due tomorrow";
   return `${difference} days`;
 }
-
-function formatDate(date: string): string {
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
-}
-
+function formatDate(date: string): string { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`)); }
 function relativeTime(value: string): string {
   const milliseconds = Date.now() - new Date(value).getTime();
   const minutes = Math.max(0, Math.round(milliseconds / 60000));
@@ -226,11 +237,5 @@ function relativeTime(value: string): string {
   if (hours < 24) return `${hours}h`;
   return `${Math.round(hours / 24)}d`;
 }
-
-function formatAuditAction(action: string): string {
-  return action.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" ");
-}
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+function formatAuditAction(action: string): string { return action.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" "); }
+function today(): string { return new Date().toISOString().slice(0, 10); }
