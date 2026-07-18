@@ -1,0 +1,14 @@
+-- Replace both email addresses before running this file.
+UPDATE users
+SET email='TRISTAN_EMAIL_HERE',
+    email_norm=lower('TRISTAN_EMAIL_HERE'),
+    status='ACTIVE',
+    updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+WHERE capid='729204';
+
+UPDATE users
+SET email='MELLARD_EMAIL_HERE',
+    email_norm=lower('MELLARD_EMAIL_HERE'),
+    status='ACTIVE',
+    updated_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+WHERE capid='326320';

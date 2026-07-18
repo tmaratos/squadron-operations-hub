@@ -674,3 +674,39 @@ body {
     grid-column: auto;
   }
 }
+
+/* Live Cloudflare backend and workflow controls */
+.backend-status-live {
+  border-color: rgba(65, 204, 114, .35) !important;
+  background: rgba(65, 204, 114, .08) !important;
+}
+.backend-status-offline {
+  border-color: rgba(244, 165, 29, .35) !important;
+  background: rgba(244, 165, 29, .08) !important;
+}
+.auth-message {
+  margin-top: 14px;
+  min-height: 22px;
+  color: var(--muted);
+  font-size: .9rem;
+}
+.auth-message.error { color: #ff7777; }
+.auth-message.success { color: #50d47e; }
+.task-live-card {
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+}
+.task-live-card h4 { margin: 0; font-size: .95rem; }
+.task-live-card p { margin: 0; color: var(--muted); font-size: .8rem; }
+.task-live-meta { display: flex; flex-wrap: wrap; gap: 6px; color: var(--muted); font-size: .76rem; }
+.task-live-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.task-live-actions button { min-height: 32px; padding: 0 9px; }
+[data-col] { display: grid; gap: 9px; }
+.live-user-email { min-width: 260px; }
+.live-select { min-width: 130px; }
+.signout-link { display: inline-flex; margin-top: 8px; color: #9fb4d0; }
+.live-hidden { display: none !important; }
