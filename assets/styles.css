@@ -214,3 +214,43 @@ body {
   .form-grid { grid-template-columns: 1fr; }
   .priority-panel table { min-width: 660px; }
 }
+
+/* TN-170 official squadron logo */
+.brand-mark,
+.profile-seal {
+  color: transparent !important;
+  background-color: transparent !important;
+  background-image: url("tn170-logo.png") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: contain !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  overflow: hidden;
+  text-indent: -9999px;
+}
+
+.brand-mark {
+  width: 56px !important;
+  height: 56px !important;
+  flex: 0 0 56px !important;
+}
+
+.brand {
+  min-height: 88px !important;
+}
+
+.profile-seal {
+  width: 42px !important;
+  height: 42px !important;
+  flex: 0 0 42px !important;
+}
+
+@media (max-width: 760px) {
+  .brand-mark {
+    width: 48px !important;
+    height: 48px !important;
+    flex-basis: 48px !important;
+  }
+}

@@ -1,4 +1,19 @@
 (() => {
+  const ensureIcon = (rel, sizes) => {
+    if (document.querySelector(`link[rel="${rel}"]`)) return;
+    const link = document.createElement("link");
+    link.rel = rel;
+    link.href = "assets/tn170-logo.png";
+    if (sizes) link.sizes = sizes;
+    link.type = "image/png";
+    document.head.appendChild(link);
+  };
+
+  ensureIcon("icon", "any");
+  ensureIcon("apple-touch-icon", "180x180");
+})();
+
+(() => {
   const sidebar = document.querySelector('.sidebar');
   const overlay = document.querySelector('.overlay');
   const open = () => { sidebar?.classList.add('open'); overlay?.classList.add('show'); };
