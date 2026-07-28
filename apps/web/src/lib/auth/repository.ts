@@ -44,6 +44,40 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
   return row ? mapUser(row) : null;
 }
 
+export async function upsertGoogleUser(input: { email: string; fullName: string }): Promise<UserRecord> {
+  const email = input.email.trim().toLowerCase();
+  const now = new Date().toISOString();
+  const existing = await findUserByEmail(email);
+  if (existing) {
+    if (existing.status === "SUSPENDED" || existing.status === "ARCHIVED") {
+      throw new Error("This Hub account is disabled.");
+    }
+    await getDatabase()
+      .prepare(
+        `UPDATE users SET full_name = ?, status = 'APPROVED', updated_at = ?,
+         approved_at = COALESCE(approved_at, ?) WHERE id = ?`
+      )
+      .bind(input.fullName.trim(), now, now, existing.id)
+      .run();
+    const updated = await findUserById(existing.id);
+    if (!updated) throw new Error("Google user profile could not be updated.");
+    return updated;
+  }
+
+  const id = crypto.randomUUID();
+  await getDatabase()
+    .prepare(
+      `INSERT INTO users (
+        id, email, full_name, status, global_role, created_at, updated_at, approved_at
+      ) VALUES (?, ?, ?, 'APPROVED', 'STAFF_MEMBER', ?, ?, ?)`
+    )
+    .bind(id, email, input.fullName.trim(), now, now, now)
+    .run();
+  const created = await findUserById(id);
+  if (!created) throw new Error("Google user profile could not be created.");
+  return created;
+}
+
 export async function listUsers(): Promise<UserRecord[]> {
   const result = await getDatabase()
     .prepare("SELECT * FROM users ORDER BY full_name COLLATE NOCASE ASC")

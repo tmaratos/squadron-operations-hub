@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Check, Shield, UserCheck, UserMinus, UserPlus, X } from "lucide-react";
-import type { AccessRequestRecord, AuthenticatedUser, GlobalRole, UserRecord } from "@/lib/auth/types";
+import { Shield, UserCheck, UserMinus } from "lucide-react";
+import type { AuthenticatedUser, GlobalRole, UserRecord } from "@/lib/auth/types";
 
 const roles: Array<{ value: GlobalRole; label: string }> = [
   { value: "SYSTEM_OWNER", label: "System owner" },
@@ -15,12 +15,10 @@ const roles: Array<{ value: GlobalRole; label: string }> = [
 
 export function UserAdministration({
   actor,
-  users,
-  requests
+  users
 }: {
   actor: AuthenticatedUser;
   users: UserRecord[];
-  requests: AccessRequestRecord[];
 }) {
   const router = useRouter();
   const [working, setWorking] = useState<string | null>(null);
@@ -43,37 +41,6 @@ export function UserAdministration({
   return (
     <div className="user-admin-stack">
       {message ? <div className="inline-notice" role="status">{message}</div> : null}
-
-      <section className="section-card">
-        <header className="section-card__header">
-          <div><h2>Pending access requests</h2><p>Every account must be verified by an authorized approver before sign-in is enabled.</p></div>
-          <span className="count-badge">{requests.length}</span>
-        </header>
-        <div className="section-card__body">
-          {requests.length ? (
-            <div className="approval-list">
-              {requests.map((request) => (
-                <article key={request.id}>
-                  <div className="approval-list__identity">
-                    <span><UserPlus size={18} /></span>
-                    <div><strong>{request.fullName}</strong><small>{request.email}</small></div>
-                  </div>
-                  <dl>
-                    <div><dt>CAPID</dt><dd>{request.capid || "Not provided"}</dd></div>
-                    <div><dt>Duty position</dt><dd>{request.dutyTitle || "Not provided"}</dd></div>
-                    <div><dt>Requested</dt><dd>{formatDate(request.requestedAt)}</dd></div>
-                  </dl>
-                  {request.note ? <p>{request.note}</p> : null}
-                  <div className="approval-list__actions">
-                    <button className="button button--primary" disabled={working === request.id} onClick={() => action({ action: "APPROVE_REQUEST", targetId: request.id }, request.id)}><Check size={16} /> Approve</button>
-                    <button className="button button--secondary" disabled={working === request.id} onClick={() => action({ action: "REJECT_REQUEST", targetId: request.id }, request.id)}><X size={16} /> Reject</button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : <div className="empty-state"><UserCheck size={25} /><strong>No requests awaiting review</strong><span>New requests will appear here.</span></div>}
-        </div>
-      </section>
 
       <section className="section-card">
         <header className="section-card__header">
@@ -114,10 +81,6 @@ export function UserAdministration({
       </section>
     </div>
   );
-}
-
-function formatDate(value: string): string {
-  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
 function initials(name: string): string {

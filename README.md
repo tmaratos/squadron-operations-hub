@@ -32,17 +32,14 @@ Google Shared Drive
 
 ## Implemented in this release
 
-### Passwordless, manually approved accounts
+### CAP Google authentication
 
-- No public automatic account creation
-- New members submit an access request
-- Tristan Maratos, Steven Mellard, or another authorized approver verifies the request
-- Approved users sign in through a single-use email link
-- No passwords are stored
-- Sign-in tokens expire after a configurable period
+- Members sign in with a verified `@tncap.us` Google account
+- Google must confirm that the member can access the configured squadron Shared Drive
+- Squadron command staff grant access through Google Drive; there is no in-app access-request process
+- D1 profiles are created or refreshed automatically after successful Google authorization
+- Google access and refresh tokens are encrypted before D1 storage
 - Sessions are revocable and expire automatically
-- Neutral login responses do not reveal whether an email has an account
-- Optional Cloudflare Turnstile protection
 
 ### Administrative succession
 
@@ -69,7 +66,7 @@ Approved users can:
 - Open items in Google Drive when needed
 - Move items to Drive trash
 
-The Google service account key is stored as a Cloudflare secret and is never sent to the browser or committed to GitHub.
+Drive requests use the signed-in member's encrypted OAuth credentials, so Google applies that member's existing Drive permissions.
 
 ### Existing operations modules
 
@@ -186,7 +183,7 @@ Open:
 http://localhost:3000
 ```
 
-When Mailgun is not configured and the app is not running in production, the login form returns a development-only sign-in link so the authentication flow can be tested locally.
+Configure a local Google OAuth client callback at `http://localhost:3000/api/auth/google/callback`.
 
 ### Preview in the Cloudflare Workers runtime
 
@@ -222,15 +219,11 @@ Set these as normal Worker variables:
 ```text
 APP_URL
 APP_NAME
-MAGIC_LINK_TTL_MINUTES
 SESSION_TTL_HOURS
 BOOTSTRAP_OWNER_EMAILS
 BOOTSTRAP_OWNER_PROFILES_JSON
-APPROVER_NOTIFICATION_EMAILS
-MAILGUN_DOMAIN
-EMAIL_FROM
-NEXT_PUBLIC_TURNSTILE_SITE_KEY
-GOOGLE_SERVICE_ACCOUNT_EMAIL
+GOOGLE_CLIENT_ID
+GOOGLE_REDIRECT_URI
 GOOGLE_SHARED_DRIVE_ID
 GOOGLE_ROOT_FOLDER_ID
 GOOGLE_DRIVE_MAX_UPLOAD_MB
@@ -239,12 +232,11 @@ GOOGLE_DRIVE_MAX_UPLOAD_MB
 Set these as encrypted Cloudflare secrets:
 
 ```text
-MAILGUN_API_KEY
-TURNSTILE_SECRET_KEY
-GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+GOOGLE_CLIENT_SECRET
+GOOGLE_TOKEN_ENCRYPTION_KEY
 ```
 
-`BOOTSTRAP_OWNER_EMAILS` contains the initial owner addresses. `BOOTSTRAP_OWNER_PROFILES_JSON` can provide their names and duty titles. The first time either address requests a sign-in link, the app creates the approved owner record automatically.
+Existing D1 user records preserve Hub-specific roles. New Drive-authorized members default to `STAFF_MEMBER`.
 
 ### 3. Deploy the web application
 
@@ -274,14 +266,13 @@ The existing GitHub Pages deployment is only a temporary README landing page and
 
 1. Create a Google Cloud project.
 2. Enable the Google Drive API.
-3. Create a service account.
-4. Generate a JSON key.
-5. Add the service account email to `TN 170 Command` as **Content manager**.
-6. Store the service account email and private key in Cloudflare.
-7. Add the Shared Drive ID to `GOOGLE_SHARED_DRIVE_ID`.
-8. Optionally set `GOOGLE_ROOT_FOLDER_ID` to restrict the app to one folder inside the Shared Drive.
+3. Configure a Web OAuth client and its authorized callback URI.
+4. Store the client ID, client secret, redirect URI, and token-encryption key in Cloudflare.
+5. Set `GOOGLE_SHARED_DRIVE_ID` to `0ALYSj1KARR19Uk9PVA`.
+6. Grant each authorized member access through Google Drive.
+7. Optionally set `GOOGLE_ROOT_FOLDER_ID` to restrict the app to one folder inside the Shared Drive.
 
-All Drive operations are performed server-side. The private key must never be placed in a public variable or frontend file.
+All Drive operations are performed server-side with the signed-in member's OAuth token. OAuth secrets and token-encryption keys must never be placed in public variables or frontend files.
 
 ## Roles
 
@@ -300,7 +291,7 @@ Functional-area permissions are stored separately so future releases can restric
 - No CAP or eServices passwords are stored.
 - No Google password is stored.
 - Google Drive credentials stay server-side.
-- Login links are single-use and short-lived.
+- OAuth state and PKCE protect the Google callback.
 - Session cookies are HTTP-only, secure in production, and SameSite=Lax.
 - Privileged changes are written to an audit log.
 - The final owner and final approver are protected from removal.
@@ -309,8 +300,8 @@ Functional-area permissions are stored separately so future releases can restric
 ## Next engineering wave
 
 1. Deploy the authentication and D1 foundation to Cloudflare.
-2. Connect Mailgun and Turnstile.
-3. Add the Google service account to `TN 170 Command`.
+2. Configure Google OAuth and the D1 token-encryption secret.
+3. Grant authorized members access to `TN 170 Command` through Google Drive.
 4. Verify document CRUD through the app.
 5. Replace mock Tasks and Suspenses with D1-backed CRUD.
 6. Connect Discord channels and create tasks from Discord messages.

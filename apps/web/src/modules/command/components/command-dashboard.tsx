@@ -17,19 +17,17 @@ import {
 import { MetricCard } from "@/components/metric-card";
 import { SectionCard } from "@/components/section-card";
 import { StatusPill } from "@/components/status-pill";
-import { listPendingAccessRequests } from "@/lib/auth/repository";
 import { listAuditEvents } from "@/lib/db/audit";
 import { getTaskSummary, listFunctionalAreaReadiness, listTasks } from "@/lib/operations/tasks";
 import type { OperationalTask, TaskStatus } from "@/lib/operations/types";
 import type { Tone } from "@/lib/types";
 
 export async function CommandDashboard() {
-  const [summary, tasks, areas, activity, pendingAccess] = await Promise.all([
+  const [summary, tasks, areas, activity] = await Promise.all([
     getTaskSummary(),
     listTasks({ includeCompleted: false, limit: 100 }),
     listFunctionalAreaReadiness(),
-    listAuditEvents(6),
-    listPendingAccessRequests()
+    listAuditEvents(6)
   ]);
 
   const readinessScore = areas.length
@@ -159,8 +157,7 @@ export async function CommandDashboard() {
             <div className="notification-list">
               {summary.overdue ? <article><ShieldAlert size={18} /><div><strong>{summary.overdue} overdue tasks need attention</strong><span>View all overdue assignments.</span></div><time>Now</time></article> : null}
               {summary.blocked ? <article><ClipboardCheck size={18} /><div><strong>{summary.blocked} blocked tasks</strong><span>Leadership intervention may be required.</span></div><time>Now</time></article> : null}
-              {pendingAccess.length ? <article><Users size={18} /><div><strong>{pendingAccess.length} access requests pending</strong><span>Review senior member access.</span></div><time>Now</time></article> : null}
-              {!summary.overdue && !summary.blocked && !pendingAccess.length ? <article><CheckCircle2 size={18} /><div><strong>No urgent notifications</strong><span>Current operational queues are clear.</span></div><time>Now</time></article> : null}
+              {!summary.overdue && !summary.blocked ? <article><CheckCircle2 size={18} /><div><strong>No urgent notifications</strong><span>Current operational queues are clear.</span></div><time>Now</time></article> : null}
             </div>
           </SectionCard>
 

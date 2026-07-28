@@ -1,13 +1,12 @@
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
-import { getCloudflareEnv } from "@/lib/cloudflare";
 import { getCurrentUser } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-export default async function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const user = await getCurrentUser();
   if (user) redirect("/");
-  const env = getCloudflareEnv();
-  return <main className="auth-page"><LoginForm turnstileSiteKey={env.NEXT_PUBLIC_TURNSTILE_SITE_KEY} /></main>;
+  const { error } = await searchParams;
+  return <main className="auth-page"><LoginForm error={error} /></main>;
 }
