@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { AlertCircle, LoaderCircle, Plus, Star, Trash2, UserRoundCog } from "lucide-react";
+import { AlertCircle, BriefcaseBusiness, LoaderCircle, Plus, Star, Trash2, UserRoundCog } from "lucide-react";
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import type { GlobalRole } from "@/lib/auth/types";
 import type { DutyAssignmentRecord } from "@/lib/operations/staff";
+import type { PersonnelCommitteeRecord, PersonnelMemberRecord, PersonnelPositionRecord } from "@/lib/operations/personnel";
 import type { FunctionalAreaRecord } from "@/lib/operations/types";
 
 interface UserOption {
@@ -19,12 +20,18 @@ interface UserOption {
 
 export function StaffPage({
   initialAssignments,
+  personnelMembers,
+  personnelPositions,
+  personnelCommittees,
   functionalAreas,
   users,
   canManage,
   canDelete
 }: {
   initialAssignments: DutyAssignmentRecord[];
+  personnelMembers: PersonnelMemberRecord[];
+  personnelPositions: PersonnelPositionRecord[];
+  personnelCommittees: PersonnelCommitteeRecord[];
   functionalAreas: FunctionalAreaRecord[];
   users: UserOption[];
   canManage: boolean;
@@ -36,9 +43,10 @@ export function StaffPage({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
 
-  const staffedAreas = new Set(assignments.filter(isActive).map((item) => item.functionalAreaKey));
-  const unstaffed = functionalAreas.filter((area) => !staffedAreas.has(area.key));
-  const assignedUsers = new Set(assignments.filter(isActive).map((item) => item.userId));
+  const filledPositions = personnelPositions.filter((position) => position.assignmentStatus !== "VACANT");
+  const vacantPositions = personnelPositions.filter((position) => position.assignmentStatus === "VACANT");
+  const actingPositions = personnelPositions.filter((position) => position.assignmentStatus === "ACTING");
+  const membersOnLeave = personnelMembers.filter((member) => member.status === "LEAVE");
   const workload = useMemo(() => {
     return users
       .map((user) => ({ user, assignments: assignments.filter((item) => item.userId === user.id && isActive(item)) }))
@@ -122,19 +130,66 @@ export function StaffPage({
     <div className="page-stack">
       <PageHeader
         eyebrow="Staff continuity"
-        title="Senior Members and Duty Assignments"
-        description="Show who owns each functional area, identify single points of failure, and make it possible for one member to cover multiple positions without losing accountability."
+        title="Squadron Personnel and Organization"
+        description="Current command structure, staff positions, committee membership, leave status, and Hub-linked workflow assignments."
         actions={canManage ? <button className="button button--primary" onClick={() => setShowForm((value) => !value)}><Plus size={16} /> Assign duty</button> : undefined}
       />
 
       <section className="metric-grid metric-grid--four">
-        <MetricCard label="Approved Members" value={users.length} detail="Accounts able to access the hub" tone="info" />
-        <MetricCard label="Assigned Members" value={assignedUsers.size} detail="Holding at least one active duty" tone="success" />
-        <MetricCard label="Active Assignments" value={assignments.filter(isActive).length} detail="Across all staff sections" tone="info" />
-        <MetricCard label="Unstaffed Areas" value={unstaffed.length} detail="No active duty assignment" tone={unstaffed.length ? "warning" : "success"} />
+        <MetricCard label="Personnel" value={personnelMembers.length} detail={`${users.length} linked Hub account${users.length === 1 ? "" : "s"}`} tone="info" />
+        <MetricCard label="Filled Positions" value={filledPositions.length} detail={`${actingPositions.length} currently acting`} tone="success" />
+        <MetricCard label="Vacancies" value={vacantPositions.length} detail="Positions needing assignment" tone={vacantPositions.length ? "warning" : "success"} />
+        <MetricCard label="On Leave" value={membersOnLeave.length} detail={membersOnLeave.map((member) => member.fullName).join(", ") || "No members on leave"} tone={membersOnLeave.length ? "warning" : "success"} />
       </section>
 
       {notice ? <div className={`inline-notice inline-notice--${notice.tone}`} role="status"><AlertCircle size={17} /><span>{notice.message}</span></div> : null}
+
+      <div className="content-grid content-grid--wide personnel-directory-grid">
+        <SectionCard title="Current organization chart" description="Source: Staff Positions, April 2026, with current leave coverage noted by squadron leadership.">
+          <div className="org-position-list">
+            {personnelPositions.map((position) => (
+              <article className={`org-position org-position--${position.assignmentStatus.toLowerCase()}`} key={position.id}>
+                <div className="org-position__icon"><BriefcaseBusiness size={16} /></div>
+                <div className="org-position__body">
+                  <strong>{position.title}</strong>
+                  <span>{position.incumbentName ? `${position.incumbentRank} ${position.incumbentName}` : "Vacant"}</span>
+                  <small>{position.reportsToTitle ? `Reports to ${position.reportsToTitle}` : "Unit command"}</small>
+                  {position.notes ? <em>{position.notes}</em> : null}
+                </div>
+                <span className={`org-status org-status--${position.assignmentStatus.toLowerCase()}`}>{position.assignmentStatus.toLowerCase()}</span>
+              </article>
+            ))}
+          </div>
+        </SectionCard>
+
+        <div className="personnel-directory-side">
+          <SectionCard title="Personnel directory" description="Directory records exist independently of Hub login accounts.">
+            <div className="personnel-member-list">
+              {personnelMembers.map((member) => {
+                const memberPositions = personnelPositions.filter((position) => position.incumbentId === member.id);
+                return (
+                  <article key={member.id}>
+                    <div className="member-avatar">{initials(member.fullName)}</div>
+                    <div><strong>{member.rank} {member.fullName}</strong><span>{memberPositions.map((position) => position.title).join(" · ") || "No current position"}</span>{member.statusNote ? <small>{member.statusNote}</small> : null}</div>
+                    <span className={`personnel-state personnel-state--${member.status.toLowerCase()}`}>{member.status === "LEAVE" ? "On leave" : member.userId ? "Hub linked" : "Directory"}</span>
+                  </article>
+                );
+              })}
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Committees" description="Committee appointments recorded in the April 2026 organization chart.">
+            <div className="committee-list">
+              {personnelCommittees.map((committee) => (
+                <article key={committee.id}>
+                  <strong>{committee.name}</strong>
+                  <div>{committee.members.map((member) => <span key={member.personnelMemberId}><b>{member.role === "CHAIR" ? "Chair" : "Member"}</b>{member.rank} {member.fullName}</span>)}</div>
+                </article>
+              ))}
+            </div>
+          </SectionCard>
+        </div>
+      </div>
 
       {showForm && canManage ? (
         <SectionCard title="Create duty assignment" description="One senior member may hold multiple duties. Mark one assignment as primary when that person owns the functional area.">
@@ -174,7 +229,7 @@ export function StaffPage({
           </div>
         </SectionCard>
 
-        <SectionCard title="Member workload" description="See where a single member is carrying several parts of the squadron.">
+        <SectionCard title="Hub-linked workload" description="Workflow assignments for members who have signed into the Hub.">
           <div className="member-workload-list">
             {workload.map(({ user, assignments: memberAssignments }) => (
               <article key={user.id}>
