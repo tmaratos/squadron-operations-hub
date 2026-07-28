@@ -3,14 +3,30 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronDown, HelpCircle, Menu, MessageCircle, Search, Sun, X } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { Bell, ChevronDown, HelpCircle, Menu, MessageCircle, Moon, Search, Sun, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 
 export function AppShell({ children, user }: { children: ReactNode; user: AuthenticatedUser }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  useEffect(() => {
+    const saved = localStorage.getItem("hub-theme");
+    const nextTheme = saved === "dark" || saved === "light"
+      ? saved
+      : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+  }, []);
+
+  function selectTheme(nextTheme: "light" | "dark") {
+    setTheme(nextTheme);
+    localStorage.setItem("hub-theme", nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+  }
 
   return (
     <div className="app-shell hub-shell">
@@ -22,7 +38,11 @@ export function AppShell({ children, user }: { children: ReactNode; user: Authen
         </Link>
         <label className="hub-search"><Search size={19} /><input aria-label="Search Hub" placeholder="Search documents, forms, contacts, and more..." /><kbd>Ctrl + K</kbd></label>
         <div className="hub-top-actions">
-          <div className="theme-switch"><b>Light</b><span><Sun size={16} /></span><small>Dark</small></div>
+          <div className="theme-switch" role="group" aria-label="Color theme">
+            <button className={theme === "light" ? "is-active" : ""} onClick={() => selectTheme("light")} aria-pressed={theme === "light"}>Light</button>
+            <span>{theme === "light" ? <Sun size={16} /> : <Moon size={15} />}</span>
+            <button className={theme === "dark" ? "is-active" : ""} onClick={() => selectTheme("dark")} aria-pressed={theme === "dark"}>Dark</button>
+          </div>
           <Link href="/notifications" className="hub-alert" aria-label="Notifications"><Bell size={21} /><b>3</b></Link>
           <Link href="/communications" className="hub-alert hub-alert--message" aria-label="Messages"><MessageCircle size={21} /><b>7</b></Link>
           <button className="hub-profile">

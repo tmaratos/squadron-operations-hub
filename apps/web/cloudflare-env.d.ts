@@ -12,4 +12,7 @@ interface CloudflareEnv {
   GOOGLE_TOKEN_ENCRYPTION_KEY?: string;
   GOOGLE_ROOT_FOLDER_ID?: string;
   GOOGLE_DRIVE_MAX_UPLOAD_MB?: string;
+  DISCORD_BOT_TOKEN?: string;
+  DISCORD_GUILD_ID?: string;
+  DISCORD_ALLOWED_CHANNEL_IDS?: string;
 }
