@@ -732,8 +732,7 @@ html[data-theme="dark"] .hub-nav-item:hover { background: #14253a; color: #fff; 
 html[data-theme="dark"] .hub-nav-item.is-active { background: linear-gradient(90deg,#15345b,#142b48); color: #80b9ff; }
 html[data-theme="dark"] .hub-nav-divider { background: #223650; }
 html[data-theme="dark"] .hub-main { background: #081321; }
-html[data-theme="dark"] .home-card, html[data-theme="dark"] .section-card, html[data-theme="dark"] .metric-card,
-html[data-theme="dark"] .discord-channel-panel, html[data-theme="dark"] .discord-message-panel, html[data-theme="dark"] .discord-setup-card {
+html[data-theme="dark"] .home-card, html[data-theme="dark"] .section-card, html[data-theme="dark"] .metric-card {
   background: #101f33; border-color: #223650; color: #f6f8fc; box-shadow: 0 8px 24px rgba(0,0,0,.22);
 }
 html[data-theme="dark"] .home-card > header h2, html[data-theme="dark"] .section-card__header h2,
@@ -746,31 +745,3 @@ html[data-theme="dark"] .event-list article > div:last-child strong { color: #dc
 html[data-theme="dark"] .announcement-list article, html[data-theme="dark"] .quick-links-grid a,
 html[data-theme="dark"] .home-quick-actions a { background: #13243a; border-color: #283d59; color: #dce6f4; }
 html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea { background: #0b1727; border-color: #2a3f5b; color: #f6f8fc; }
-
-/* Discord communications workspace */
-.discord-workspace { display: grid; grid-template-columns: 330px minmax(0,1fr); gap: 16px; align-items: start; }
-.discord-notice { grid-column: 1 / -1; padding: 11px 14px; border: 1px solid #b9d7ff; border-radius: 9px; background: #edf6ff; color: #185fae; font-size: 11px; }
-.discord-channel-panel, .discord-message-panel, .discord-setup-card { overflow: hidden; border: 1px solid #e1e7f0; border-radius: 14px; background: #fff; box-shadow: var(--shadow); }
-.discord-channel-panel > header, .discord-message-panel > header { min-height: 68px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border-soft); }
-.discord-channel-panel h2 { margin: 0; font-size: 14px; }.discord-channel-panel header p { margin: 5px 0 0; color: var(--muted); font-size: 9px; }
-.discord-channel-panel header button, .discord-message-panel header button { min-height: 33px; padding: 0 9px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--muted-strong); cursor: pointer; }
-.linked-channel-list { padding: 10px; display: grid; gap: 5px; }.linked-channel-list > button { min-height: 48px; padding: 8px 9px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-soft); text-align: left; cursor: pointer; }
-.linked-channel-list > button.is-selected { border-color: #c9ddf8; background: #edf5ff; color: #075fc9; }
-.linked-channel-list button > span { display: grid; gap: 3px; }.linked-channel-list strong { font-size: 11px; }.linked-channel-list small { color: var(--muted); font-size: 8px; }
-.linked-channel-list i { display: grid; place-items: center; color: #d55353; }
-.available-channel-list { padding: 13px 10px 15px; border-top: 1px solid var(--border-soft); }.available-channel-list h3 { margin: 0 6px 9px; color: var(--muted); font-size: 9px; text-transform: uppercase; }
-.available-channel-list button { width: 100%; min-height: 34px; padding: 6px 8px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 7px; border: 0; border-radius: 7px; background: transparent; color: var(--muted-strong); font-size: 10px; text-align: left; cursor: pointer; }
-.available-channel-list button:hover { background: var(--surface-alt); }
-.discord-message-panel { min-height: 620px; display: grid; grid-template-rows: auto minmax(360px,1fr) auto; }
-.discord-message-panel > header > div { display: flex; align-items: center; gap: 9px; }.discord-message-panel > header > div > span { display: grid; gap: 3px; }.discord-message-panel header strong { font-size: 13px; }.discord-message-panel header small { color: var(--muted); font-size: 9px; }
-.discord-message-list { max-height: 520px; padding: 14px 18px; overflow-y: auto; }.discord-message-list article { padding: 9px 0; display: grid; grid-template-columns: 34px 1fr; gap: 10px; }
-.discord-message-list article > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #5865f2; color: white; font-size: 9px; font-weight: 800; }
-.discord-message-list article > div { min-width: 0; }.discord-message-list article strong { display: flex; gap: 8px; font-size: 11px; }.discord-message-list time { color: var(--muted); font-size: 8px; font-weight: 400; }.discord-message-list p { margin: 4px 0 0; color: var(--muted-strong); font-size: 10px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
-.discord-message-panel form { padding: 12px; border-top: 1px solid var(--border-soft); }.discord-message-panel textarea { width: 100%; min-height: 82px; padding: 11px; resize: vertical; border: 1px solid var(--border); border-radius: 9px; outline: 0; }
-.discord-message-panel form > div { margin-top: 8px; display: flex; align-items: center; justify-content: space-between; }.discord-message-panel form span { color: var(--muted); font-size: 8px; }
-.discord-message-panel form button { min-height: 36px; padding: 0 13px; display: flex; align-items: center; gap: 7px; border: 0; border-radius: 8px; background: #5865f2; color: white; font-size: 10px; font-weight: 700; cursor: pointer; }.discord-message-panel form button:disabled { opacity: .5; cursor: not-allowed; }
-.discord-empty { padding: 20px; color: var(--muted); font-size: 10px; text-align: center; }.discord-setup-card { padding: 28px; display: flex; align-items: center; gap: 17px; color: #5865f2; }.discord-setup-card h2 { margin: 0; color: var(--text); font-size: 16px; }.discord-setup-card p { margin: 6px 0 0; color: var(--muted); font-size: 11px; }
-.spin { animation: spin .8s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
-html[data-theme="dark"] .linked-channel-list > button.is-selected { border-color: #385478; background: #173355; color: #80b9ff; }
-html[data-theme="dark"] .discord-notice { border-color: #315272; background: #112d48; color: #80b9ff; }
-@media (max-width: 850px) { .discord-workspace { grid-template-columns: 1fr; }.discord-message-panel { min-height: 540px; } }

@@ -11,8 +11,7 @@ export default async function SettingsPage() {
   const owner = ["SYSTEM_OWNER", "ACCOUNT_APPROVER"].includes(user.globalRole);
   const integrations = [
     { name: "Cloudflare D1", detail: "Connected as the application database", state: "Connected" },
-    { name: "Google OAuth and Shared Drive", detail: isGoogleDriveConfigured() ? "Member sign-in and TN 170 Command storage are connected" : "Google OAuth secrets, token encryption key, redirect URI, and drive ID are required", state: isGoogleDriveConfigured() ? "Connected" : "Needs setup" },
-    { name: "Discord", detail: "Integration adapter is present; channel authorization is not configured", state: "Planned" }
+    { name: "Google OAuth and Shared Drive", detail: isGoogleDriveConfigured() ? "Member sign-in and TN 170 Command storage are connected" : "Google OAuth secrets, token encryption key, redirect URI, and drive ID are required", state: isGoogleDriveConfigured() ? "Connected" : "Needs setup" }
   ];
 
   return (
