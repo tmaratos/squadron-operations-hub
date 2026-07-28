@@ -17,7 +17,6 @@ export interface GoogleProfile {
   name: string;
   picture?: string;
   emailVerified: boolean;
-  hostedDomain?: string;
 }
 
 interface TokenResponse {
@@ -61,7 +60,6 @@ export async function createGoogleAuthorizationUrl(): Promise<string> {
     code_challenge_method: "S256",
     access_type: "offline",
     prompt: "consent",
-    hd: "tncap.us",
     include_granted_scopes: "true"
   });
   return `${AUTHORIZATION_ENDPOINT}?${params}`;
@@ -104,21 +102,18 @@ export async function getGoogleProfile(accessToken: string): Promise<GoogleProfi
     name: string;
     picture?: string;
     email_verified?: boolean;
-    hd?: string;
   }>();
   return {
     sub: profile.sub,
     email: profile.email.trim().toLowerCase(),
     name: profile.name,
     picture: profile.picture,
-    emailVerified: profile.email_verified === true,
-    hostedDomain: profile.hd
+    emailVerified: profile.email_verified === true
   };
 }
 
-export function isAuthorizedCapProfile(profile: GoogleProfile): boolean {
-  return profile.emailVerified && profile.email.endsWith("@tncap.us") &&
-    (!profile.hostedDomain || profile.hostedDomain === "tncap.us");
+export function isVerifiedGoogleProfile(profile: GoogleProfile): boolean {
+  return profile.emailVerified && profile.email.length > 0;
 }
 
 export async function canAccessSharedDrive(accessToken: string): Promise<boolean> {

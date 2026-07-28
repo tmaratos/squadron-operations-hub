@@ -3,7 +3,7 @@ import {
   canAccessSharedDrive,
   exchangeGoogleCode,
   getGoogleProfile,
-  isAuthorizedCapProfile,
+  isVerifiedGoogleProfile,
   storeGoogleTokens
 } from "@/lib/auth/google-oauth";
 import { upsertGoogleUser } from "@/lib/auth/repository";
@@ -21,7 +21,7 @@ export async function GET(request: Request) {
   try {
     const tokens = await exchangeGoogleCode(code, state);
     const profile = await getGoogleProfile(tokens.access_token);
-    if (!isAuthorizedCapProfile(profile)) return loginRedirect(request, "domain");
+    if (!isVerifiedGoogleProfile(profile)) return loginRedirect(request, "unverified");
     if (!(await canAccessSharedDrive(tokens.access_token))) return loginRedirect(request, "drive_access");
 
     const user = await upsertGoogleUser({ email: profile.email, fullName: profile.name });
@@ -43,7 +43,7 @@ export async function GET(request: Request) {
       actorUserId: user.id,
       action: "SIGNED_IN",
       entityType: "session",
-      summary: `${user.fullName} signed in with CAP Google`
+      summary: `${user.fullName} signed in with Google`
     });
     return NextResponse.redirect(new URL("/", request.url));
   } catch (error) {
