@@ -18,7 +18,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ fileI
     if (!user || user.globalRole === "READ_ONLY") return NextResponse.json({ message: "Not authorized." }, { status: 403 });
     const { fileId } = await context.params;
     const input = schema.parse(await request.json());
-    const updated = await updateDriveFile({ fileId, ...input });
+    const updated = await updateDriveFile({ userId: user.id, fileId, ...input });
     await recordAuditEvent({
       actorUserId: user.id,
       action: "DRIVE_FILE_UPDATED",
@@ -40,7 +40,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ file
     const user = await getCurrentUser();
     if (!user || user.globalRole === "READ_ONLY") return NextResponse.json({ message: "Not authorized." }, { status: 403 });
     const { fileId } = await context.params;
-    await trashDriveFile(fileId);
+    await trashDriveFile(user.id, fileId);
     await recordAuditEvent({
       actorUserId: user.id,
       action: "DRIVE_FILE_TRASHED",

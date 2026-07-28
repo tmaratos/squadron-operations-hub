@@ -8,7 +8,8 @@ const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 export { isGoogleDriveConfigured };
 
-export async function listDriveFiles(input?: {
+export async function listDriveFiles(input: {
+  userId: string;
   parentId?: string;
   search?: string;
   pageToken?: string;
@@ -16,7 +17,7 @@ export async function listDriveFiles(input?: {
   const env = getCloudflareEnv();
   if (!env.GOOGLE_SHARED_DRIVE_ID) throw new Error("Google Shared Drive ID is not configured.");
   const parentId = input?.parentId || env.GOOGLE_ROOT_FOLDER_ID || env.GOOGLE_SHARED_DRIVE_ID;
-  const token = await getGoogleAccessToken();
+  const token = await getGoogleAccessToken(input.userId);
   const queryParts = [`'${escapeDriveQuery(parentId)}' in parents`, "trashed = false"];
   if (input?.search?.trim()) {
     queryParts.push(`name contains '${escapeDriveQuery(input.search.trim())}'`);
@@ -37,9 +38,9 @@ export async function listDriveFiles(input?: {
   return googleJson<DriveFileList>(`${DRIVE_API}/files?${params}`, token);
 }
 
-export async function createDriveFolder(name: string, parentId?: string): Promise<DriveFile> {
+export async function createDriveFolder(userId: string, name: string, parentId?: string): Promise<DriveFile> {
   const env = getCloudflareEnv();
-  const token = await getGoogleAccessToken();
+  const token = await getGoogleAccessToken(userId);
   const parent = parentId || env.GOOGLE_ROOT_FOLDER_ID || env.GOOGLE_SHARED_DRIVE_ID;
   if (!parent) throw new Error("Google Drive root folder is not configured.");
 
@@ -51,13 +52,14 @@ export async function createDriveFolder(name: string, parentId?: string): Promis
 }
 
 export async function uploadDriveFile(input: {
+  userId: string;
   name: string;
   mimeType: string;
   bytes: ArrayBuffer;
   parentId?: string;
 }): Promise<DriveFile> {
   const env = getCloudflareEnv();
-  const token = await getGoogleAccessToken();
+  const token = await getGoogleAccessToken(input.userId);
   const parent = input.parentId || env.GOOGLE_ROOT_FOLDER_ID || env.GOOGLE_SHARED_DRIVE_ID;
   if (!parent) throw new Error("Google Drive root folder is not configured.");
 
@@ -85,12 +87,13 @@ export async function uploadDriveFile(input: {
 }
 
 export async function updateDriveFile(input: {
+  userId: string;
   fileId: string;
   name?: string;
   addParentId?: string;
   removeParentId?: string;
 }): Promise<DriveFile> {
-  const token = await getGoogleAccessToken();
+  const token = await getGoogleAccessToken(input.userId);
   const params = new URLSearchParams({
     supportsAllDrives: "true",
     fields: "id,name,mimeType,modifiedTime,size,parents,webViewLink,webContentLink"
@@ -105,8 +108,8 @@ export async function updateDriveFile(input: {
   });
 }
 
-export async function trashDriveFile(fileId: string): Promise<void> {
-  const token = await getGoogleAccessToken();
+export async function trashDriveFile(userId: string, fileId: string): Promise<void> {
+  const token = await getGoogleAccessToken(userId);
   await googleJson(`${DRIVE_API}/files/${encodeURIComponent(fileId)}?supportsAllDrives=true`, token, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -114,8 +117,8 @@ export async function trashDriveFile(fileId: string): Promise<void> {
   });
 }
 
-export async function downloadDriveFile(fileId: string): Promise<Response> {
-  const token = await getGoogleAccessToken();
+export async function downloadDriveFile(userId: string, fileId: string): Promise<Response> {
+  const token = await getGoogleAccessToken(userId);
   const metadata = await googleJson<DriveFile>(
     `${DRIVE_API}/files/${encodeURIComponent(fileId)}?supportsAllDrives=true&fields=id,name,mimeType`,
     token

@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const result = await listDriveFiles({
+      userId: user.id,
       parentId: url.searchParams.get("parentId") ?? undefined,
       search: url.searchParams.get("search") ?? undefined,
       pageToken: url.searchParams.get("pageToken") ?? undefined
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
       const input = folderSchema.parse(await request.json());
-      const folder = await createDriveFolder(input.name, input.parentId);
+      const folder = await createDriveFolder(user.id, input.name, input.parentId);
       await recordAuditEvent({
         actorUserId: user.id,
         action: "DRIVE_FOLDER_CREATED",
@@ -68,6 +69,7 @@ export async function POST(request: Request) {
     }
 
     const uploaded = await uploadDriveFile({
+      userId: user.id,
       name: file.name,
       mimeType: file.type || "application/octet-stream",
       bytes: await file.arrayBuffer(),

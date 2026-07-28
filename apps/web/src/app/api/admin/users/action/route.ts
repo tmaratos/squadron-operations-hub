@@ -3,21 +3,17 @@ import { z } from "zod";
 import {
   countActiveApprovers,
   countActiveSystemOwners,
-  createApprovedUserFromRequest,
-  findAccessRequestById,
   findUserById,
-  rejectAccessRequest,
   updateUserRole,
   updateUserStatus
 } from "@/lib/auth/repository";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canApproveAccounts, canManageOwners, type GlobalRole } from "@/lib/auth/types";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { sendApprovalEmail } from "@/lib/email/mailgun";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 const schema = z.object({
-  action: z.enum(["APPROVE_REQUEST", "REJECT_REQUEST", "SET_ROLE", "SUSPEND", "REACTIVATE", "ARCHIVE"]),
+  action: z.enum(["SET_ROLE", "SUSPEND", "REACTIVATE", "ARCHIVE"]),
   targetId: z.string().uuid(),
   role: z.enum(["SYSTEM_OWNER", "ACCOUNT_APPROVER", "ADMINISTRATOR", "STAFF_MEMBER", "READ_ONLY"]).optional(),
   note: z.string().trim().max(500).optional()
@@ -31,40 +27,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "You are not authorized to manage accounts." }, { status: 403 });
     }
     const input = schema.parse(await request.json());
-
-    if (input.action === "APPROVE_REQUEST") {
-      const accessRequest = await findAccessRequestById(input.targetId);
-      if (!accessRequest || accessRequest.status !== "PENDING") {
-        return NextResponse.json({ message: "That access request is no longer pending." }, { status: 409 });
-      }
-      const user = await createApprovedUserFromRequest({ request: accessRequest, approverId: actor.id });
-      await recordAuditEvent({
-        actorUserId: actor.id,
-        action: "USER_APPROVED",
-        entityType: "user",
-        entityId: user.id,
-        summary: `${actor.fullName} approved ${user.fullName}`,
-        metadata: { email: user.email, role: user.globalRole }
-      });
-      await sendApprovalEmail({ to: user.email, name: user.fullName });
-      return NextResponse.json({ message: `${user.fullName} was approved.` });
-    }
-
-    if (input.action === "REJECT_REQUEST") {
-      const accessRequest = await findAccessRequestById(input.targetId);
-      if (!accessRequest || accessRequest.status !== "PENDING") {
-        return NextResponse.json({ message: "That access request is no longer pending." }, { status: 409 });
-      }
-      await rejectAccessRequest(input.targetId, actor.id, input.note);
-      await recordAuditEvent({
-        actorUserId: actor.id,
-        action: "ACCESS_REQUEST_REJECTED",
-        entityType: "access_request",
-        entityId: input.targetId,
-        summary: `${actor.fullName} rejected the access request from ${accessRequest.fullName}`
-      });
-      return NextResponse.json({ message: "The access request was rejected." });
-    }
 
     const target = await findUserById(input.targetId);
     if (!target) return NextResponse.json({ message: "User not found." }, { status: 404 });

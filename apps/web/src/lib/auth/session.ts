@@ -4,6 +4,7 @@ import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 import { createRandomToken, sha256 } from "@/lib/security/crypto";
 import { findUserById, toAuthenticatedUser } from "./repository";
 import type { AuthenticatedUser, GlobalRole } from "./types";
+import { canAccessSharedDrive, getUserGoogleAccessToken } from "./google-oauth";
 
 const PRODUCTION_COOKIE = "__Host-squadron_session";
 const DEVELOPMENT_COOKIE = "squadron_session";
@@ -86,6 +87,12 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   if (!session) return null;
   const user = await findUserById(session.user_id);
   if (!user || user.status !== "APPROVED") return null;
+  try {
+    const googleToken = await getUserGoogleAccessToken(user.id);
+    if (!(await canAccessSharedDrive(googleToken))) return null;
+  } catch {
+    return null;
+  }
 
   if (Date.now() - new Date(session.last_seen_at).getTime() > 15 * 60 * 1000) {
     await getDatabase()

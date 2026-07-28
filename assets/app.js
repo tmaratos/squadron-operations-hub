@@ -1,7 +1,7 @@
 (() => {
   const API = "/api";
   const currentPage = location.pathname.split("/").pop() || "index.html";
-  const publicPages = new Set(["sign-in.html", "access-request.html", "404.html"]);
+  const publicPages = new Set(["sign-in.html", "404.html"]);
   let currentUser = null;
   let backendAvailable = false;
   let toastTimer;
@@ -1056,7 +1056,6 @@
 
   initializeKeyboardAndPreviewActions();
   initializeSignIn();
-  initializeAccessRequest();
 
   initializeSession().then(authenticated => {
     initializeCalendar();
