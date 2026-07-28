@@ -1,238 +1,154 @@
 import Link from "next/link";
+import type { ComponentType, ReactNode } from "react";
 import {
-  CalendarDays,
-  CheckCircle2,
-  ClipboardCheck,
-  Cloud,
-  FilePlus2,
-  FolderOpen,
-  Gauge,
-  MessageSquareText,
-  Plus,
-  Radio,
-  ShieldAlert,
-  Users,
-  Wrench
+  BellRing, CalendarDays, CheckSquare, ContactRound, ExternalLink, FilePlus2,
+  FileText, Folder, FolderPlus, Globe2, Megaphone, MoreVertical, Search,
+  ShieldCheck, Shirt, SlidersHorizontal, UploadCloud, Users
 } from "lucide-react";
-import { MetricCard } from "@/components/metric-card";
-import { SectionCard } from "@/components/section-card";
-import { StatusPill } from "@/components/status-pill";
-import { listAuditEvents } from "@/lib/db/audit";
-import { getTaskSummary, listFunctionalAreaReadiness, listTasks } from "@/lib/operations/tasks";
-import type { OperationalTask, TaskStatus } from "@/lib/operations/types";
-import type { Tone } from "@/lib/types";
+import type { AuthenticatedUser } from "@/lib/auth/types";
+import { getTaskSummary, listTasks } from "@/lib/operations/tasks";
 
-export async function CommandDashboard() {
-  const [summary, tasks, areas, activity] = await Promise.all([
+const recentDocuments = [
+  ["FAA Sectional Charts AE Presentation C/Tsgt. Wilkie.pptx", "03. Aerospace Education", "/ Cadet AE Presentations", "Mar 10, 2026", "1:22 PM", "ppt"],
+  ["Military Aviation Presentation C.Ssgt. Wilkie (Revised).pptx", "03. Aerospace Education", "/ Cadet AE Presentations", "Aug 31, 2025", "6:47 PM", "ppt"],
+  ["Orientation Flight - Puska_Wilkie", "03. Aerospace Education", "/ Orientation Flights", "Mar 10, 2026", "7:46 PM", "folder"],
+  ["Cadet Programs SOP v2.1.pdf", "07. Cadet Programs", "/ Standard Operating Procedures", "Mar 8, 2026", "3:15 PM", "pdf"],
+  ["Emergency Services Drill Plan - Q1 2026.pdf", "08. Emergency Services", "/ Drill Plans", "Mar 7, 2026", "9:03 AM", "pdf"]
+] as const;
+
+const events = [
+  { month: "JUL", day: "29", title: "Staff Meeting", date: "Wed, Jul 29, 2026 · 7:00 PM", place: "Anderson County Clerk's Office", tone: "red" },
+  { month: "AUG", day: "01", title: "Cadet Drone Operations", date: "Sat, Aug 1, 2026 · 9:00 AM", place: "ORCS Field", tone: "red" },
+  { month: "AUG", day: "04", title: "AE Lesson: Radio Communications", date: "Tue, Aug 4, 2026 · 6:00 PM", place: "Squadron Building", tone: "green" }
+] as const;
+
+export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
+  const [summary, tasks] = await Promise.all([
     getTaskSummary(),
-    listTasks({ includeCompleted: false, limit: 100 }),
-    listFunctionalAreaReadiness(),
-    listAuditEvents(6)
+    listTasks({ includeCompleted: false, limit: 12 })
   ]);
-
-  const readinessScore = areas.length
-    ? Math.round(areas.reduce((total, area) => total + area.score, 0) / areas.length)
-    : 100;
-
-  const priorityTasks = [...tasks].sort((a, b) => priorityRank(a) - priorityRank(b)).slice(0, 5);
-  const deadlines = tasks.filter((task) => task.dueOn).sort((a, b) => (a.dueOn ?? "9999").localeCompare(b.dueOn ?? "9999")).slice(0, 5);
-
-  const metrics = [
-    { label: "Overdue Items", value: summary.overdue, detail: "Require immediate attention", tone: summary.overdue ? "danger" : "success", progress: Math.min(summary.overdue * 12, 100) },
-    { label: "Due This Week", value: summary.dueThisWeek, detail: "Upcoming deadlines", tone: summary.dueThisWeek ? "warning" : "success", progress: Math.min(summary.dueThisWeek * 10, 100) },
-    { label: "Awaiting Approval", value: summary.awaitingApproval, detail: "Items pending your review", tone: summary.awaitingApproval ? "warning" : "success", progress: Math.min(summary.awaitingApproval * 18, 100) },
-    { label: "Open Tasks", value: summary.open + summary.inProgress + summary.blocked + summary.awaitingApproval, detail: "Active assignments", tone: "info", progress: Math.min((summary.open + summary.inProgress) * 5, 100) },
-    { label: "Readiness Score", value: `${readinessScore}%`, detail: "Overall squadron", tone: readinessScore >= 85 ? "success" : readinessScore >= 70 ? "warning" : "danger", progress: readinessScore }
-  ] as const;
-
-  const connectedApps = [
-    { name: "Discord", detail: "3 new staff messages", icon: MessageSquareText, href: "/communications" },
-    { name: "Drive", detail: "AE lesson plans updated", icon: FolderOpen, href: "/documents" },
-    { name: "Calendar", detail: "Next event Tue 1900", icon: CalendarDays, href: "/calendar" },
-    { name: "eServices", detail: "Open exact module", icon: Cloud, href: "/settings" },
-    { name: "BAND", detail: "2 new posts", icon: Radio, href: "/communications" },
-    { name: "Attendance", detail: "92% recorded", icon: Users, href: "/reports" }
-  ];
+  const visibleTasks = tasks.slice(0, 3);
+  const openTasks = summary.open + summary.inProgress + summary.blocked + summary.awaitingApproval;
 
   return (
-    <div className="page-stack command-page">
-      <header className="command-page__header">
-        <div className="command-page__title">
-          <h1>Command Dashboard</h1>
-          <p>{new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(new Date())}</p>
-        </div>
-        <div className="command-page__controls">
-          <div className="segmented-control">
-            <span className="is-active"><Users size={15} /> Commander View</span>
-            <Link href="/staff">My Duty Positions</Link>
+    <div className="home-dashboard">
+      <div className="home-primary">
+        <section className="welcome-hero">
+          <div className="welcome-hero__shade" />
+          <div className="welcome-hero__content">
+            <h1>Good morning, {firstName(user.fullName)}! <span>👋</span></h1>
+            <p>Here&apos;s what&apos;s happening with TN-170 today.</p>
+            <div className="hero-metrics">
+              <HeroMetric icon={FileText} value="128" label="Documents" detail="Updated this week" tone="blue" />
+              <HeroMetric icon={Users} value="23" label="Active Personnel" detail="2 new this month" tone="green" />
+              <HeroMetric icon={CalendarDays} value="5" label="Upcoming Events" detail="Next: Staff Meeting" tone="orange" />
+              <HeroMetric icon={CheckSquare} value={String(openTasks)} label="Tasks Assigned" detail={`${summary.dueThisWeek} due this week`} tone="purple" />
+            </div>
           </div>
-          <Link className="button button--secondary" href="/settings"><Wrench size={15} /> Customize Dashboard</Link>
-        </div>
-      </header>
+        </section>
 
-      <section className="metric-grid command-metrics">
-        {metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
-      </section>
+        <DashboardCard title="Recent Documents" icon={<FileText size={20} />} action="View All" href="/documents" className="documents-card">
+          <div className="documents-head"><span>Name</span><span>Location</span><span>Updated</span><span>By</span><span /></div>
+          <div className="documents-list">
+            {recentDocuments.map(([name, location, folder, date, time, type]) => (
+              <article key={name}>
+                <span className={`document-type document-type--${type}`}>{type === "folder" ? <Folder size={17} /> : type.toUpperCase()}</span>
+                <Link href="/documents"><strong>{name}</strong></Link>
+                <span><b>{location}</b><small>{folder}</small></span>
+                <span><b>{date}</b><small>{time}</small></span>
+                <span className="mini-avatar">{initials(user.fullName)}</span>
+                <button aria-label={`More actions for ${name}`}><MoreVertical size={17} /></button>
+              </article>
+            ))}
+          </div>
+        </DashboardCard>
 
-      <section className="connected-workspace">
-        <div className="connected-workspace__head"><h2>Connected Workspace</h2><span>About 15 senior members connected</span></div>
-        <div className="connected-workspace__apps">
-          {connectedApps.map(({ name, detail, icon: Icon, href }) => (
-            <Link className="workspace-app" href={href} key={name}>
-              <span className="workspace-app__icon"><Icon size={16} /></span>
-              <span className="workspace-app__copy"><strong>{name}</strong><span>{detail}</span></span>
-              <span className="workspace-app__dot" />
-            </Link>
-          ))}
-        </div>
-      </section>
+        <DashboardCard title="Quick Actions" icon={<SlidersHorizontal size={20} />} className="quick-actions-card">
+          <div className="home-quick-actions">
+            <QuickAction icon={UploadCloud} label="Upload Document" href="/documents" tone="blue" />
+            <QuickAction icon={FolderPlus} label="Create Folder" href="/documents" tone="green" />
+            <QuickAction icon={FilePlus2} label="New Form" href="/documents" tone="purple" />
+            <QuickAction icon={CalendarDays} label="Add Event" href="/calendar" tone="orange" />
+            <QuickAction icon={Search} label="Search Everything" href="/documents" tone="cyan" />
+            <QuickAction icon={ContactRound} label="Contacts Directory" href="/staff" tone="orange" />
+          </div>
+        </DashboardCard>
 
-      <div className="command-layout">
-        <div className="command-primary">
-          <SectionCard title="Priority Items" action={<Link className="button button--ghost" href="/tasks">View All</Link>} className="command-priority">
-            {priorityTasks.length ? (
-              <div className="priority-table" role="table" aria-label="Priority items">
-                <div className="priority-table__header" role="row"><span>Item</span><span>Category</span><span>Due Date</span><span>Status</span><span>Assigned To</span></div>
-                {priorityTasks.map((task) => (
-                  <div className="priority-table__row" role="row" key={task.id}>
-                    <div><strong>{task.title}</strong><small>{task.description || `${formatPriority(task.priority)} priority`}</small></div>
-                    <span className="category-label">{task.functionalAreaName}</span>
-                    <div><span>{task.dueOn ? formatDate(task.dueOn) : "No due date"}</span><small className={`text-${dueTone(task)}`}>{dueDetail(task)}</small></div>
-                    <StatusPill label={formatStatus(task.status)} tone={toneForStatus(task.status)} />
-                    <span>{task.ownerName || "Unassigned"}</span>
-                  </div>
-                ))}
-              </div>
-            ) : <div className="empty-state"><strong>No active tasks</strong><span>Create the first suspense item to begin tracking squadron work.</span><Link className="button button--primary" href="/tasks">Create task</Link></div>}
-          </SectionCard>
-
-          <SectionCard title="Functional Area Status" action={<Link className="button button--ghost" href="/readiness">View All</Link>}>
-            <div className="area-grid command-area-grid">
-              {areas.slice(0, 12).map((area) => {
-                const tone: Tone = area.score >= 85 ? "success" : area.score >= 70 ? "warning" : "danger";
-                return (
-                  <article key={area.key}>
-                    <div><strong>{area.name}</strong><span>{area.status}{area.openTasks ? `, ${area.openTasks} open` : ""}</span></div>
-                    <b>{area.score}%</b>
-                    <div className={`progress progress--${tone}`}><span style={{ width: `${area.score}%` }} /></div>
-                  </article>
-                );
-              })}
-            </div>
-          </SectionCard>
-        </div>
-
-        <SectionCard title="Recent Activity" action={<Link className="button button--ghost" href="/audit">View All</Link>} className="command-activity">
-          {activity.length ? (
-            <div className="activity-list">
-              {activity.map((item) => (
-                <article key={item.id}>
-                  <span className="activity-list__icon activity-list__icon--info"><CheckCircle2 size={17} /></span>
-                  <div><strong>{formatAuditAction(item.action)}</strong><span>{item.summary}</span><small>{item.actorName ? `by ${item.actorName}` : "System event"}</small></div>
-                  <time>{relativeTime(item.createdAt)}</time>
-                </article>
-              ))}
-            </div>
-          ) : <div className="empty-state"><strong>No activity yet</strong><span>Account, task, and document changes will appear here.</span></div>}
-        </SectionCard>
-
-        <aside className="command-rail">
-          <SectionCard title="Upcoming Deadlines" action={<Link className="button button--ghost" href="/calendar">View Calendar</Link>}>
-            {deadlines.length ? (
-              <div className="deadline-list">
-                {deadlines.map((task) => {
-                  const date = new Date(`${task.dueOn}T00:00:00Z`);
-                  return (
-                    <article key={task.id}>
-                      <div className={`date-tile date-tile--${dueTone(task)}`}><span>{date.toLocaleString("en-US", { month: "short", timeZone: "UTC" }).toUpperCase()}</span><strong>{date.getUTCDate()}</strong></div>
-                      <div><strong>{task.title}</strong><span>{task.functionalAreaName}</span><small className={`text-${dueTone(task)}`}>{dueDetail(task)}</small></div>
-                    </article>
-                  );
-                })}
-              </div>
-            ) : <div className="empty-state"><strong>No upcoming deadlines</strong><span>Tasks with due dates will appear here.</span></div>}
-          </SectionCard>
-
-          <SectionCard title="Notifications" action={<Link className="button button--ghost" href="/notifications">View All</Link>}>
-            <div className="notification-list">
-              {summary.overdue ? <article><ShieldAlert size={18} /><div><strong>{summary.overdue} overdue tasks need attention</strong><span>View all overdue assignments.</span></div><time>Now</time></article> : null}
-              {summary.blocked ? <article><ClipboardCheck size={18} /><div><strong>{summary.blocked} blocked tasks</strong><span>Leadership intervention may be required.</span></div><time>Now</time></article> : null}
-              {!summary.overdue && !summary.blocked ? <article><CheckCircle2 size={18} /><div><strong>No urgent notifications</strong><span>Current operational queues are clear.</span></div><time>Now</time></article> : null}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Calendar Preview" action={<Link className="button button--ghost" href="/calendar">View Calendar</Link>}>
-            <div className="calendar-preview">
-              {[["JUL","21","Staff Meeting","Tue, 1830 – 2030"],["JUL","22","PT Test","Wed, 0800 – 1200"],["JUL","25","Aerospace Activity","Sat, 1300 – 1900"]].map(([month, day, title, detail]) => (
-                <article key={`${month}-${day}-${title}`}>
-                  <div className="calendar-preview__date"><span>{month}</span><strong>{day}</strong></div>
-                  <div className="calendar-preview__copy"><strong>{title}</strong><span>{detail}</span></div>
-                  <CalendarDays size={14} />
-                </article>
-              ))}
-            </div>
-          </SectionCard>
-        </aside>
+        <DashboardCard title="My Tasks" icon={<CheckSquare size={20} />} action="View All Tasks" href="/tasks" className="tasks-card">
+          <div className="task-tabs"><b>All ({openTasks})</b><span>Due This Week ({summary.dueThisWeek})</span><span>Overdue ({summary.overdue})</span><span>Completed</span></div>
+          <div className="home-task-list">
+            {visibleTasks.length ? visibleTasks.map((task) => (
+              <article key={task.id}>
+                <span className="task-checkbox" />
+                <strong>{task.title}</strong>
+                <span className="task-due"><CalendarDays size={13} /> {task.dueOn ? formatDate(task.dueOn) : "No due date"}</span>
+                <span className={`task-priority task-priority--${task.priority.toLowerCase()}`}>● {formatPriority(task.priority)}</span>
+                <span className="task-area">{task.functionalAreaName}</span>
+                <MoreVertical size={16} />
+              </article>
+            )) : <div className="home-empty">No active tasks. Your queue is clear.</div>}
+          </div>
+        </DashboardCard>
       </div>
 
-      <section className="quick-actions-bar command-quick-actions">
-        <strong>Quick Actions</strong>
-        <div>
-          <Link href="/tasks"><Plus size={16} /><strong>Create Task</strong><small>Assign to staff</small></Link>
-          <Link href="/meetings"><CalendarDays size={16} /><strong>Schedule Meeting</strong><small>Add to calendar</small></Link>
-          <Link href="/documents"><FilePlus2 size={16} /><strong>Add Document</strong><small>Upload & share</small></Link>
-          <Link href="/inspections"><ShieldAlert size={16} /><strong>Log Incident</strong><small>Safety reporting</small></Link>
-          <Link href="/reports"><Gauge size={16} /><strong>Submit Report</strong><small>Official reporting</small></Link>
-          <Link href="/tasks"><ClipboardCheck size={16} /><strong>Request Approval</strong><small>Send for review</small></Link>
-          <Link href="/communications"><MessageSquareText size={16} /><strong>Message Staff</strong><small>Secure comms</small></Link>
-          <Link href="/calendar"><CalendarDays size={16} /><strong>View Calendar</strong><small>Open schedule</small></Link>
-        </div>
-      </section>
+      <aside className="home-rail">
+        <DashboardCard title="Upcoming Events" action="View Calendar" href="/calendar" className="events-card">
+          <div className="event-list">
+            {events.map((event) => (
+              <article key={event.title}>
+                <div className={`event-date event-date--${event.tone}`}><span>{event.month}</span><strong>{event.day}</strong></div>
+                <div><strong>{event.title}</strong><span><CalendarDays size={12} />{event.date}</span><span>⌖ {event.place}</span></div>
+              </article>
+            ))}
+          </div>
+          <Link className="card-footer-link" href="/calendar">View full calendar <ExternalLink size={14} /></Link>
+        </DashboardCard>
+
+        <DashboardCard title="Hub Announcements" action="View All" href="/notifications" className="announcements-card">
+          <div className="announcement-list">
+            <Announcement icon={Megaphone} title="New Cadet Program Updates" detail="Check out the latest changes to the Cadet Program guidelines and requirements." date="Mar 12, 2026" tag="Education" tone="blue" />
+            <Announcement icon={ShieldCheck} title="Squadron Safety Brief" detail="Monthly safety brief is now available." date="Mar 10, 2026" tag="Safety" tone="green" />
+            <Announcement icon={BellRing} title="IT Systems Maintenance" detail="Scheduled maintenance on network systems." date="Mar 8, 2026" tag="IT / Systems" tone="blue" />
+          </div>
+          <Link className="card-footer-link" href="/notifications">View all announcements <ExternalLink size={14} /></Link>
+        </DashboardCard>
+
+        <DashboardCard title="Quick Links" action="Edit" href="/settings" className="links-card">
+          <div className="quick-links-grid">
+            <QuickLink icon={Globe2} label="National CAP Website" />
+            <QuickLink icon={FileText} label="CAPR 60-1" />
+            <QuickLink icon={FileText} label="Ops Tracker (Excel)" tone="green" />
+            <QuickLink icon={Folder} label="TN-170 Shared Drive" tone="drive" />
+            <QuickLink icon={Shirt} label="Uniform Guide" tone="purple" />
+            <QuickLink icon={FileText} label="Form 60-1 (Activity Report)" />
+          </div>
+        </DashboardCard>
+      </aside>
     </div>
   );
 }
 
-function priorityRank(task: OperationalTask): number {
-  const statusRank: Record<TaskStatus, number> = { BLOCKED: 0, AWAITING_APPROVAL: 1, IN_PROGRESS: 2, OPEN: 3, COMPLETED: 4, CANCELLED: 5 };
-  const priorityRankMap = { CRITICAL: 0, HIGH: 10, NORMAL: 20, LOW: 30 } as const;
-  const overdueAdjustment = task.dueOn && task.dueOn < today() ? -100 : 0;
-  return overdueAdjustment + statusRank[task.status] * 10 + priorityRankMap[task.priority];
+function DashboardCard({ title, icon, action, href = "#", className = "", children }: { title: string; icon?: ReactNode; action?: string; href?: string; className?: string; children: ReactNode }) {
+  return <section className={`home-card ${className}`}><header><h2>{icon}{title}</h2>{action ? <Link href={href}>{action}<span>→</span></Link> : null}</header>{children}</section>;
 }
-function toneForStatus(status: TaskStatus): Tone {
-  if (status === "COMPLETED") return "success";
-  if (status === "BLOCKED" || status === "CANCELLED") return "danger";
-  if (status === "AWAITING_APPROVAL") return "warning";
-  if (status === "IN_PROGRESS") return "info";
-  return "neutral";
+
+function HeroMetric({ icon: Icon, value, label, detail, tone }: { icon: ComponentType<{ size?: number }>; value: string; label: string; detail: string; tone: string }) {
+  return <article><span className={`hero-metric-icon hero-metric-icon--${tone}`}><Icon size={28} /></span><div><b>{value}</b><strong>{label}</strong><small>{detail}</small></div></article>;
 }
-function formatStatus(status: TaskStatus): string { return status.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" "); }
-function formatPriority(priority: OperationalTask["priority"]): string { return priority[0] + priority.slice(1).toLowerCase(); }
-function dueTone(task: OperationalTask): Tone {
-  if (!task.dueOn) return "neutral";
-  if (task.dueOn < today()) return "danger";
-  const inSevenDays = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
-  if (task.dueOn <= inSevenDays) return "warning";
-  return "neutral";
+
+function QuickAction({ icon: Icon, label, href, tone }: { icon: ComponentType<{ size?: number; className?: string }>; label: string; href: string; tone: string }) {
+  return <Link href={href}><Icon className={`tone-${tone}`} size={22} /><strong>{label}</strong></Link>;
 }
-function dueDetail(task: OperationalTask): string {
-  if (!task.dueOn) return "No deadline";
-  const due = new Date(`${task.dueOn}T00:00:00Z`).getTime();
-  const current = new Date(`${today()}T00:00:00Z`).getTime();
-  const difference = Math.round((due - current) / 86400000);
-  if (difference < 0) return `${Math.abs(difference)} day${Math.abs(difference) === 1 ? "" : "s"} overdue`;
-  if (difference === 0) return "Due today";
-  if (difference === 1) return "Due tomorrow";
-  return `${difference} days`;
+
+function Announcement({ icon: Icon, title, detail, date, tag, tone }: { icon: ComponentType<{ size?: number }>; title: string; detail: string; date: string; tag: string; tone: string }) {
+  return <article><span className={`announcement-icon announcement-icon--${tone}`}><Icon size={23} /></span><div><strong>{title}</strong><p>{detail}</p><small>{date}</small></div><em className={`announcement-tag announcement-tag--${tone}`}>{tag}</em></article>;
 }
-function formatDate(date: string): string { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`)); }
-function relativeTime(value: string): string {
-  const milliseconds = Date.now() - new Date(value).getTime();
-  const minutes = Math.max(0, Math.round(milliseconds / 60000));
-  if (minutes < 1) return "Now";
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  return `${Math.round(hours / 24)}d`;
+
+function QuickLink({ icon: Icon, label, tone = "blue" }: { icon: ComponentType<{ size?: number; className?: string }>; label: string; tone?: string }) {
+  return <Link href="/documents"><Icon className={`tone-${tone}`} size={20} /><span>{label}</span></Link>;
 }
-function formatAuditAction(action: string): string { return action.toLowerCase().split("_").map((part) => part[0].toUpperCase() + part.slice(1)).join(" "); }
-function today(): string { return new Date().toISOString().slice(0, 10); }
+
+function firstName(name: string) { return name.trim().split(/\s+/)[0] || "Member"; }
+function initials(name: string) { return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(); }
+function formatPriority(value: string) { return value[0] + value.slice(1).toLowerCase(); }
+function formatDate(value: string) { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)); }
