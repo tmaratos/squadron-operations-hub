@@ -1,102 +1,78 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronDown, Menu, MessageSquareText, Plus, Search, X } from "lucide-react";
-import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { Bell, ChevronDown, HelpCircle, Menu, MessageCircle, Search, Sun, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 
 export function AppShell({ children, user }: { children: ReactNode; user: AuthenticatedUser }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
-
-  const currentLabel = useMemo(() => {
-    const items = [...navigationGroups.flatMap((group) => group.items), ...utilityNavigation];
-    return items.find((item) => item.href === pathname)?.label ?? "Command Center";
-  }, [pathname]);
 
   return (
-    <div className="app-shell app-shell--command">
-      <aside className={`sidebar ${mobileOpen ? "sidebar--open" : ""}`}>
-        <div className="sidebar__brand">
-          <div className="brand-mark">170</div>
-          <div><strong>TN-170 Oak Ridge Composite SQ</strong><span>Squadron Operations Hub</span></div>
-          <button className="icon-button sidebar__close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={20} /></button>
+    <div className="app-shell hub-shell">
+      <header className="hub-topbar">
+        <button className="hub-mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={21} /></button>
+        <Link className="hub-brand" href="/">
+          <Image src="/tn170-logo.png" alt="TN-170 emblem" width={46} height={46} priority />
+          <span><strong>TN-170 Oak Ridge Composite SQ</strong><small>Squadron Operations Hub</small></span>
+        </Link>
+        <label className="hub-search"><Search size={19} /><input aria-label="Search Hub" placeholder="Search documents, forms, contacts, and more..." /><kbd>Ctrl + K</kbd></label>
+        <div className="hub-top-actions">
+          <div className="theme-switch"><b>Light</b><span><Sun size={16} /></span><small>Dark</small></div>
+          <Link href="/notifications" className="hub-alert" aria-label="Notifications"><Bell size={21} /><b>3</b></Link>
+          <Link href="/communications" className="hub-alert hub-alert--message" aria-label="Messages"><MessageCircle size={21} /><b>7</b></Link>
+          <button className="hub-profile">
+            <span>{initials(user.fullName)}</span>
+            <span><strong>{user.fullName}</strong><small>{user.dutyTitle || formatRole(user.globalRole)}</small></span>
+            <ChevronDown size={16} />
+          </button>
         </div>
+      </header>
 
-        <nav className="sidebar__nav" aria-label="Primary navigation">
-          {navigationGroups.map((group) => (
-            <div className="nav-group" key={group.label}>
-              <p>{group.label}</p>
+      <aside className={`hub-sidebar ${mobileOpen ? "hub-sidebar--open" : ""}`}>
+        <button className="hub-sidebar-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={20} /></button>
+        <nav aria-label="Primary navigation">
+          <Link href="/" className={`hub-nav-item ${pathname === "/" ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
+            {(() => { const HomeIcon = navigationGroups[0].items[0].icon; return <HomeIcon size={18} />; })()}<span>Home</span>
+          </Link>
+          {navigationGroups.slice(1).map((group) => (
+            <section className="hub-nav-group" key={group.label}>
+              <p>{group.label === "Staff Sections" ? "Operations" : group.label}</p>
               {group.items.map((item) => {
                 const Icon = item.icon;
-                const active = pathname === item.href;
                 return (
-                  <Link key={`${group.label}-${item.label}`} href={item.href} className={`nav-item ${active ? "nav-item--active" : ""}`} onClick={() => setMobileOpen(false)}>
-                    <Icon size={17} /><span>{item.label}</span>{item.badge ? <b>{item.badge}</b> : null}
+                  <Link href={item.href} key={`${group.label}-${item.label}`} className={`hub-nav-item ${pathname === item.href ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
+                    <Icon size={16} /><span>{item.label}</span>
                   </Link>
                 );
               })}
-            </div>
+            </section>
           ))}
-        </nav>
-
-        <div className="sidebar__footer">
+          <div className="hub-nav-divider" />
           {utilityNavigation.map((item) => {
             const Icon = item.icon;
-            return <Link key={item.href} href={item.href} className="nav-item"><Icon size={18} /><span>{item.label}</span></Link>;
+            return <Link href={item.href} key={item.href} className={`hub-nav-item ${pathname === item.href ? "is-active" : ""}`}><Icon size={16} /><span>{item.label}</span></Link>;
           })}
-          <form action="/api/auth/logout" method="post" className="sidebar-logout"><button type="submit" className="button button--ghost">Sign out</button></form>
-          <small>Independent operational support tool</small>
+          <Link href="/settings" className="hub-nav-item"><HelpCircle size={16} /><span>Help & Support</span></Link>
+        </nav>
+        <div className="hub-sidebar-status">
+          <ShieldMark />
+          <span><strong>TN-170 v2.0.0</strong><small>Together • Prepared • Successful</small></span>
         </div>
       </aside>
 
-      {mobileOpen ? <button className="sidebar-backdrop" onClick={() => setMobileOpen(false)} aria-label="Close navigation" /> : null}
-
-      <div className="app-shell__main">
-        <header className="topbar command-topbar">
-          <div className="topbar__left">
-            <button className="icon-button topbar__menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={21} /></button>
-            <div className="command-brand-lockup">
-              <div className="command-brand-lockup__seal">TN</div>
-              <div className="command-brand-lockup__copy"><strong>TN-170 Oak Ridge Composite SQ</strong><span>Squadron Operations Hub</span></div>
-            </div>
-            <div className="topbar__context"><small>TN-170</small><strong>{currentLabel}</strong></div>
-          </div>
-
-          <label className="global-search"><Search size={17} /><input placeholder="Search everything..." /><kbd>Ctrl K</kbd></label>
-
-          <div className="topbar__actions">
-            <button className="topbar-text-action" onClick={() => setQuickAddOpen(true)}><Plus size={17} /><span>Quick Add</span></button>
-            <Link href="/communications" className="topbar-text-action topbar-text-action--badged"><MessageSquareText size={18} /><span>Messages</span><b>3</b></Link>
-            <Link href="/notifications" className="topbar-text-action topbar-text-action--badged topbar-text-action--warning"><Bell size={18} /><span>Alerts</span><b>7</b></Link>
-            <button className="profile-button">
-              <span className="profile-button__avatar">{initials(user.fullName)}</span>
-              <span className="profile-button__text"><strong>{user.fullName}</strong><small>{user.dutyTitle || formatRole(user.globalRole)}</small></span>
-              <ChevronDown size={16} />
-            </button>
-          </div>
-        </header>
-
-        <main className="main-content">{children}</main>
-      </div>
-
-      {quickAddOpen ? (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setQuickAddOpen(false)}>
-          <section className="quick-add-modal" role="dialog" aria-modal="true" aria-label="Quick add" onMouseDown={(event: MouseEvent<HTMLElement>) => event.stopPropagation()}>
-            <header><div><p>New operational item</p><h2>Quick add</h2></div><button className="icon-button" onClick={() => setQuickAddOpen(false)} aria-label="Close quick add"><X size={20} /></button></header>
-            <div className="quick-add-grid">
-              {[["Task","Assign work with a due date"],["Meeting","Build an agenda and action list"],["Document","Upload or create a controlled file"],["Requirement","Add a recurring compliance item"],["Discord action","Capture a message as work"],["Funding lead","Track a donor or grant opportunity"]].map(([title, detail]) => (
-                <button type="button" key={title} onClick={() => setQuickAddOpen(false)}><strong>{title}</strong><span>{detail}</span></button>
-              ))}
-            </div>
-          </section>
-        </div>
-      ) : null}
+      {mobileOpen ? <button className="hub-sidebar-backdrop" onClick={() => setMobileOpen(false)} aria-label="Close navigation" /> : null}
+      <main className="hub-main">{children}</main>
     </div>
   );
+}
+
+function ShieldMark() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 20 5v6c0 5.1-3.2 9.2-8 11-4.8-1.8-8-5.9-8-11V5l8-3Z" fill="none" stroke="currentColor" strokeWidth="1.8"/><path d="m8.5 12 2.2 2.2 4.8-5" fill="none" stroke="currentColor" strokeWidth="1.8"/></svg>;
 }
 
 function initials(name: string): string {
