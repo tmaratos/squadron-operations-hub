@@ -37,7 +37,7 @@ export default async function SettingsPage() {
             ))}
           </div>
         </SectionCard>
-        <SectionCard title="Account security" description="Verified @tncap.us accounts must have access to the squadron Shared Drive. Hub roles remain separate.">
+        <SectionCard title="Account security" description="Verified Google accounts must have access to the squadron Shared Drive. Hub roles remain separate.">
           <div className="action-list">
             <div className="action-card"><span><strong>Your global role</strong><small>{user.globalRole.replaceAll("_", " ")}</small></span></div>
             {owner ? <Link className="action-card" href="/admin/users"><span><strong>Manage users and succession</strong><small>Assign Hub roles, suspend accounts, and promote another system owner.</small></span></Link> : null}
