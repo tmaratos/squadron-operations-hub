@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronDown, HelpCircle, Menu, MessageCircle, Moon, Search, Sun, X } from "lucide-react";
+import { Bell, ChevronDown, HelpCircle, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
@@ -44,7 +44,6 @@ export function AppShell({ children, user }: { children: ReactNode; user: Authen
             <button className={theme === "dark" ? "is-active" : ""} onClick={() => selectTheme("dark")} aria-pressed={theme === "dark"}>Dark</button>
           </div>
           <Link href="/notifications" className="hub-alert" aria-label="Notifications"><Bell size={21} /><b>3</b></Link>
-          <Link href="/communications" className="hub-alert hub-alert--message" aria-label="Messages"><MessageCircle size={21} /><b>7</b></Link>
           <button className="hub-profile">
             <span>{initials(user.fullName)}</span>
             <span><strong>{user.fullName}</strong><small>{user.dutyTitle || formatRole(user.globalRole)}</small></span>
