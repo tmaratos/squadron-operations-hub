@@ -21,7 +21,7 @@
   ],
   "vars": {
     "APP_NAME": "Squadron Operations Hub",
-    "APP_URL": "http://localhost:3000",
+    "APP_URL": "https://tn170adminhub.tristanmaratos.com",
     "MAGIC_LINK_TTL_MINUTES": "15",
     "SESSION_TTL_HOURS": "12",
     "GOOGLE_DRIVE_MAX_UPLOAD_MB": "10"
