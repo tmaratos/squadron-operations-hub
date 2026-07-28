@@ -15,7 +15,7 @@
     {
       "binding": "DB",
       "database_name": "squadron-operations-hub",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "ed944b79-6948-4aa9-b27b-9c73ff012d72",
       "migrations_dir": "migrations"
     }
   ],
