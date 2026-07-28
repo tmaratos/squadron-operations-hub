@@ -42,7 +42,7 @@ export const moduleRegistry: Record<string, ModuleDefinition> = {
     ],
     records: [
       { id: "meeting-1", primary: "July Staff Meeting", secondary: "Jul 21, 2026 at 18:00", tertiary: "7 agenda items", status: "Scheduled", tone: "info" },
-      { id: "meeting-2", primary: "Discord Migration Working Session", secondary: "Jul 24, 2026 at 19:00", tertiary: "Communications and cadet protection review", status: "Draft", tone: "warning" },
+      { id: "meeting-2", primary: "Communications Working Session", secondary: "Jul 24, 2026 at 19:00", tertiary: "Announcements and cadet protection review", status: "Draft", tone: "warning" },
       { id: "meeting-3", primary: "June Staff Meeting", secondary: "Jun 16, 2026", tertiary: "8 action items, 5 completed", status: "Needs Minutes", tone: "danger" }
     ]
   },
@@ -87,7 +87,7 @@ export const moduleRegistry: Record<string, ModuleDefinition> = {
     records: [
       { id: "process-1", primary: "Monthly Finance Report", secondary: "Finance, 11 documented steps", tertiary: "Includes evidence checklist", status: "Published", tone: "success" },
       { id: "process-2", primary: "New Senior Member Onboarding", secondary: "Administration and Personnel", tertiary: "Draft is 70% complete", status: "Draft", tone: "warning" },
-      { id: "process-3", primary: "Discord Account Onboarding", secondary: "Communications and IT", tertiary: "Role assignment and channel verification", status: "Published", tone: "success" }
+      { id: "process-3", primary: "Communications Account Onboarding", secondary: "Communications and IT", tertiary: "Role assignment and access verification", status: "Published", tone: "success" }
     ]
   },
   finance: {
@@ -225,23 +225,23 @@ export const moduleRegistry: Record<string, ModuleDefinition> = {
   communications: {
     key: "communications",
     title: "Communications Center",
-    subtitle: "Discord, announcements, channel links, and action capture",
-    description: "Connect operational communication to tracked work without trying to replace Discord itself.",
+    subtitle: "Announcements, decisions, and action capture",
+    description: "Turn operational communication into documented decisions and accountable follow-up work.",
     stats: [
-      { label: "Linked Channels", value: 6, detail: "Discord channel mappings", tone: "success" },
-      { label: "Unread Staff Messages", value: 9, detail: "Across approved channels", tone: "warning" },
-      { label: "Messages Flagged", value: 3, detail: "Potential action items", tone: "info" },
-      { label: "Integration Health", value: "Online", detail: "Last sync 2 minutes ago", tone: "success" }
+      { label: "Draft Announcements", value: 3, detail: "Awaiting review", tone: "warning" },
+      { label: "Published This Month", value: 8, detail: "Across official channels", tone: "success" },
+      { label: "Decisions Captured", value: 5, detail: "Linked to operational work", tone: "info" },
+      { label: "Follow-ups Open", value: 4, detail: "Owners and due dates assigned", tone: "warning" }
     ],
     actions: [
-      { label: "Link Discord Channel", description: "Map an approved channel to the hub." },
-      { label: "Post Announcement", description: "Send an approved message to Discord." },
-      { label: "Create Task from Message", description: "Capture a message as tracked work." }
+      { label: "Draft Announcement", description: "Prepare a notice for review and publication." },
+      { label: "Record Decision", description: "Preserve an operational decision and its context." },
+      { label: "Create Follow-up Task", description: "Assign accountable work from a conversation." }
     ],
     records: [
-      { id: "comms-1", primary: "#senior-member-chat", secondary: "9 unread messages", tertiary: "Last activity 12 minutes ago", status: "Connected", tone: "success" },
-      { id: "comms-2", primary: "#announcements", secondary: "No pending posts", tertiary: "Last post Jul 15", status: "Connected", tone: "success" },
-      { id: "comms-3", primary: "Potential task: Donor research", secondary: "Source: #senior-member-chat", tertiary: "Needs owner and due date", status: "Flagged", tone: "warning" }
+      { id: "comms-1", primary: "August training schedule", secondary: "Draft announcement", tertiary: "Commander review requested", status: "In Review", tone: "info" },
+      { id: "comms-2", primary: "Meeting location update", secondary: "Published Jul 15", tertiary: "Publication record complete", status: "Published", tone: "success" },
+      { id: "comms-3", primary: "Potential task: Donor research", secondary: "Captured from staff discussion", tertiary: "Needs owner and due date", status: "Flagged", tone: "warning" }
     ]
   },
   inspections: {
@@ -297,7 +297,7 @@ export const moduleRegistry: Record<string, ModuleDefinition> = {
       { label: "Events This Month", value: 18, detail: "7 meetings, 6 deadlines, 5 activities", tone: "info" },
       { label: "Unstaffed Events", value: 3, detail: "Need responsible senior member", tone: "warning" },
       { label: "Conflicts", value: 2, detail: "Require schedule review", tone: "danger" },
-      { label: "Synced Calendars", value: 2, detail: "Squadron and Discord events", tone: "success" }
+      { label: "Synced Calendars", value: 2, detail: "Squadron and training events", tone: "success" }
     ],
     actions: [
       { label: "Create Event", description: "Add a meeting, deadline, or activity." },
@@ -328,7 +328,7 @@ export const moduleRegistry: Record<string, ModuleDefinition> = {
     ],
     records: [
       { id: "notification-1", primary: "Overdue Task Escalation", secondary: "Runs daily at 08:00", tertiary: "Commander notified after 3 days", status: "Active", tone: "success" },
-      { id: "notification-2", primary: "Discord Staff Digest", secondary: "Runs weekdays at 17:00", tertiary: "Summarizes flagged messages", status: "Active", tone: "success" },
+      { id: "notification-2", primary: "Staff Work Digest", secondary: "Runs weekdays at 17:00", tertiary: "Summarizes open follow-up work", status: "Active", tone: "success" },
       { id: "notification-3", primary: "Safety Briefing Reminder", secondary: "4 members remain", tertiary: "Next reminder in 6 hours", status: "Queued", tone: "info" }
     ]
   },
@@ -395,7 +395,7 @@ export const moduleRegistry: Record<string, ModuleDefinition> = {
     records: [
       { id: "audit-1", primary: "Task reassigned", secondary: "Inventory Check to SM R. Cooper", tertiary: "By Maj. Mellard, 2 hours ago", status: "Recorded", tone: "success" },
       { id: "audit-2", primary: "Document approved", secondary: "July Safety Briefing", tertiary: "By 2d Lt. Maratos, 4 hours ago", status: "Recorded", tone: "success" },
-      { id: "audit-3", primary: "Discord channel linked", secondary: "#senior-member-chat", tertiary: "By 2d Lt. Maratos, yesterday", status: "Recorded", tone: "success" }
+      { id: "audit-3", primary: "Announcement approved", secondary: "August training schedule", tertiary: "By 2d Lt. Maratos, yesterday", status: "Recorded", tone: "success" }
     ]
   },
   compliance: {
