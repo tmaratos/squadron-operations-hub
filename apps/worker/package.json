@@ -9,7 +9,7 @@
     "test": "echo \"No tests configured yet\""
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260716.0",
+    "@cloudflare/workers-types": "^5.20260728.1",
     "typescript": "^5.7.2",
     "wrangler": "^4.26.1"
   }
