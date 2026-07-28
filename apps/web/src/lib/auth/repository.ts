@@ -1,4 +1,5 @@
 import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
+import { linkPersonnelMemberToUser } from "@/lib/operations/personnel";
 import type { AccessRequestRecord, AuthenticatedUser, GlobalRole, UserRecord, UserStatus } from "./types";
 
 interface UserRow {
@@ -61,6 +62,7 @@ export async function upsertGoogleUser(input: { email: string; fullName: string 
       .run();
     const updated = await findUserById(existing.id);
     if (!updated) throw new Error("Google user profile could not be updated.");
+    await linkPersonnelMemberToUser(updated.id, updated.fullName);
     return updated;
   }
 
@@ -75,6 +77,7 @@ export async function upsertGoogleUser(input: { email: string; fullName: string 
     .run();
   const created = await findUserById(id);
   if (!created) throw new Error("Google user profile could not be created.");
+  await linkPersonnelMemberToUser(created.id, created.fullName);
   return created;
 }
 
