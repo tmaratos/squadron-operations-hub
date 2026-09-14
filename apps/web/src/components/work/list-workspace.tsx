@@ -250,9 +250,9 @@ function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch
 
   useEffect(() => {
     let active = true;
-    fetch("/api/work/items/" + itemId).then((response) => response.json()).then((data) => {
+    send("/api/work/items/" + itemId, "GET").then((data) => {
       if (active && data.item) adopt(data.item);
-    });
+    }).catch(() => undefined);
     return () => {
       active = false;
     };
