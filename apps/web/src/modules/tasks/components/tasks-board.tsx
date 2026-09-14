@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
-import { AlertCircle, Filter, LoaderCircle, Plus, Search, Trash2 } from "lucide-react";
+import { AlertCircle, LayoutList, LoaderCircle, Plus, Search, Trash2, Trello } from "lucide-react";
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
@@ -40,6 +40,8 @@ export function TasksBoard({
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"list" | "board">("list");
+  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | TaskStatus>("ACTIVE");
   const [showForm, setShowForm] = useState(false);
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -47,13 +49,14 @@ export function TasksBoard({
 
   const visibleTasks = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return tasks.filter((task) => task.status !== "CANCELLED");
     return tasks.filter((task) => {
       if (task.status === "CANCELLED") return false;
-      return [task.title, task.description ?? "", task.functionalAreaName, task.ownerName ?? "Unassigned", task.priority]
+      if (statusFilter === "ACTIVE" && task.status === "COMPLETED") return false;
+      if (statusFilter !== "ACTIVE" && task.status !== statusFilter) return false;
+      return !normalized || [task.title, task.description ?? "", task.functionalAreaName, task.ownerName ?? "Unassigned", task.priority]
         .some((value) => value.toLowerCase().includes(normalized));
     });
-  }, [query, tasks]);
+  }, [query, statusFilter, tasks]);
 
   const activeTasks = tasks.filter((task) => !["COMPLETED", "CANCELLED"].includes(task.status));
   const overdue = activeTasks.filter((task) => task.dueOn && task.dueOn < today()).length;
@@ -177,16 +180,27 @@ export function TasksBoard({
         </SectionCard>
       ) : null}
 
-      <div className="task-toolbar">
+      <div className="task-toolbar task-toolbar--workbench">
         <label><Search size={17} /><input value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} placeholder="Search tasks, owners, or staff sections..." /></label>
-        <button className="button button--secondary" type="button"><Filter size={16} /> Filters</button>
+        <select aria-label="Filter tasks by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "ACTIVE" | TaskStatus)}>
+          <option value="ACTIVE">Active work</option>
+          <option value="OPEN">Open</option>
+          <option value="IN_PROGRESS">In progress</option>
+          <option value="BLOCKED">Blocked</option>
+          <option value="AWAITING_APPROVAL">Awaiting approval</option>
+          <option value="COMPLETED">Completed</option>
+        </select>
+        <div className="view-toggle" role="group" aria-label="Task view">
+          <button type="button" className={view === "list" ? "is-active" : ""} onClick={() => setView("list")} aria-pressed={view === "list"}><LayoutList size={16} /> List</button>
+          <button type="button" className={view === "board" ? "is-active" : ""} onClick={() => setView("board")} aria-pressed={view === "board"}><Trello size={16} /> Board</button>
+        </div>
       </div>
 
       {tasks.length === 0 ? (
         <SectionCard title="No tasks yet" description="Create the first operational task to begin building the squadron's shared suspense tracker.">
           <div className="empty-state"><strong>The task board is ready.</strong><span>Use New task to add the first assignment.</span></div>
         </SectionCard>
-      ) : (
+      ) : view === "board" ? (
         <section className="kanban-board kanban-board--five">
           {columns.map((column) => {
             const columnTasks = visibleTasks.filter((task) => task.status === column.status);
@@ -220,6 +234,25 @@ export function TasksBoard({
             );
           })}
         </section>
+      ) : (
+        <SectionCard title="Work queue" description="A single, scannable list of the work currently in scope. Switch to Board when you need to move it through the workflow.">
+          <div className="task-list-view" role="table" aria-label="Task work queue">
+            <div className="task-list-view__head" role="row"><span>Task</span><span>Status</span><span>Owner</span><span>Due</span><span>Area</span><span /></div>
+            {visibleTasks.map((task) => (
+              <article key={task.id} role="row" className={`task-list-view__row task-list-view__row--${task.priority.toLowerCase()}`}>
+                <div><strong>{task.title}</strong><small>{task.description || `${formatPriority(task.priority)} priority`}</small></div>
+                <StatusPill label={formatStatus(task.status)} tone={toneForStatus(task.status)} />
+                <span>{task.ownerName || "Unassigned"}</span>
+                <span className={task.dueOn && task.dueOn < today() && !["COMPLETED", "CANCELLED"].includes(task.status) ? "text-danger" : ""}>{task.dueOn ? formatDate(task.dueOn) : "No due date"}</span>
+                <span className="task-list-view__area">{task.functionalAreaName}</span>
+                <div className="task-list-view__actions">
+                  {canEdit && task.status !== "COMPLETED" ? <button disabled={busyTaskId === task.id} onClick={() => updateStatus(task, nextStatus(task))}>{busyTaskId === task.id ? "Saving..." : "Advance"}</button> : null}
+                </div>
+              </article>
+            ))}
+            {!visibleTasks.length ? <div className="empty-state"><strong>No tasks match this view.</strong><span>Adjust the status filter or create a new task.</span></div> : null}
+          </div>
+        </SectionCard>
       )}
     </div>
   );
@@ -256,3 +289,4 @@ function formatDate(date: string): string {
 function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
+
