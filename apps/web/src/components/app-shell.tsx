@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronDown, HelpCircle, LayoutDashboard, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { Bell, ChevronDown, Compass, HelpCircle, LayoutDashboard, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
@@ -56,7 +56,10 @@ export function AppShell({ children, user }: { children: ReactNode; user: Authen
         <button className="hub-sidebar-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={20} /></button>
         <nav aria-label="Primary navigation">
           <Link href="/" className={`hub-nav-item ${pathname === "/" ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
-            <LayoutDashboard size={18} /><span>Command Brief</span>
+            <LayoutDashboard size={18} /><span>Squadron Overview</span>
+          </Link>
+          <Link href="/start-here" className={`hub-nav-item ${pathname === "/start-here" ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
+            <Compass size={18} /><span>Start Here</span>
           </Link>
           {navigationGroups.map((group) => (
             <section className="hub-nav-group" key={group.label}>
