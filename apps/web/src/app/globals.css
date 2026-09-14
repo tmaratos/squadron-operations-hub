@@ -679,6 +679,8 @@ body { background: #f8faff; font-size: 14px; }
 .hero-metric-icon { width: 48px; height: 48px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 12px; }
 .hero-metric-icon--blue { background: rgba(0,111,242,.45); color: #9fcaff; }.hero-metric-icon--green { background: rgba(0,145,111,.33); color: #13df9f; }
 .hero-metric-icon--orange { background: rgba(213,94,0,.36); color: #ff9000; }.hero-metric-icon--purple { background: rgba(137,58,187,.39); color: #db7cf2; }
+.hero-metric-icon--red { background: rgba(220,57,67,.34); color: #ff9aa1; }
+.command-brief__eyebrow { margin: 0 0 9px; color: #b9d6ff; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
 .hero-metrics article > div { min-width: 0; display: grid; gap: 3px; }.hero-metrics b { font-size: 23px; line-height: 1; }.hero-metrics strong { font-size: 11px; }.hero-metrics small { color: #dce8fb; font-size: 9px; white-space: nowrap; }
 
 .home-card { overflow: hidden; border: 1px solid #e1e7f0; border-radius: 14px; background: white; box-shadow: var(--shadow); }

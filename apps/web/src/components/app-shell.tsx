@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, ChevronDown, HelpCircle, Menu, Moon, Search, Sun, X } from "lucide-react";
+import { Bell, ChevronDown, HelpCircle, LayoutDashboard, Menu, Moon, Search, Sun, X } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
@@ -56,11 +56,11 @@ export function AppShell({ children, user }: { children: ReactNode; user: Authen
         <button className="hub-sidebar-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={20} /></button>
         <nav aria-label="Primary navigation">
           <Link href="/" className={`hub-nav-item ${pathname === "/" ? "is-active" : ""}`} onClick={() => setMobileOpen(false)}>
-            {(() => { const HomeIcon = navigationGroups[0].items[0].icon; return <HomeIcon size={18} />; })()}<span>Home</span>
+            <LayoutDashboard size={18} /><span>Command Brief</span>
           </Link>
-          {navigationGroups.slice(1).map((group) => (
+          {navigationGroups.map((group) => (
             <section className="hub-nav-group" key={group.label}>
-              <p>{group.label === "Staff Sections" ? "Operations" : group.label}</p>
+              <p>{group.label}</p>
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
