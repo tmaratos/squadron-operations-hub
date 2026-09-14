@@ -11,6 +11,7 @@ import {
   Gauge,
   GraduationCap,
   History,
+  LayoutGrid,
   Megaphone,
   NotebookTabs,
   PackageCheck,
@@ -41,6 +42,7 @@ export const navigationGroups: NavigationGroup[] = [
   {
     label: "Work",
     items: [
+      { label: "Spaces & Lists", href: "/spaces", icon: LayoutGrid },
       { label: "Tasks & Assignments", href: "/tasks", icon: ClipboardCheck, badge: "18" },
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Meetings", href: "/meetings", icon: NotebookTabs },
