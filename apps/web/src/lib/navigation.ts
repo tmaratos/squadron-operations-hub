@@ -3,18 +3,14 @@ import {
   Activity,
   BadgeDollarSign,
   BookOpenCheck,
-  Boxes,
   Building2,
   CalendarDays,
   ClipboardCheck,
-  ContactRound,
   FileBarChart,
   FileText,
-  FolderCog,
   Gauge,
   GraduationCap,
   History,
-  House,
   Megaphone,
   NotebookTabs,
   PackageCheck,
@@ -42,49 +38,49 @@ export interface NavigationGroup {
 
 export const navigationGroups: NavigationGroup[] = [
   {
-    label: "Operations",
+    label: "Work",
     items: [
-      { label: "Command Center", href: "/", icon: House },
       { label: "Tasks & Assignments", href: "/tasks", icon: ClipboardCheck, badge: "18" },
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Meetings", href: "/meetings", icon: NotebookTabs },
       { label: "Reports", href: "/reports", icon: FileBarChart },
       { label: "Inspections", href: "/inspections", icon: ShieldCheck },
-      { label: "Readiness", href: "/readiness", icon: Gauge },
-      { label: "Connected Apps", href: "/communications", icon: Boxes, badge: "NEW" }
+      { label: "Readiness", href: "/readiness", icon: Gauge }
     ]
   },
   {
-    label: "Staff Sections",
+    label: "People & Programs",
     items: [
-      { label: "Administration", href: "/staff", icon: Users },
-      { label: "Personnel", href: "/admin/users", icon: UserCog },
-      { label: "Finance", href: "/finance", icon: BadgeDollarSign },
-      { label: "Logistics", href: "/logistics", icon: PackageCheck },
-      { label: "Safety", href: "/safety", icon: ShieldCheck },
+      { label: "People & Roles", href: "/staff", icon: Users },
       { label: "Aerospace Education", href: "/aerospace", icon: GraduationCap },
       { label: "Cadet Programs", href: "/cadet-programs", icon: Sparkles },
       { label: "Emergency Services", href: "/emergency-services", icon: Siren },
+      { label: "Safety", href: "/safety", icon: ShieldCheck },
       { label: "Communications", href: "/communications", icon: Radio },
-      { label: "IT / Systems", href: "/settings", icon: FolderCog },
       { label: "Public Affairs", href: "/public-affairs", icon: Megaphone },
       { label: "Recruiting & Retention", href: "/recruiting", icon: Building2 }
     ]
   },
   {
-    label: "Resources",
+    label: "Administration",
+    items: [
+      { label: "Finance", href: "/finance", icon: BadgeDollarSign },
+      { label: "Logistics", href: "/logistics", icon: PackageCheck },
+      { label: "Member Access", href: "/admin/users", icon: UserCog }
+    ]
+  },
+  {
+    label: "Knowledge",
     items: [
       { label: "Document Library", href: "/documents", icon: FileText },
       { label: "Process Library", href: "/processes", icon: Workflow },
-      { label: "Forms & Templates", href: "/documents", icon: BookOpenCheck },
-      { label: "Contacts Directory", href: "/staff", icon: ContactRound },
-      { label: "Equipment & Supply", href: "/logistics", icon: Boxes }
+      { label: "Forms & Templates", href: "/documents", icon: BookOpenCheck }
     ]
   }
 ];
 
 export const utilityNavigation: NavigationItem[] = [
-  { label: "Audit Log", href: "/audit", icon: History },
-  { label: "Notifications", href: "/notifications", icon: Activity },
-  { label: "Settings", href: "/settings", icon: Settings }
+  { label: "Action Center", href: "/notifications", icon: Activity },
+  { label: "History", href: "/audit", icon: History },
+  { label: "System Settings", href: "/settings", icon: Settings }
 ];

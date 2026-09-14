@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ComponentType, ReactNode } from "react";
 import {
-  BellRing, CalendarDays, CheckSquare, ContactRound, ExternalLink, FilePlus2,
+  BellRing, CalendarDays, CheckSquare, ContactRound, ExternalLink,
   FileText, Folder, FolderPlus, Globe2, Megaphone, MoreVertical, Search,
   ShieldCheck, Shirt, SlidersHorizontal, UploadCloud, Users
 } from "lucide-react";
@@ -29,6 +29,7 @@ export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
   ]);
   const visibleTasks = tasks.slice(0, 3);
   const openTasks = summary.open + summary.inProgress + summary.blocked + summary.awaitingApproval;
+  const attentionCount = summary.overdue + summary.blocked + summary.awaitingApproval;
 
   return (
     <div className="home-dashboard">
@@ -36,13 +37,14 @@ export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
         <section className="welcome-hero">
           <div className="welcome-hero__shade" />
           <div className="welcome-hero__content">
+            <p className="command-brief__eyebrow">Command brief</p>
             <h1>Good morning, {firstName(user.fullName)}! <span>👋</span></h1>
-            <p>Here&apos;s what&apos;s happening with TN-170 today.</p>
+            <p>{attentionCount ? `${attentionCount} item${attentionCount === 1 ? "" : "s"} need attention today.` : "Your attention queue is clear today."}</p>
             <div className="hero-metrics">
-              <HeroMetric icon={FileText} value="128" label="Documents" detail="Updated this week" tone="blue" />
-              <HeroMetric icon={Users} value="23" label="Active Personnel" detail="2 new this month" tone="green" />
-              <HeroMetric icon={CalendarDays} value="5" label="Upcoming Events" detail="Next: Staff Meeting" tone="orange" />
-              <HeroMetric icon={CheckSquare} value={String(openTasks)} label="Tasks Assigned" detail={`${summary.dueThisWeek} due this week`} tone="purple" />
+              <HeroMetric icon={BellRing} value={String(attentionCount)} label="Need attention" detail={`${summary.overdue} overdue · ${summary.blocked} blocked`} tone="red" />
+              <HeroMetric icon={CheckSquare} value={String(openTasks)} label="Open work" detail={`${summary.inProgress} in progress`} tone="purple" />
+              <HeroMetric icon={CalendarDays} value={String(summary.dueThisWeek)} label="Due this week" detail="See the calendar for details" tone="orange" />
+              <HeroMetric icon={FileText} value="128" label="Reference files" detail="Policies, SOPs, and templates" tone="blue" />
             </div>
           </div>
         </section>
@@ -63,14 +65,14 @@ export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
           </div>
         </DashboardCard>
 
-        <DashboardCard title="Quick Actions" icon={<SlidersHorizontal size={20} />} className="quick-actions-card">
+        <DashboardCard title="Start work" icon={<SlidersHorizontal size={20} />} className="quick-actions-card">
           <div className="home-quick-actions">
             <QuickAction icon={UploadCloud} label="Upload Document" href="/documents" tone="blue" />
             <QuickAction icon={FolderPlus} label="Create Folder" href="/documents" tone="green" />
-            <QuickAction icon={FilePlus2} label="New Form" href="/documents" tone="purple" />
-            <QuickAction icon={CalendarDays} label="Add Event" href="/calendar" tone="orange" />
-            <QuickAction icon={Search} label="Search Everything" href="/documents" tone="cyan" />
-            <QuickAction icon={ContactRound} label="Contacts Directory" href="/staff" tone="orange" />
+            <QuickAction icon={CheckSquare} label="View Task Board" href="/tasks" tone="purple" />
+            <QuickAction icon={CalendarDays} label="View Calendar" href="/calendar" tone="orange" />
+            <QuickAction icon={Search} label="Find a Reference" href="/documents" tone="cyan" />
+            <QuickAction icon={ContactRound} label="People & Roles" href="/staff" tone="orange" />
           </div>
         </DashboardCard>
 
