@@ -5,11 +5,10 @@ import type { ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from 
 
 type Person = { id: string; fullName: string };
 type Mode = "list" | "board";
+type ApiResult = { message?: string; item: ItemDetail; items: WorkItem[] };
 
 const PRIORITIES: ItemPriority[] = ["URGENT", "HIGH", "NORMAL", "LOW"];
-const PRIORITY_COLOR: Record<ItemPriority, string> = { URGENT: "#e5484d", HIGH: "#f76808", NORMAL: "#5f55ee", LOW: "#87909e" };
-
-type ApiResult = { message?: string; item: ItemDetail; items: WorkItem[] };
+const PRIORITY_COLOR: Record<ItemPriority, string> = { URGENT: "#e5484d", HIGH: "#f5a623", NORMAL: "#5f55ee", LOW: "#87909e" };
 
 async function send(url: string, method: string, body?: unknown): Promise<ApiResult> {
   const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -18,19 +17,44 @@ async function send(url: string, method: string, body?: unknown): Promise<ApiRes
   return data;
 }
 
-function formatDue(value: string | null): { text: string; late: boolean } {
-  if (!value) return { text: "", late: false };
+function formatDue(value: string | null): { text: string; late: boolean; today: boolean } {
+  if (!value) return { text: "", late: false, today: false };
   const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   const date = new Date(value + "T12:00:00");
-  return { text: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }), late: value < today };
+  const text = value === today ? "Today" : value === tomorrow ? "Tomorrow" : date.toLocaleDateString(undefined, { month: "numeric", day: "numeric", year: "2-digit" });
+  return { text, late: value < today, today: value === today };
+}
+
+function initials(name: string): string {
+  return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function StatusIcon({ status }: { status?: ListStatus }) {
+  const color = status?.color ?? "#87909e";
+  if (status && (status.category === "DONE" || status.category === "CLOSED")) {
+    return (
+      <span className="lw-sicon lw-sicon--done" style={{ background: color, borderColor: color }} title={status.name}>
+        <svg viewBox="0 0 12 12" width="9" height="9" aria-hidden="true"><path d="M2.5 6.2 5 8.5l4.5-5" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+      </span>
+    );
+  }
+  if (status && status.category === "ACTIVE") {
+    return <span className="lw-sicon" style={{ borderColor: color, background: "conic-gradient(" + color + " 0 50%, transparent 50% 100%)" }} title={status.name} />;
+  }
+  return <span className="lw-sicon lw-sicon--todo" style={{ borderColor: color }} title={status?.name ?? "no status"} />;
 }
 
 export function ListWorkspace({ list, initialItems, people, canEdit }: { list: ListDetail; initialItems: WorkItem[]; people: Person[]; canEdit: boolean }) {
   const [items, setItems] = useState<WorkItem[]>(initialItems);
   const [mode, setMode] = useState<Mode>("list");
   const [search, setSearch] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
+  const [expandAll, setExpandAll] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [addingIn, setAddingIn] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
@@ -68,7 +92,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
       await send("/api/work/lists/" + list.id + "/items", "POST", { title, statusId, parentId });
       await reload();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not add the item.");
+      setError(caught instanceof Error ? caught.message : "Could not add the task.");
     }
   }
 
@@ -88,52 +112,85 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
     const kids = (childrenOf.get(item.id) ?? []).filter(matches);
     const status = item.statusId ? statusById.get(item.statusId) : undefined;
     const due = formatDue(item.dueOn);
+    const open = expandAll || expanded[item.id];
     return (
       <div key={item.id}>
-        <div className="lw-row" style={{ paddingLeft: 12 + depth * 22 }}>
-          <button className="lw-caret" aria-label="Show sub-items" onClick={() => setExpanded({ ...expanded, [item.id]: !expanded[item.id] })} style={{ visibility: item.childCount ? "visible" : "hidden" }}>
-            {expanded[item.id] ? "▾" : "▸"}
-          </button>
-          <span className="lw-status-dot" style={{ background: status?.color ?? "#87909e" }} title={status?.name} />
-          <button className="lw-title" onClick={() => setOpenId(item.id)}>{item.title}</button>
-          <span className="lw-meta">
-            {item.childCount ? <span className="lw-pill">{item.childCount} sub</span> : null}
-            {item.checklistTotal ? <span className="lw-pill">☑ {item.checklistDone}/{item.checklistTotal}</span> : null}
-            {item.tags.slice(0, 3).map((tag) => <span key={tag.id} className={"work-tag work-tag--" + tag.color}>{tag.label}</span>)}
-            {item.tags.length > 3 ? <span className="lw-pill">+{item.tags.length - 3}</span> : null}
-          </span>
-          <span className="lw-col lw-assignee">{item.assignees.map((person) => person.fullName.split(" ")[0]).join(", ")}</span>
-          <span className={"lw-col lw-due" + (due.late && !isClosed(item) ? " lw-late" : "")}>{due.text}</span>
-          <span className="lw-col lw-priority">{item.priority ? <span style={{ color: PRIORITY_COLOR[item.priority] }}>⚑ {item.priority.toLowerCase()}</span> : null}</span>
+        <div className="lw-row" onClick={() => setOpenId(item.id)}>
+          <div className="lw-name" style={{ paddingLeft: depth * 26 }}>
+            <button
+              className="lw-caret"
+              aria-label={open ? "Hide subtasks" : "Show subtasks"}
+              onClick={(event) => {
+                event.stopPropagation();
+                setExpanded({ ...expanded, [item.id]: !open });
+              }}
+              style={{ visibility: item.childCount ? "visible" : "hidden" }}
+            >
+              <svg viewBox="0 0 10 10" width="9" height="9" style={{ transform: open ? "rotate(90deg)" : "none" }} aria-hidden="true"><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
+            </button>
+            <StatusIcon status={status} />
+            <span className={"lw-title" + (isClosed(item) ? " lw-title--closed" : "")}>{item.title}</span>
+            {item.childCount ? <span className="lw-mini" title="Subtasks">⑂ {item.childCount}</span> : null}
+            {item.checklistTotal ? <span className="lw-mini" title="Checklist">☑ {item.checklistDone}/{item.checklistTotal}</span> : null}
+            {item.tags.slice(0, 2).map((tag) => <span key={tag.id} className={"lw-tag work-tag work-tag--" + tag.color}>{tag.label}</span>)}
+            {item.tags.length > 2 ? <span className="lw-mini">+{item.tags.length - 2}</span> : null}
+          </div>
+          <div className="lw-cell">
+            {item.assignees.length ? (
+              <span className="lw-avatars">{item.assignees.slice(0, 3).map((person) => <span key={person.id} className="lw-avatar" title={person.fullName}>{initials(person.fullName)}</span>)}</span>
+            ) : <span className="lw-empty-person" aria-label="Unassigned">
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="5.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M3 13.5c.8-2.4 2.7-3.6 5-3.6s4.2 1.2 5 3.6" fill="none" stroke="currentColor" strokeWidth="1.3" /></svg>
+            </span>}
+          </div>
+          <div className={"lw-cell" + (due.late && !isClosed(item) ? " lw-late" : due.today ? " lw-today" : "")}>
+            {due.text || <span className="lw-faint">—</span>}
+          </div>
+          <div className="lw-cell">
+            {item.priority ? <span style={{ color: PRIORITY_COLOR[item.priority] }}>⚑ <span className="lw-priority-text">{item.priority[0] + item.priority.slice(1).toLowerCase()}</span></span> : <span className="lw-faint">—</span>}
+          </div>
         </div>
-        {expanded[item.id] ? kids.map((kid) => renderRow(kid, depth + 1)) : null}
+        {open ? kids.map((kid) => renderRow(kid, depth + 1)) : null}
       </div>
     );
   }
 
   const visibleStatuses = list.statuses.filter((status) => showClosed || (status.category !== "DONE" && status.category !== "CLOSED"));
   const unassignedStatus = topLevel.filter((item) => matches(item) && (!item.statusId || !statusById.has(item.statusId)));
+  const openCount = items.filter((item) => !isClosed(item)).length;
 
   return (
     <div className="lw">
       <style>{lwCss}</style>
       <header className="lw-head">
-        <div>
-          <h1>{list.name}</h1>
-          {list.description ? <p>{list.description}</p> : null}
-        </div>
+        <span className="lw-space-badge">{list.spaceName.slice(0, 1).toUpperCase()}</span>
+        <h1>{list.name}</h1>
+        <span className="lw-head-count">{openCount} open</span>
       </header>
+
+      <div className="lw-views" role="tablist">
+        {(["list", "board"] as Mode[]).map((value) => (
+          <button key={value} role="tab" aria-selected={mode === value} className={mode === value ? "is-active" : ""} onClick={() => setMode(value)}>
+            {value === "list" ? "☰ List" : "▦ Board"}
+          </button>
+        ))}
+      </div>
+
       <div className="lw-toolbar">
-        <div className="lw-tabs" role="tablist">
-          {(["list", "board"] as Mode[]).map((value) => (
-            <button key={value} role="tab" aria-selected={mode === value} className={mode === value ? "is-active" : ""} onClick={() => setMode(value)}>
-              {value === "list" ? "☰ List" : "▦ Board"}
-            </button>
-          ))}
+        <div className="lw-chips">
+          <span className="lw-chip lw-chip--on">Group: Status</span>
+          <button className={"lw-chip" + (expandAll ? " lw-chip--on" : "")} onClick={() => setExpandAll(!expandAll)}>⑂ {expandAll ? "Expanded" : "Collapsed"}</button>
+          <button className={"lw-chip" + (showClosed ? " lw-chip--on" : "")} onClick={() => setShowClosed(!showClosed)}>✓ Closed</button>
         </div>
-        <input className="lw-search" placeholder="Search items or tags" value={search} onChange={(event) => setSearch(event.target.value)} />
-        <label className="lw-check"><input type="checkbox" checked={showClosed} onChange={(event) => setShowClosed(event.target.checked)} /> Show closed</label>
-        <span className="lw-total">{items.filter((item) => !isClosed(item)).length} open · {items.length} total</span>
+        <div className="lw-tools">
+          {searchOpen || search ? (
+            <input autoFocus className="lw-search" placeholder="Search tasks..." value={search} onChange={(event) => setSearch(event.target.value)} onBlur={() => setSearchOpen(false)} />
+          ) : (
+            <button className="lw-icon-btn" aria-label="Search tasks" onClick={() => setSearchOpen(true)}>
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.5" /></svg>
+            </button>
+          )}
+          {canEdit ? <button className="lw-primary" onClick={() => setAddingIn(visibleStatuses[0]?.id ?? null)}>+ Task</button> : null}
+        </div>
       </div>
       {error ? <p className="lw-error" role="alert">{error}</p> : null}
 
@@ -141,17 +198,40 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
         <div className="lw-groups">
           {visibleStatuses.map((status) => {
             const rows = topLevel.filter((item) => item.statusId === status.id && matches(item));
+            const folded = collapsedGroups[status.id];
             return (
               <section key={status.id} className="lw-group">
-                <h2><span className="lw-badge" style={{ background: status.color }}>{status.name}</span><span className="lw-n">{rows.length}</span></h2>
-                {rows.map((item) => renderRow(item, 0))}
-                {canEdit ? <QuickAdd onAdd={(title) => quickAdd(title, status.id)} /> : null}
+                <div className="lw-group-head">
+                  <button className="lw-caret" aria-label={folded ? "Expand group" : "Collapse group"} onClick={() => setCollapsedGroups({ ...collapsedGroups, [status.id]: !folded })}>
+                    <svg viewBox="0 0 10 10" width="9" height="9" style={{ transform: folded ? "none" : "rotate(90deg)" }} aria-hidden="true"><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
+                  </button>
+                  <span className="lw-pill" style={{ background: status.color }}><StatusIcon status={status} />{status.name}</span>
+                  <span className="lw-n">{rows.length}</span>
+                  {canEdit ? <button className="lw-group-add" onClick={() => setAddingIn(status.id)}>+ Add Task</button> : null}
+                </div>
+                {folded ? null : (
+                  <>
+                    <div className="lw-colhead"><span>Name</span><span>Assignee</span><span>Due date</span><span>Priority</span></div>
+                    {rows.map((item) => renderRow(item, 0))}
+                    {canEdit ? (
+                      addingIn === status.id ? (
+                        <QuickAdd autoOpen onCancel={() => setAddingIn(null)} onAdd={(title) => quickAdd(title, status.id)} />
+                      ) : (
+                        <button className="lw-add" onClick={() => setAddingIn(status.id)}>+ Add Task</button>
+                      )
+                    ) : null}
+                  </>
+                )}
               </section>
             );
           })}
           {unassignedStatus.length ? (
             <section className="lw-group">
-              <h2><span className="lw-badge" style={{ background: "#87909e" }}>no status</span><span className="lw-n">{unassignedStatus.length}</span></h2>
+              <div className="lw-group-head">
+                <span className="lw-pill" style={{ background: "#87909e" }}>no status</span>
+                <span className="lw-n">{unassignedStatus.length}</span>
+              </div>
+              <div className="lw-colhead"><span>Name</span><span>Assignee</span><span>Due date</span><span>Priority</span></div>
               {unassignedStatus.map((item) => renderRow(item, 0))}
             </section>
           ) : null}
@@ -170,18 +250,24 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
                   if (id && canEdit) patch(id, { statusId: status.id });
                 }}
               >
-                <h2><span className="lw-badge" style={{ background: status.color }}>{status.name}</span><span className="lw-n">{cards.length}</span></h2>
+                <div className="lw-column-head" style={{ borderTopColor: status.color }}>
+                  <span className="lw-pill" style={{ background: status.color }}><StatusIcon status={status} />{status.name}</span>
+                  <span className="lw-n">{cards.length}</span>
+                </div>
                 {cards.map((item) => {
                   const due = formatDue(item.dueOn);
                   return (
                     <article key={item.id} className="lw-card" draggable={canEdit} onDragStart={(event) => event.dataTransfer.setData("text/plain", item.id)} onClick={() => setOpenId(item.id)}>
                       <strong>{item.title}</strong>
-                      <div className="lw-meta">
-                        {item.tags.slice(0, 3).map((tag) => <span key={tag.id} className={"work-tag work-tag--" + tag.color}>{tag.label}</span>)}
-                      </div>
+                      {item.tags.length ? (
+                        <div className="lw-card-tags">
+                          {item.tags.slice(0, 3).map((tag) => <span key={tag.id} className={"lw-tag work-tag work-tag--" + tag.color}>{tag.label}</span>)}
+                        </div>
+                      ) : null}
                       <div className="lw-card-foot">
-                        <span className={due.late ? "lw-late" : ""}>{due.text}</span>
-                        {item.childCount ? <span>{item.childCount} sub</span> : null}
+                        {item.assignees.length ? <span className="lw-avatar">{initials(item.assignees[0].fullName)}</span> : null}
+                        <span className={due.late && !isClosed(item) ? "lw-late" : ""}>{due.text}</span>
+                        {item.childCount ? <span>⑂ {item.childCount}</span> : null}
                         {item.priority ? <span style={{ color: PRIORITY_COLOR[item.priority] }}>⚑</span> : null}
                       </div>
                     </article>
@@ -213,9 +299,13 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
   );
 }
 
-function QuickAdd({ onAdd, label = "+ Add item" }: { onAdd: (title: string) => Promise<unknown> | void; label?: string }) {
+function QuickAdd({ onAdd, onCancel, autoOpen = false, label = "+ Add Task" }: { onAdd: (title: string) => Promise<unknown> | void; onCancel?: () => void; autoOpen?: boolean; label?: string }) {
   const [value, setValue] = useState("");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(autoOpen);
+  const close = () => {
+    setOpen(false);
+    onCancel?.();
+  };
   if (!open) return <button className="lw-add" onClick={() => setOpen(true)}>{label}</button>;
   return (
     <form className="lw-addform" onSubmit={async (event) => {
@@ -223,8 +313,9 @@ function QuickAdd({ onAdd, label = "+ Add item" }: { onAdd: (title: string) => P
       await onAdd(value);
       setValue("");
     }}>
-      <input autoFocus value={value} placeholder="Name, then Enter" onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") setOpen(false); }} />
-      <button type="submit">Save</button>
+      <input autoFocus value={value} placeholder="Task Name" onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") close(); }} />
+      <button type="button" className="lw-ghost" onClick={close}>Cancel</button>
+      <button type="submit" className="lw-primary">Save</button>
     </form>
   );
 }
@@ -263,9 +354,11 @@ function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch
     if (next) adopt(next);
   }
 
+  const currentStatus = statuses.find((status) => status.id === item?.statusId);
+
   return (
     <div className="lw-overlay" onClick={onClose}>
-      <aside className="lw-panel" onClick={(event) => event.stopPropagation()} aria-label="Item details">
+      <aside className="lw-panel" onClick={(event) => event.stopPropagation()} aria-label="Task details">
         <div className="lw-panel-top">
           <span className="lw-crumbs">
             {item?.listName}
@@ -275,59 +368,61 @@ function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch
           </span>
           <button className="lw-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        {!item ? <p>Loading…</p> : (
+        {!item ? <p className="lw-faint">Loading…</p> : (
           <div className="lw-panel-body">
             <input className="lw-panel-title" value={draft.title} disabled={!canEdit}
               onChange={(event) => setDraft({ ...draft, title: event.target.value })}
               onBlur={() => { if (draft.title.trim() && draft.title !== item.title) save({ title: draft.title }); }} />
 
-            <div className="lw-fields">
-              <label>Status
-                <select value={item.statusId ?? ""} disabled={!canEdit} onChange={(event) => save({ statusId: event.target.value || null })}>
-                  {statuses.map((status) => <option key={status.id} value={status.id}>{status.name}</option>)}
+            <div className="lw-props">
+              <span className="lw-prop-label">Status</span>
+              <span>
+                <select className="lw-status-select" style={{ background: currentStatus?.color ?? "#87909e" }} value={item.statusId ?? ""} disabled={!canEdit} onChange={(event) => save({ statusId: event.target.value || null })}>
+                  {statuses.map((status) => <option key={status.id} value={status.id}>{status.name.toUpperCase()}</option>)}
                 </select>
-              </label>
-              <label>Priority
-                <select value={item.priority ?? ""} disabled={!canEdit} onChange={(event) => save({ priority: event.target.value || null })}>
-                  <option value="">none</option>
-                  {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority.toLowerCase()}</option>)}
-                </select>
-              </label>
-              <label>Start
-                <input type="date" value={item.startOn ?? ""} disabled={!canEdit} onChange={(event) => save({ startOn: event.target.value || null })} />
-              </label>
-              <label>Due
-                <input type="date" value={item.dueOn ?? ""} disabled={!canEdit} onChange={(event) => save({ dueOn: event.target.value || null })} />
-              </label>
-              <label className="lw-wide">Assignees
-                <select multiple value={item.assignees.map((person) => person.id)} disabled={!canEdit}
+              </span>
+              <span className="lw-prop-label">Assignees</span>
+              <span>
+                <select multiple className="lw-multi" value={item.assignees.map((person) => person.id)} disabled={!canEdit}
                   onChange={(event) => save({ assigneeIds: Array.from(event.target.selectedOptions).map((option) => option.value) })}>
                   {people.map((person) => <option key={person.id} value={person.id}>{person.fullName}</option>)}
                 </select>
-              </label>
-              <label className="lw-wide">Tags (comma separated)
-                <input value={draft.tags} disabled={!canEdit} onChange={(event) => setDraft({ ...draft, tags: event.target.value })}
+              </span>
+              <span className="lw-prop-label">Dates</span>
+              <span className="lw-dates">
+                <input type="date" aria-label="Start date" value={item.startOn ?? ""} disabled={!canEdit} onChange={(event) => save({ startOn: event.target.value || null })} />
+                <span className="lw-faint">→</span>
+                <input type="date" aria-label="Due date" value={item.dueOn ?? ""} disabled={!canEdit} onChange={(event) => save({ dueOn: event.target.value || null })} />
+              </span>
+              <span className="lw-prop-label">Priority</span>
+              <span>
+                <select value={item.priority ?? ""} disabled={!canEdit} onChange={(event) => save({ priority: event.target.value || null })}>
+                  <option value="">Empty</option>
+                  {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority[0] + priority.slice(1).toLowerCase()}</option>)}
+                </select>
+              </span>
+              <span className="lw-prop-label">Tags</span>
+              <span>
+                <input value={draft.tags} placeholder="Comma separated" disabled={!canEdit} onChange={(event) => setDraft({ ...draft, tags: event.target.value })}
                   onBlur={() => save({ tags: draft.tags.split(",").map((tag) => tag.trim()).filter(Boolean) })} />
-              </label>
+              </span>
             </div>
 
-            <label className="lw-desc">Description
-              <textarea rows={12} value={draft.description} disabled={!canEdit}
-                onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                onBlur={() => { if (draft.description !== (item.description ?? "")) save({ description: draft.description }); }} />
-            </label>
+            <textarea className="lw-desc" rows={12} placeholder="Add description" value={draft.description} disabled={!canEdit}
+              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+              onBlur={() => { if (draft.description !== (item.description ?? "")) save({ description: draft.description }); }} />
 
             <section className="lw-section">
-              <h3>Sub-items <span className="lw-n">{item.children.length}</span></h3>
+              <h3>Subtasks <span className="lw-n">{item.children.length}</span></h3>
               {item.children.map((child) => {
                 const status = statuses.find((entry) => entry.id === child.statusId);
                 return (
                   <button key={child.id} className="lw-subitem" onClick={() => onOpen(child.id)}>
-                    <span className="lw-status-dot" style={{ background: status?.color ?? "#87909e" }} /> {child.title}
+                    <StatusIcon status={status} /> <span>{child.title}</span>
                   </button>
                 );
               })}
-              {canEdit ? <QuickAdd label="+ Add sub-item" onAdd={async (title) => {
+              {canEdit ? <QuickAdd label="+ Add subtask" onAdd={async (title) => {
                 await onAddChild(title);
                 const data = await send("/api/work/items/" + itemId, "GET");
                 adopt(data.item);
@@ -345,10 +440,10 @@ function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch
                       <span className={entry.done ? "lw-done" : ""}>{entry.label}</span>
                     </label>
                   ))}
-                  {canEdit ? <QuickAdd label="+ Add entry" onAdd={(label) => save({ checklistEntry: { checklistId: checklist.id, label } })} /> : null}
+                  {canEdit ? <QuickAdd label="+ Add item" onAdd={(label) => save({ checklistEntry: { checklistId: checklist.id, label } })} /> : null}
                 </div>
               ))}
-              {canEdit ? <QuickAdd label="+ New checklist" onAdd={(name) => save({ checklist: { name } })} /> : null}
+              {canEdit ? <QuickAdd label="+ Add checklist" onAdd={(name) => save({ checklist: { name } })} /> : null}
             </section>
 
             {item.attachments.length ? (
@@ -364,7 +459,7 @@ function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch
               <h3>Activity <span className="lw-n">{item.comments.length}</span></h3>
               {item.comments.map((entry) => (
                 <div key={entry.id} className="lw-comment">
-                  <div className="lw-comment-head"><strong>{entry.authorName}</strong> <span>{new Date(entry.createdAt).toLocaleString()}</span></div>
+                  <div className="lw-comment-head"><span className="lw-avatar">{initials(entry.authorName)}</span><strong>{entry.authorName}</strong> <span className="lw-faint">{new Date(entry.createdAt).toLocaleString()}</span></div>
                   <div className="lw-comment-body">{entry.body}</div>
                 </div>
               ))}
@@ -375,8 +470,8 @@ function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch
                   await save({ comment });
                   setComment("");
                 }}>
-                  <input value={comment} placeholder="Write a comment" onChange={(event) => setComment(event.target.value)} />
-                  <button type="submit">Comment</button>
+                  <input value={comment} placeholder="Write a comment..." onChange={(event) => setComment(event.target.value)} />
+                  <button type="submit" className="lw-primary">Comment</button>
                 </form>
               ) : null}
             </section>
@@ -388,54 +483,89 @@ function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch
 }
 
 const lwCss = [
-  ".lw{display:flex;flex-direction:column;gap:12px}",
-  ".lw-head h1{margin:0;font-size:22px}.lw-head p{margin:4px 0 0;opacity:.7;font-size:13px}",
-  ".lw-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;border-bottom:1px solid var(--border,#e4e6eb);padding-bottom:10px}",
-  ".lw-tabs{display:flex;gap:4px}.lw-tabs button{border:0;background:transparent;color:inherit;padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit}",
-  ".lw-tabs button.is-active{background:rgba(123,104,238,.16);color:#7b68ee;font-weight:600}",
-  ".lw-search{flex:1;min-width:160px;max-width:320px}",
-  ".lw-check{display:flex;gap:6px;align-items:center;font-size:13px}.lw-total{font-size:12px;opacity:.65;margin-left:auto}",
-  ".lw-error{color:#e5484d;margin:0}",
-  ".lw-groups{display:flex;flex-direction:column;gap:18px}",
-  ".lw-group h2,.lw-column h2{display:flex;align-items:center;gap:8px;font-size:13px;margin:0 0 6px}",
-  ".lw-badge{color:#fff;text-transform:uppercase;font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px;letter-spacing:.03em}",
-  ".lw-n{font-size:12px;opacity:.6;font-weight:400}",
-  ".lw-row{display:grid;grid-template-columns:18px 10px minmax(0,max-content) minmax(0,1fr) 120px 70px 80px;align-items:center;gap:8px;border-top:1px solid var(--border,#e4e6eb);padding-top:7px;padding-bottom:7px;padding-right:12px}",
-  ".lw-row:hover{background:rgba(123,104,238,.06)}",
-  ".lw-caret{border:0;background:none;color:inherit;cursor:pointer;padding:0;font-size:12px}",
-  ".lw-status-dot{display:inline-block;width:10px;height:10px;border-radius:3px;flex:none}",
-  ".lw-title{border:0;background:none;color:inherit;font:inherit;text-align:left;cursor:pointer;padding:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}",
-  ".lw-title:hover{color:#7b68ee}",
-  ".lw-meta{display:flex;gap:4px;flex-wrap:wrap;overflow:hidden;min-width:0}",
-  ".lw-pill{font-size:11px;padding:1px 6px;border-radius:10px;background:rgba(135,144,158,.18)}",
-  ".lw-col{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-  ".lw-late{color:#e5484d}",
-  ".lw-add{border:0;background:none;color:inherit;opacity:.6;cursor:pointer;padding:6px 12px;text-align:left;font:inherit;font-size:13px}",
-  ".lw-add:hover{opacity:1;color:#7b68ee}",
-  ".lw-addform{display:flex;gap:6px;padding:6px 12px}.lw-addform input{flex:1}",
-  ".lw-board{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}",
-  ".lw-column{flex:0 0 280px;background:rgba(135,144,158,.08);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}",
-  ".lw-card{background:var(--surface,#fff);border:1px solid var(--border,#e4e6eb);border-radius:8px;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:6px;font-size:13px}",
+  ".lw{--lw-border:var(--cu-border,#e4e6eb);--lw-muted:var(--cu-muted,#656f7d);--lw-hover:var(--cu-hover,rgba(15,23,42,.05));--lw-bg:var(--cu-bg,#fff);display:flex;flex-direction:column;gap:0;margin:-20px -24px 0}",
+  ".lw-head{display:flex;align-items:center;gap:8px;padding:12px 24px 6px}",
+  ".lw-head h1{margin:0;font-size:15px;font-weight:600}",
+  ".lw-space-badge{width:20px;height:20px;border-radius:5px;display:grid;place-items:center;background:#7b68ee;color:#fff;font-size:10px;font-weight:800}",
+  ".lw-head-count{font-size:12px;color:var(--lw-muted)}",
+  ".lw-views{display:flex;gap:2px;padding:0 20px;border-bottom:1px solid var(--lw-border)}",
+  ".lw-views button{border:0;border-bottom:2px solid transparent;background:none;color:var(--lw-muted);font:inherit;font-size:13px;padding:8px 10px;cursor:pointer}",
+  ".lw-views button.is-active{color:inherit;border-bottom-color:#7b68ee;font-weight:600}",
+  ".lw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 24px;border-bottom:1px solid var(--lw-border)}",
+  ".lw-chips,.lw-tools{display:flex;align-items:center;gap:6px}",
+  ".lw-chip{border:1px solid var(--lw-border);background:none;color:inherit;font:inherit;font-size:12px;padding:3px 10px;border-radius:14px;cursor:pointer}",
+  ".lw-chip--on{background:rgba(123,104,238,.14);border-color:rgba(123,104,238,.45);color:#7b68ee}",
+  ".lw-icon-btn{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--lw-border);border-radius:6px;background:none;color:inherit;cursor:pointer}",
+  ".lw-search{height:28px;width:200px;font-size:13px}",
+  ".lw-primary{border:0;background:#7b68ee;color:#fff;font:inherit;font-size:12px;font-weight:600;padding:5px 12px;border-radius:6px;cursor:pointer}",
+  ".lw-primary:hover{background:#6a58e0}",
+  ".lw-ghost{border:1px solid var(--lw-border);background:none;color:inherit;font:inherit;font-size:12px;padding:5px 10px;border-radius:6px;cursor:pointer}",
+  ".lw-error{color:#e5484d;margin:8px 24px}",
+  ".lw-groups{display:flex;flex-direction:column;gap:20px;padding:14px 24px 40px}",
+  ".lw-group-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}",
+  ".lw-group-head:hover .lw-group-add{opacity:1}",
+  ".lw-pill{display:inline-flex;align-items:center;gap:6px;color:#fff;text-transform:uppercase;font-size:11px;font-weight:700;padding:3px 9px 3px 6px;border-radius:5px;letter-spacing:.02em}",
+  ".lw-pill .lw-sicon{border-color:#fff !important;background:transparent !important}",
+  ".lw-n{font-size:12px;color:var(--lw-muted);font-weight:500}",
+  ".lw-group-add{opacity:0;border:0;background:none;color:var(--lw-muted);font:inherit;font-size:12px;cursor:pointer}",
+  ".lw-colhead,.lw-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 110px 100px;align-items:center}",
+  ".lw-colhead{font-size:11px;color:var(--lw-muted);padding:4px 0 6px 44px;border-bottom:1px solid var(--lw-border)}",
+  ".lw-row{min-height:38px;border-bottom:1px solid var(--lw-border);cursor:pointer}",
+  ".lw-row:hover{background:var(--lw-hover)}",
+  ".lw-name{display:flex;align-items:center;gap:7px;min-width:0;padding-right:10px}",
+  ".lw-caret{display:grid;place-items:center;width:18px;height:18px;border:0;background:none;color:var(--lw-muted);cursor:pointer;padding:0;border-radius:4px;flex:none}",
+  ".lw-caret:hover{background:var(--lw-hover)}",
+  ".lw-sicon{display:inline-grid;place-items:center;width:14px;height:14px;border-radius:50%;border:2px solid;flex:none;box-sizing:border-box}",
+  ".lw-sicon--todo{border-style:dashed}",
+  ".lw-sicon--done{border-width:0}",
+  ".lw-title{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}",
+  ".lw-title--closed{color:var(--lw-muted)}",
+  ".lw-row:hover .lw-title{color:#7b68ee}",
+  ".lw-mini{flex:none;font-size:11px;color:var(--lw-muted);padding:0 4px;border:1px solid var(--lw-border);border-radius:4px}",
+  ".lw-tag{flex:none;font-size:11px;padding:1px 7px;border-radius:4px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".lw-cell{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".lw-faint{color:var(--lw-muted);opacity:.7}",
+  ".lw-late{color:#e5484d}.lw-today{color:#f5a623}",
+  ".lw-priority-text{color:inherit}",
+  ".lw-avatars{display:flex}.lw-avatars .lw-avatar+.lw-avatar{margin-left:-6px}",
+  ".lw-avatar{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#5f55ee;color:#fff;font-size:9px;font-weight:700;border:2px solid var(--lw-bg);flex:none}",
+  ".lw-empty-person{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;border:1px dashed var(--lw-border);color:var(--lw-muted)}",
+  ".lw-add{border:0;background:none;color:var(--lw-muted);cursor:pointer;padding:8px 0 8px 44px;text-align:left;font:inherit;font-size:13px;width:100%}",
+  ".lw-add:hover{color:#7b68ee;background:var(--lw-hover)}",
+  ".lw-addform{display:flex;gap:6px;align-items:center;padding:6px 0 6px 44px;border-bottom:1px solid var(--lw-border)}.lw-addform input{flex:1;height:30px}",
+  ".lw-board{display:flex;gap:10px;overflow-x:auto;padding:14px 24px 40px;align-items:flex-start}",
+  ".lw-column{flex:0 0 272px;background:var(--lw-hover);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px}",
+  ".lw-column-head{display:flex;align-items:center;gap:8px;padding:4px 2px 6px}",
+  ".lw-card{background:var(--lw-bg);border:1px solid var(--lw-border);border-radius:8px;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:8px;font-size:13px;box-shadow:0 1px 2px rgba(0,0,0,.06)}",
   ".lw-card:hover{border-color:#7b68ee}",
-  ".lw-card-foot{display:flex;gap:10px;font-size:12px;opacity:.75}",
-  ".lw-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:60;display:flex;justify-content:flex-end}",
-  ".lw-panel{width:min(760px,100%);height:100%;overflow-y:auto;background:var(--surface,#fff);color:inherit;box-shadow:-8px 0 24px rgba(0,0,0,.25);padding:16px 20px}",
-  "html[data-theme=dark] .lw-panel,html[data-theme=dark] .lw-card{background:#222326;border-color:#34363b;color:#e8e9ea}",
-  ".lw-panel-top{display:flex;justify-content:space-between;gap:12px;font-size:12px;opacity:.8}",
+  ".lw-card strong{font-weight:500}",
+  ".lw-card-tags{display:flex;gap:4px;flex-wrap:wrap}",
+  ".lw-card-foot{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--lw-muted)}",
+  ".lw-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:95;display:flex;justify-content:flex-end}",
+  ".lw-panel{width:min(820px,100%);height:100%;overflow-y:auto;background:var(--lw-bg);color:inherit;box-shadow:-8px 0 24px rgba(0,0,0,.3);padding:14px 28px 40px}",
+  "html[data-theme=dark] .lw-panel{background:#1b1c1f;color:#e3e4e6}",
+  ".lw-panel-top{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:12px;color:var(--lw-muted);padding-bottom:10px;border-bottom:1px solid var(--lw-border)}",
   ".lw-crumbs button{border:0;background:none;color:#7b68ee;cursor:pointer;font:inherit;padding:0}",
-  ".lw-close{border:0;background:none;color:inherit;font-size:18px;cursor:pointer}",
-  ".lw-panel-body{display:flex;flex-direction:column;gap:14px;margin-top:8px}",
-  ".lw-panel-title{font-size:22px;font-weight:700;border:1px solid transparent;background:transparent;color:inherit;padding:4px 6px;width:100%}",
-  ".lw-panel-title:hover,.lw-panel-title:focus{border-color:var(--border,#e4e6eb)}",
-  ".lw-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}",
-  ".lw-fields label,.lw-desc{display:flex;flex-direction:column;gap:4px;font-size:12px}",
-  ".lw-wide{grid-column:1/-1}",
-  ".lw-desc textarea{font:inherit;font-size:13px;line-height:1.5;white-space:pre-wrap}",
-  ".lw-section h3{font-size:14px;margin:0 0 6px}",
-  ".lw-subitem{display:flex;gap:8px;align-items:center;width:100%;border:0;border-top:1px solid var(--border,#e4e6eb);background:none;color:inherit;font:inherit;padding:7px 4px;cursor:pointer;text-align:left}",
-  ".lw-checklist{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}",
-  ".lw-entry{display:flex;gap:8px;align-items:flex-start;font-size:13px}.lw-done{text-decoration:line-through;opacity:.6}",
-  ".lw-comment{border-top:1px solid var(--border,#e4e6eb);padding:8px 0;font-size:13px}",
-  ".lw-comment-head span{opacity:.6;font-size:12px}.lw-comment-body{white-space:pre-wrap;margin-top:4px}",
-  "@media (max-width:700px){.lw-row{grid-template-columns:18px 10px minmax(0,1fr) 60px}.lw-meta,.lw-assignee,.lw-priority{display:none}}"
+  ".lw-close{border:0;background:none;color:inherit;font-size:16px;cursor:pointer;width:28px;height:28px;border-radius:6px}",
+  ".lw-close:hover{background:var(--lw-hover)}",
+  ".lw-panel-body{display:flex;flex-direction:column;gap:18px;margin-top:14px}",
+  ".lw-panel-title{font-size:24px;font-weight:700;border:0;background:transparent;color:inherit;padding:2px 0;width:100%;box-shadow:none}",
+  ".lw-props{display:grid;grid-template-columns:110px minmax(0,1fr);gap:8px 12px;align-items:center;font-size:13px}",
+  ".lw-prop-label{color:var(--lw-muted)}",
+  ".lw-props select,.lw-props input{font-size:13px;max-width:100%}",
+  ".lw-status-select{color:#fff;border:0;border-radius:5px;font-weight:700;font-size:11px !important;padding:4px 8px}",
+  ".lw-multi{min-height:64px;width:100%}",
+  ".lw-dates{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+  ".lw-desc{font:inherit;font-size:14px;line-height:1.6;white-space:pre-wrap;border:1px solid var(--lw-border);border-radius:8px;padding:12px;background:transparent;color:inherit}",
+  ".lw-section h3{font-size:14px;margin:0 0 8px;font-weight:600}",
+  ".lw-subitem{display:flex;gap:8px;align-items:center;width:100%;border:0;border-bottom:1px solid var(--lw-border);background:none;color:inherit;font:inherit;font-size:13px;padding:8px 4px;cursor:pointer;text-align:left}",
+  ".lw-subitem:hover{background:var(--lw-hover)}",
+  ".lw-section .lw-add,.lw-section .lw-addform{padding-left:4px}",
+  ".lw-checklist{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}",
+  ".lw-entry{display:flex;gap:8px;align-items:flex-start;font-size:13px}.lw-done{text-decoration:line-through;color:var(--lw-muted)}",
+  ".lw-comment{padding:10px 0;border-bottom:1px solid var(--lw-border);font-size:13px}",
+  ".lw-comment-head{display:flex;align-items:center;gap:8px}.lw-comment-head span:last-child{font-size:12px}",
+  ".lw-comment-body{white-space:pre-wrap;margin:6px 0 0 30px}",
+  "@media (max-width:900px){.lw{margin:-16px -16px 0}.lw-head,.lw-toolbar{padding-left:16px;padding-right:16px}.lw-groups,.lw-board{padding-left:16px;padding-right:16px}}",
+  "@media (max-width:700px){.lw-colhead,.lw-row{grid-template-columns:minmax(0,1fr) 76px}.lw-colhead span:nth-child(2),.lw-colhead span:nth-child(4),.lw-row>.lw-cell:nth-child(2),.lw-row>.lw-cell:nth-child(4),.lw-tag,.lw-mini{display:none}.lw-props{grid-template-columns:1fr}}"
 ].join("");
