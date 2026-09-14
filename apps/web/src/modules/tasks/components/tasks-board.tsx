@@ -6,7 +6,7 @@ import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import { StatusPill } from "@/components/status-pill";
-import type { FunctionalAreaRecord, OperationalTask, TaskPriority, TaskStatus } from "@/lib/operations/types";
+import type { FunctionalAreaRecord, OperationalTask, TaskPriority, TaskStatus, TaskTag } from "@/lib/operations/types";
 import type { Tone } from "@/lib/types";
 
 // All task data lives in Cloudflare D1 and is read and written through /api/tasks. Nothing is kept in browser storage.
@@ -38,9 +38,11 @@ export function TasksBoard({
   initialTasks,
   functionalAreas,
   users,
+  availableTags,
   canEdit,
   canDelete
 }: {
+  availableTags?: TaskTag[];
   initialTasks: OperationalTask[];
   functionalAreas: FunctionalAreaRecord[];
   users: UserOption[];
@@ -54,6 +56,7 @@ export function TasksBoard({
   const [ownerFilter, setOwnerFilter] = useState("ALL");
   const [priorityFilter, setPriorityFilter] = useState<"ALL" | TaskPriority>("ALL");
   const [areaFilter, setAreaFilter] = useState("ALL");
+  const [tagFilter, setTagFilter] = useState("ALL");
   const [dueFilter, setDueFilter] = useState<DueFilter>("ALL");
   const [groupBy, setGroupBy] = useState<GroupBy>("due");
   const [sortBy, setSortBy] = useState<SortBy>("due");
@@ -74,20 +77,28 @@ export function TasksBoard({
       if (!["ALL", "UNASSIGNED"].includes(ownerFilter) && task.ownerUserId !== ownerFilter) return false;
       if (priorityFilter !== "ALL" && task.priority !== priorityFilter) return false;
       if (areaFilter !== "ALL" && task.functionalAreaKey !== areaFilter) return false;
+      if (tagFilter !== "ALL" && !(task.tags ?? []).some((tag) => tag.label === tagFilter)) return false;
       if (dueFilter === "NONE" && task.dueOn) return false;
       if (dueFilter === "OVERDUE" && !(task.dueOn && task.dueOn < now && !isClosed(task))) return false;
       if (dueFilter === "NEXT7" && !(task.dueOn && task.dueOn >= now && task.dueOn <= addDays(now, 7))) return false;
       if (dueFilter === "NEXT14" && !(task.dueOn && task.dueOn >= now && task.dueOn <= addDays(now, 14))) return false;
-      return !normalized || [task.title, task.description ?? "", task.functionalAreaName, task.ownerName ?? "Unassigned", task.priority]
+      return !normalized || [task.title, task.description ?? "", task.functionalAreaName, task.ownerName ?? "Unassigned", task.priority, ...(task.tags ?? []).map((tag) => tag.label)]
         .some((value) => value.toLowerCase().includes(normalized));
     }).sort((a, b) => compareTasks(a, b, sortBy));
-  }, [query, statusFilter, ownerFilter, priorityFilter, areaFilter, dueFilter, sortBy, tasks]);
+  }, [query, statusFilter, ownerFilter, priorityFilter, areaFilter, tagFilter, dueFilter, sortBy, tasks]);
+
+  const tagOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const tag of availableTags ?? []) map.set(tag.label, tag.color);
+    for (const task of tasks) for (const tag of task.tags ?? []) map.set(tag.label, tag.color);
+    return [...map.entries()].map(([label, color]) => ({ label, color })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [availableTags, tasks]);
 
   const groups = useMemo(() => groupTasks(visibleTasks, groupBy), [visibleTasks, groupBy]);
   const selected = tasks.find((task) => task.id === selectedId) ?? null;
   const activeTasks = tasks.filter((task) => !isClosed(task));
   const overdue = activeTasks.filter((task) => task.dueOn && task.dueOn < today()).length;
-  const filtersActive = ownerFilter !== "ALL" || priorityFilter !== "ALL" || areaFilter !== "ALL" || dueFilter !== "ALL" || statusFilter !== "ACTIVE" || query !== "";
+  const filtersActive = ownerFilter !== "ALL" || priorityFilter !== "ALL" || areaFilter !== "ALL" || tagFilter !== "ALL" || dueFilter !== "ALL" || statusFilter !== "ACTIVE" || query !== "";
 
   function clearFilters() {
     setQuery("");
@@ -95,6 +106,7 @@ export function TasksBoard({
     setOwnerFilter("ALL");
     setPriorityFilter("ALL");
     setAreaFilter("ALL");
+    setTagFilter("ALL");
     setDueFilter("ALL");
   }
 
@@ -117,7 +129,8 @@ export function TasksBoard({
           functionalAreaKey: String(formData.get("functionalAreaKey") ?? "command"),
           ownerUserId: String(formData.get("ownerUserId") ?? "") || null,
           dueOn: String(formData.get("dueOn") ?? "") || null,
-          requiresApproval: formData.get("requiresApproval") === "on"
+          requiresApproval: formData.get("requiresApproval") === "on",
+          tags: String(formData.get("tags") ?? "").split(",").map((value) => value.trim()).filter(Boolean)
         })
       });
       const payload = await response.json() as { task?: OperationalTask; message?: string };
@@ -223,6 +236,7 @@ export function TasksBoard({
             <label>Assignee<select name="ownerUserId" defaultValue=""><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.fullName}{user.dutyTitle ? ", " + user.dutyTitle : ""}</option>)}</select></label>
             <label>Priority<select name="priority" defaultValue="NORMAL"><option value="LOW">Low</option><option value="NORMAL">Normal</option><option value="HIGH">High</option><option value="CRITICAL">Critical</option></select></label>
             <label>Due date<input name="dueOn" type="date" /></label>
+            <label>Tags<input name="tags" list="work-tag-options" placeholder="Comma separated, e.g. commander action, finance" /></label>
             <label className="task-form__description">Description<textarea name="description" maxLength={5000} rows={3} placeholder="Context, expected result, or completion evidence..." /></label>
             <label className="checkbox-field"><input name="requiresApproval" type="checkbox" /> Commander or administrator approval required before completion</label>
             <div>
@@ -268,6 +282,10 @@ export function TasksBoard({
           <option value="ALL">Section: all</option>
           {functionalAreas.map((area) => <option key={area.key} value={area.key}>Section: {area.name}</option>)}
         </select>
+        <select aria-label="Tag" value={tagFilter} onChange={(event) => setTagFilter(event.target.value)}>
+          <option value="ALL">Tag: any</option>
+          {tagOptions.map((tag) => <option key={tag.label} value={tag.label}>Tag: {tag.label}</option>)}
+        </select>
         <span className="work-filters__divider" />
         {view === "list" ? (
           <select aria-label="Group by" value={groupBy} onChange={(event) => setGroupBy(event.target.value as GroupBy)}>
@@ -305,7 +323,7 @@ export function TasksBoard({
                     <article className={"task-card task-card--" + task.priority.toLowerCase() + " work-card"} key={task.id} onClick={() => setSelectedId(task.id)}>
                       <div className="task-card__top"><span>{task.functionalAreaName}</span><PriorityChip priority={task.priority} /></div>
                       <h3>{task.title}</h3>
-                      <div className="work-chips"><DueChip task={task} /></div>
+                      <div className="work-chips"><DueChip task={task} /><TagChips tags={task.tags} /></div>
                       <dl>
                         <div><dt>Assignee</dt><dd>{task.ownerName || "Unassigned"}</dd></div>
                       </dl>
@@ -334,7 +352,7 @@ export function TasksBoard({
                 {groupBy !== "none" ? <div className="work-group__head">{group.label}<b>{group.tasks.length}</b></div> : null}
                 {group.tasks.map((task) => (
                   <div key={task.id} role="row" tabIndex={0} className={"work-row work-row--" + task.priority.toLowerCase() + (selectedId === task.id ? " is-selected" : "")} onClick={() => setSelectedId(task.id)} onKeyDown={(event) => { if (event.key === "Enter") setSelectedId(task.id); }}>
-                    <div className="work-row__title"><strong>{task.title}</strong><small>{task.functionalAreaName}{task.requiresApproval ? " · needs approval" : ""}</small></div>
+                    <div className="work-row__title"><strong>{task.title}</strong><small>{task.functionalAreaName}{task.requiresApproval ? " · needs approval" : ""}</small>{task.tags?.length ? <div className="work-chips work-row__tags"><TagChips tags={task.tags} /></div> : null}</div>
                     <span><StatusPill label={formatStatus(task.status)} tone={toneForStatus(task.status)} /></span>
                     <span className={"work-hide-sm" + (task.ownerName ? "" : " work-muted")}>{task.ownerName || "Unassigned"}</span>
                     <span><DueChip task={task} /></span>
@@ -354,6 +372,7 @@ export function TasksBoard({
           task={selected}
           users={users}
           functionalAreas={functionalAreas}
+          tagOptions={tagOptions}
           canEdit={canEdit}
           canDelete={canDelete}
           busy={busyTaskId === selected.id}
@@ -362,6 +381,7 @@ export function TasksBoard({
           onDelete={() => removeTask(selected)}
         />
       ) : null}
+      <datalist id="work-tag-options">{tagOptions.map((tag) => <option key={tag.label} value={tag.label} />)}</datalist>
     </div>
   );
 }
@@ -370,6 +390,7 @@ function TaskDrawer({
   task,
   users,
   functionalAreas,
+  tagOptions,
   canEdit,
   canDelete,
   busy,
@@ -380,6 +401,7 @@ function TaskDrawer({
   task: OperationalTask;
   users: UserOption[];
   functionalAreas: FunctionalAreaRecord[];
+  tagOptions: Array<{ label: string; color: string }>;
   canEdit: boolean;
   canDelete: boolean;
   busy: boolean;
@@ -395,8 +417,17 @@ function TaskDrawer({
     functionalAreaKey: task.functionalAreaKey,
     ownerUserId: task.ownerUserId ?? "",
     dueOn: task.dueOn ?? "",
-    requiresApproval: task.requiresApproval
+    requiresApproval: task.requiresApproval,
+    tags: (task.tags ?? []).map((tag) => tag.label)
   });
+  const [tagInput, setTagInput] = useState("");
+
+  function addTag(raw: string) {
+    const label = normalizeTag(raw);
+    if (!label || label.length > 40) return;
+    setDraft((current) => current.tags.includes(label) ? current : { ...current, tags: [...current.tags, label] });
+    setTagInput("");
+  }
   const ownerMissing = Boolean(task.ownerUserId) && !users.some((user) => user.id === task.ownerUserId);
 
   function set<K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) {
@@ -413,7 +444,8 @@ function TaskDrawer({
       functionalAreaKey: draft.functionalAreaKey,
       ownerUserId: draft.ownerUserId || null,
       dueOn: draft.dueOn || null,
-      requiresApproval: draft.requiresApproval
+      requiresApproval: draft.requiresApproval,
+      tags: [...new Set([...draft.tags, normalizeTag(tagInput)].filter(Boolean))]
     });
   }
 
@@ -445,6 +477,19 @@ function TaskDrawer({
               {functionalAreas.map((area) => <option key={area.key} value={area.key}>{area.name}</option>)}
             </select></label>
           </div>
+          <div className="work-tag-editor">
+            <span className="work-tag-editor__label">Tags</span>
+            <div className="work-chips">
+              {draft.tags.map((label) => (
+                <span key={label} className={"work-tag work-tag--" + (tagOptions.find((tag) => tag.label === label)?.color ?? "slate")}>
+                  {label}
+                  {canEdit ? <button type="button" aria-label={"Remove tag " + label} onClick={() => set("tags", draft.tags.filter((item) => item !== label))}>×</button> : null}
+                </span>
+              ))}
+              {!draft.tags.length ? <span className="work-muted">No tags yet</span> : null}
+            </div>
+            {canEdit ? <input list="work-tag-options" value={tagInput} placeholder="Type a tag and press Enter" onChange={(event) => setTagInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addTag(tagInput); } }} /> : null}
+          </div>
           <label>Description<textarea rows={8} maxLength={5000} value={draft.description} onChange={(event) => set("description", event.target.value)} placeholder="Context, expected result, or completion evidence..." disabled={!canEdit} /></label>
           <label className="checkbox-field"><input type="checkbox" checked={draft.requiresApproval} onChange={(event) => set("requiresApproval", event.target.checked)} disabled={!canEdit} /> Approval required before completion</label>
           <div className="work-drawer__foot">
@@ -462,6 +507,15 @@ function TaskDrawer({
       </aside>
     </>
   );
+}
+
+function TagChips({ tags }: { tags?: TaskTag[] }) {
+  if (!tags?.length) return null;
+  return <>{tags.map((tag) => <span key={tag.id} className={"work-tag work-tag--" + tag.color}>{tag.label}</span>)}</>;
+}
+
+function normalizeTag(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 function PriorityChip({ priority }: { priority: TaskPriority }) {
@@ -595,6 +649,10 @@ const workCss = [
   ".work-chip--overdue{background:rgba(242,87,87,.16);border-color:rgba(242,87,87,.45);color:#ff8f8f}",
   ".work-chip--soon{background:rgba(245,176,65,.12);color:#f5c26b}",
   ".work-card{cursor:pointer}",
+  ".work-tag{display:inline-flex;align-items:center;gap:4px;min-height:20px;padding:0 7px;border-radius:5px;background:rgba(148,163,184,.16);color:#cbd5e1;font-size:11px;font-weight:600;white-space:nowrap}",
+  ".work-tag button{all:unset;cursor:pointer;padding-left:2px;opacity:.75}.work-tag button:hover{opacity:1}",
+  ".work-tag--blue{background:rgba(96,165,250,.18);color:#93c5fd}.work-tag--green{background:rgba(74,222,128,.16);color:#86efac}.work-tag--amber{background:rgba(251,191,36,.16);color:#fcd34d}.work-tag--red{background:rgba(248,113,113,.18);color:#fca5a5}.work-tag--purple{background:rgba(192,132,252,.18);color:#d8b4fe}.work-tag--teal{background:rgba(45,212,191,.16);color:#5eead4}.work-tag--pink{background:rgba(244,114,182,.16);color:#f9a8d4}",
+  ".work-row__tags{margin-top:4px}.work-tag-editor{display:grid;gap:7px}.work-tag-editor__label{color:var(--text-soft);font-size:12px}",
   ".work-drawer-backdrop{position:fixed;inset:0;z-index:80;background:rgba(3,8,16,.55)}",
   ".work-drawer{position:fixed;top:0;right:0;bottom:0;z-index:81;width:min(540px,100vw);overflow-y:auto;display:grid;align-content:start;gap:14px;padding:18px 20px;background:var(--surface,#0d1a2c);border-left:1px solid var(--border-soft);box-shadow:-24px 0 48px rgba(0,0,0,.35)}",
   ".work-drawer__top{display:flex;align-items:center;justify-content:space-between;gap:10px}",
