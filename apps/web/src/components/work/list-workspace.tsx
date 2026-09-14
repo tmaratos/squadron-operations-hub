@@ -9,9 +9,11 @@ type Mode = "list" | "board";
 const PRIORITIES: ItemPriority[] = ["URGENT", "HIGH", "NORMAL", "LOW"];
 const PRIORITY_COLOR: Record<ItemPriority, string> = { URGENT: "#e5484d", HIGH: "#f76808", NORMAL: "#5f55ee", LOW: "#87909e" };
 
-async function send(url: string, method: string, body?: unknown) {
+type ApiResult = { message?: string; item: ItemDetail; items: WorkItem[] };
+
+async function send(url: string, method: string, body?: unknown): Promise<ApiResult> {
   const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
-  const data = await response.json().catch(() => ({}));
+  const data = (await response.json().catch(() => ({}))) as ApiResult;
   if (!response.ok) throw new Error(data.message || "Request failed.");
   return data;
 }
@@ -32,7 +34,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
   const [openId, setOpenId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  const statusById = useMemo(() => new Map(list.statuses.map((status) => [status.id, status])), [list.statuses]);
+  const statusById = useMemo(() => new Map(list.statuses.map((status) => [status.id, status] as const)), [list.statuses]);
   const isClosed = (item: WorkItem) => {
     const status = item.statusId ? statusById.get(item.statusId) : undefined;
     return Boolean(status && (status.category === "DONE" || status.category === "CLOSED"));
@@ -75,7 +77,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
     try {
       const data = await send("/api/work/items/" + itemId, "PATCH", body);
       await reload();
-      return data.item as ItemDetail;
+      return data.item;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save.");
       return null;
