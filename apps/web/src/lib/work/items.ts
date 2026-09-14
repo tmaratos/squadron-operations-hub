@@ -226,7 +226,7 @@ export async function updateItem(itemId: string, input: ItemUpdate): Promise<voi
     assign("completed_at", status && ["DONE", "CLOSED"].includes(status.category) ? now : null);
   }
 
-  const statements: D1PreparedStatement[] = [];
+  const statements: Array<ReturnType<typeof db.prepare>> = [];
   if (sets.length) {
     statements.push(db.prepare("UPDATE items SET " + sets.join(", ") + ", updated_at = ? WHERE id = ?").bind(...values, now, itemId));
   }
