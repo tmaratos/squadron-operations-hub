@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { createTask, listTasks } from "@/lib/operations/tasks";
+import { createTask, findTaskById, listTasks, setTaskTags } from "@/lib/operations/tasks";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 const createTaskSchema = z.object({
@@ -14,7 +14,8 @@ const createTaskSchema = z.object({
   dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   sourceType: z.enum(["MANUAL", "MEETING", "DISCORD", "COMPLIANCE", "SYSTEM"]).default("MANUAL"),
   sourceReference: z.string().trim().max(1000).nullable().optional(),
-  requiresApproval: z.boolean().default(false)
+  requiresApproval: z.boolean().default(false),
+  tags: z.array(z.string().trim().min(1).max(40)).max(20).optional()
 });
 
 export async function GET() {
@@ -34,7 +35,11 @@ export async function POST(request: Request) {
     }
 
     const input = createTaskSchema.parse(await request.json());
-    const task = await createTask({ ...input, createdBy: user.id });
+    let task = await createTask({ ...input, createdBy: user.id });
+    if (input.tags?.length) {
+      await setTaskTags(task.id, input.tags, user.id);
+      task = (await findTaskById(task.id)) ?? task;
+    }
     await recordAuditEvent({
       actorUserId: user.id,
       action: "TASK_CREATED",
@@ -46,7 +51,8 @@ export async function POST(request: Request) {
         priority: task.priority,
         functionalArea: task.functionalAreaKey,
         ownerUserId: task.ownerUserId,
-        dueOn: task.dueOn
+        dueOn: task.dueOn,
+        tags: (task.tags ?? []).map((tag) => tag.label)
       }
     });
 
