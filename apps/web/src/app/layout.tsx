@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import "./globals.css";
 import "./dashboard-overrides.css";
+import "./clickup-theme.css";
 
 export const metadata: Metadata = {
   title: {
