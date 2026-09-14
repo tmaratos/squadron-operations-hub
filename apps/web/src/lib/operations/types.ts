@@ -16,6 +16,12 @@ export interface FunctionalAreaRecord {
   displayOrder: number;
 }
 
+export interface TaskTag {
+  id: string;
+  label: string;
+  color: string;
+}
+
 export interface OperationalTask {
   id: string;
   title: string;
@@ -36,6 +42,7 @@ export interface OperationalTask {
   updatedAt: string;
   completedAt: string | null;
   cancelledAt: string | null;
+  tags?: TaskTag[];
 }
 
 export interface TaskCreateInput {
@@ -48,6 +55,7 @@ export interface TaskCreateInput {
   sourceType?: TaskSourceType;
   sourceReference?: string | null;
   requiresApproval?: boolean;
+  tags?: string[];
 }
 
 export interface TaskUpdateInput {
@@ -59,6 +67,7 @@ export interface TaskUpdateInput {
   ownerUserId?: string | null;
   dueOn?: string | null;
   requiresApproval?: boolean;
+  tags?: string[];
 }
 
 export interface DashboardTaskSummary {
