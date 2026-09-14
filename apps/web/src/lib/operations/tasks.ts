@@ -8,6 +8,7 @@ import type {
   TaskPriority,
   TaskSourceType,
   TaskStatus,
+  TaskTag,
   TaskUpdateInput
 } from "./types";
 
@@ -112,7 +113,7 @@ export async function listTasks(input?: {
     .bind(limit)
     .all<TaskRow>();
 
-  return result.results.map(mapTask);
+  return attachTags(result.results.map(mapTask));
 }
 
 export async function findTaskById(id: string): Promise<OperationalTask | null> {
@@ -120,7 +121,7 @@ export async function findTaskById(id: string): Promise<OperationalTask | null> 
     .prepare(`${taskSelect} WHERE tasks.id = ? LIMIT 1`)
     .bind(id)
     .first<TaskRow>();
-  return row ? mapTask(row) : null;
+  return row ? (await attachTags([mapTask(row)]))[0] : null;
 }
 
 export async function createTask(input: TaskCreateInput & { createdBy: string }): Promise<OperationalTask> {
@@ -309,4 +310,55 @@ function mapTask(row: TaskRow): OperationalTask {
     completedAt: row.completed_at,
     cancelledAt: row.cancelled_at
   };
+}
+
+export async function listTaskTags(): Promise<TaskTag[]> {
+  const result = await getDatabase()
+    .prepare("SELECT id, label, color FROM task_tags ORDER BY label COLLATE NOCASE ASC")
+    .all<TaskTag>();
+  return result.results;
+}
+
+export async function setTaskTags(taskId: string, labels: string[], userId: string): Promise<void> {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  const clean = [...new Set(labels.map(normalizeTagLabel).filter((label) => label.length > 0 && label.length <= 40))].slice(0, 20);
+  const statements = [db.prepare("DELETE FROM task_tag_assignments WHERE task_id = ?").bind(taskId)];
+  for (const label of clean) {
+    statements.push(
+      db.prepare("INSERT OR IGNORE INTO task_tags (id, label, color, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), label, tagColor(label), userId, now, now)
+    );
+    statements.push(
+      db.prepare("INSERT OR IGNORE INTO task_tag_assignments (task_id, tag_id, assigned_by, assigned_at) SELECT ?, id, ?, ? FROM task_tags WHERE label = ?")
+        .bind(taskId, userId, now, label)
+    );
+  }
+  await db.batch(statements);
+}
+
+async function attachTags(tasks: OperationalTask[]): Promise<OperationalTask[]> {
+  if (!tasks.length) return tasks;
+  const result = await getDatabase()
+    .prepare(
+      "SELECT task_tag_assignments.task_id, task_tags.id, task_tags.label, task_tags.color FROM task_tag_assignments JOIN task_tags ON task_tags.id = task_tag_assignments.tag_id ORDER BY task_tags.label COLLATE NOCASE ASC"
+    )
+    .all<{ task_id: string; id: string; label: string; color: string }>();
+  const byTask = new Map<string, TaskTag[]>();
+  for (const row of result.results) {
+    byTask.set(row.task_id, [...(byTask.get(row.task_id) ?? []), { id: row.id, label: row.label, color: row.color }]);
+  }
+  return tasks.map((task) => ({ ...task, tags: byTask.get(task.id) ?? [] }));
+}
+
+function normalizeTagLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+const tagPalette = ["blue", "green", "amber", "red", "purple", "teal", "pink", "slate"];
+
+function tagColor(label: string): string {
+  let hash = 0;
+  for (const char of label) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return tagPalette[hash % tagPalette.length];
 }
