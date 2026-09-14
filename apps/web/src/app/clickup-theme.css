@@ -1,0 +1,136 @@
+/* ClickUp-style theme. Loaded after globals.css and dashboard-overrides.css so it wins.
+   Light: white work area, light gray sidebar. Dark: neutral gray and black, no navy. Accent: purple. */
+
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --background-soft: #f7f8f9;
+  --surface: #ffffff;
+  --surface-alt: #f7f8f9;
+  --surface-high: #f0f1f3;
+  --border: #e3e4e8;
+  --border-soft: #ececef;
+  --text: #292d34;
+  --text-soft: #3b4048;
+  --muted: #7c828d;
+  --muted-strong: #5b616b;
+  --accent: #7b68ee;
+  --accent-strong: #6a57e3;
+  --danger: #e5484d;
+  --warning: #f5a623;
+  --success: #22a06b;
+  --info: #3b82f6;
+  --neutral: #87909e;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .06);
+  --cu-sidebar: #f7f8f9;
+  --cu-hover: rgba(0, 0, 0, .05);
+  --cu-active: rgba(123, 104, 238, .12);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #1b1c1f;
+  --background-soft: #202124;
+  --surface: #222326;
+  --surface-alt: #26272b;
+  --surface-high: #2e2f33;
+  --border: #36373c;
+  --border-soft: #2c2d31;
+  --text: #e8e9eb;
+  --text-soft: #d4d5d8;
+  --muted: #8f9197;
+  --muted-strong: #adafb4;
+  --accent: #8b7bf2;
+  --accent-strong: #7b68ee;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  --cu-sidebar: #141517;
+  --cu-hover: rgba(255, 255, 255, .06);
+  --cu-active: rgba(139, 123, 242, .18);
+}
+
+/* Page and shell */
+body, .hub-shell, .hub-main,
+html[data-theme="dark"] body, html[data-theme="dark"] .hub-shell, html[data-theme="dark"] .hub-main { background: var(--background); color: var(--text); }
+
+.hub-topbar,
+html[data-theme="dark"] .hub-topbar { height: 56px; background: var(--surface); border-bottom: 1px solid var(--border-soft); box-shadow: none; }
+.hub-sidebar,
+html[data-theme="dark"] .hub-sidebar { top: 56px; background: var(--cu-sidebar); border-right: 1px solid var(--border-soft); }
+.hub-main { padding-top: 72px; }
+.hub-sidebar-backdrop { top: 56px; }
+@media (max-width: 680px) { .hub-main { padding-top: 68px; } }
+
+.hub-brand img { width: 34px; height: 34px; }
+.hub-brand strong, html[data-theme="dark"] .hub-brand strong { color: var(--text); font-size: 14px; }
+.hub-brand small, html[data-theme="dark"] .hub-brand small { color: var(--muted); font-size: 11px; }
+
+.hub-search,
+html[data-theme="dark"] .hub-search { height: 34px; border-radius: 8px; background: var(--surface-alt); border: 1px solid var(--border-soft); color: var(--muted); box-shadow: none; }
+.hub-search input, html[data-theme="dark"] .hub-search input { color: var(--text); }
+.hub-search input::placeholder { color: var(--muted); }
+.hub-search kbd, html[data-theme="dark"] .hub-search kbd { background: var(--surface-high); color: var(--muted-strong); border-radius: 5px; }
+
+.theme-switch, html[data-theme="dark"] .theme-switch { height: 32px; border-radius: 8px; background: var(--surface-alt); color: var(--muted-strong); }
+.theme-switch > span, html[data-theme="dark"] .theme-switch > span { width: 24px; height: 24px; background: var(--surface-high); color: var(--accent); box-shadow: none; }
+.theme-switch button, html[data-theme="dark"] .theme-switch button { color: var(--muted); }
+.theme-switch button.is-active, html[data-theme="dark"] .theme-switch button.is-active { color: var(--accent); }
+
+.hub-alert, html[data-theme="dark"] .hub-alert { color: var(--text-soft); }
+.hub-alert b { border-color: var(--surface); }
+.hub-profile, html[data-theme="dark"] .hub-profile { color: var(--text); }
+.hub-profile small, html[data-theme="dark"] .hub-profile small { color: var(--muted); }
+.hub-profile > span:first-child, .mini-avatar { background: var(--accent); }
+
+/* Sidebar navigation */
+.hub-nav-group > p { color: var(--muted); font-size: 10px; letter-spacing: .02em; }
+.hub-nav-item, html[data-theme="dark"] .hub-nav-item { min-height: 30px; color: var(--text-soft); font-size: 13px; border-radius: 6px; }
+.hub-nav-item svg, html[data-theme="dark"] .hub-nav-item svg { color: var(--muted-strong); }
+.hub-nav-item:hover, html[data-theme="dark"] .hub-nav-item:hover { background: var(--cu-hover); color: var(--text); }
+.hub-nav-item.is-active, html[data-theme="dark"] .hub-nav-item.is-active { min-height: 30px; background: var(--cu-active); color: var(--accent); font-weight: 600; }
+.hub-nav-item.is-active::before { display: none; }
+.hub-nav-item.is-active svg, html[data-theme="dark"] .hub-nav-item.is-active svg { color: var(--accent); }
+.hub-nav-divider, html[data-theme="dark"] .hub-nav-divider { background: var(--border-soft); }
+.hub-sidebar-status, .hub-sidebar-status strong, .hub-sidebar-status small { color: var(--muted); }
+
+/* Workspace switcher */
+.ws-switcher__button { background: transparent; border-color: transparent; }
+.ws-switcher__button:hover { background: var(--cu-hover); }
+.ws-avatar { background: var(--accent); border-radius: 6px; }
+
+/* Cards and headers: flat, like ClickUp */
+.home-card, .section-card, .metric-card,
+html[data-theme="dark"] .home-card, html[data-theme="dark"] .section-card, html[data-theme="dark"] .metric-card { background: var(--surface); border: 1px solid var(--border); color: var(--text); box-shadow: none; border-radius: 10px; }
+.section-card__header, html[data-theme="dark"] .section-card__header { border-color: var(--border-soft); }
+.page-header h1, .section-card__header h2, .metric-card__label, .home-card > header h2,
+html[data-theme="dark"] .page-header h1, html[data-theme="dark"] .section-card__header h2, html[data-theme="dark"] .metric-card__label, html[data-theme="dark"] .home-card > header h2 { color: var(--text); }
+.page-header > div > p:last-child, .section-card__header p, .metric-card__detail, .home-empty { color: var(--muted); }
+.page-header__eyebrow { color: var(--accent); }
+.home-card > header h2 svg, .home-card > header > a { color: var(--accent); }
+.home-task-list article, html[data-theme="dark"] .home-task-list article { border-color: var(--border-soft); color: var(--text-soft); }
+.home-task-list strong, html[data-theme="dark"] .home-task-list strong { color: var(--text); }
+.home-quick-actions a, .quick-links-grid a, .announcement-list article,
+html[data-theme="dark"] .home-quick-actions a, html[data-theme="dark"] .quick-links-grid a, html[data-theme="dark"] .announcement-list article { background: var(--surface); border-color: var(--border); color: var(--text-soft); }
+.documents-list article, .event-list article,
+html[data-theme="dark"] .documents-list article, html[data-theme="dark"] .event-list article { border-color: var(--border-soft); }
+
+/* Buttons and fields */
+.button, html[data-theme="dark"] .button { background: var(--surface); border-color: var(--border); color: var(--text-soft); border-radius: 6px; }
+.button:hover { background: var(--surface-high); }
+.button--primary, html[data-theme="dark"] .button--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.button--primary:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
+.button--ghost, html[data-theme="dark"] .button--ghost { background: transparent; }
+input, select, textarea,
+html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea { background: var(--surface); border-color: var(--border); color: var(--text); }
+input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 0; border-color: var(--accent); }
+
+/* Work view: tabs and toggles in accent purple */
+.view-toggle button.is-active, .segmented-control .is-active { background: var(--cu-active); color: var(--accent); }
+.work-row:hover, .work-row.is-selected { background: var(--cu-hover); }
+.integrations__tabs button.is-active { background: var(--cu-active); color: var(--accent); }
+.integration-card { box-shadow: none; }
+.integration-card__icon { color: var(--accent); }
+
+/* Scrollbars */
+html[data-theme="dark"] ::-webkit-scrollbar { width: 10px; height: 10px; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #3a3b40; border-radius: 10px; border: 2px solid var(--background); }
+html[data-theme="dark"] ::-webkit-scrollbar-track { background: transparent; }
