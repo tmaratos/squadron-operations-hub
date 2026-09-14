@@ -14,6 +14,7 @@ import {
   Megaphone,
   NotebookTabs,
   PackageCheck,
+  Plug,
   Radio,
   Settings,
   ShieldCheck,
@@ -81,6 +82,7 @@ export const navigationGroups: NavigationGroup[] = [
 
 export const utilityNavigation: NavigationItem[] = [
   { label: "Action Center", href: "/notifications", icon: Activity },
+  { label: "Integrations", href: "/integrations", icon: Plug },
   { label: "History", href: "/audit", icon: History },
   { label: "System Settings", href: "/settings", icon: Settings }
 ];
