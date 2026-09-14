@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { deleteTask, findTaskById, updateTask } from "@/lib/operations/tasks";
+import { deleteTask, findTaskById, setTaskTags, updateTask } from "@/lib/operations/tasks";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 const updateTaskSchema = z.object({
@@ -13,7 +13,8 @@ const updateTaskSchema = z.object({
   functionalAreaKey: z.string().trim().min(1).max(80).optional(),
   ownerUserId: z.string().uuid().nullable().optional(),
   dueOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  requiresApproval: z.boolean().optional()
+  requiresApproval: z.boolean().optional(),
+  tags: z.array(z.string().trim().min(1).max(40)).max(20).optional()
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ taskId: string }> }) {
@@ -30,6 +31,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
     if (!current) return NextResponse.json({ message: "Task not found." }, { status: 404 });
 
     const input = updateTaskSchema.parse(await request.json());
+    if (input.tags !== undefined) await setTaskTags(taskId, input.tags, user.id);
     const task = await updateTask(taskId, input);
     await recordAuditEvent({
       actorUserId: user.id,
@@ -43,7 +45,9 @@ export async function PATCH(request: Request, context: { params: Promise<{ taskI
         previousOwnerUserId: current.ownerUserId,
         newOwnerUserId: task.ownerUserId,
         priority: task.priority,
-        dueOn: task.dueOn
+        dueOn: task.dueOn,
+        previousTags: (current.tags ?? []).map((tag) => tag.label),
+        newTags: (task.tags ?? []).map((tag) => tag.label)
       }
     });
 
