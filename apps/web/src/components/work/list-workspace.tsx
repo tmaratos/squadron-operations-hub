@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
+import type { CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
 
 type Person = { id: string; fullName: string };
 type Mode = "list" | "board" | "table" | "calendar";
@@ -60,6 +60,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
   const [addingIn, setAddingIn] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingStatuses, setEditingStatuses] = useState(false);
+  const [editingFields, setEditingFields] = useState(false);
   const [error, setError] = useState("");
 
   const statusById = useMemo(() => new Map(list.statuses.map((status) => [status.id, status] as const)), [list.statuses]);
@@ -193,6 +194,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.5" /></svg>
             </button>
           )}
+          {canEdit ? <button className="lw-ghost" onClick={() => setEditingFields(true)}>⊞ Fields{list.fields.length ? " " + list.fields.length : ""}</button> : null}
           {canEdit ? <button className="lw-ghost" onClick={() => setEditingStatuses(true)}>⚙ Statuses</button> : null}
           {canEdit ? <button className="lw-primary" onClick={() => { setMode("list"); setAddingIn(visibleStatuses[0]?.id ?? null); }}>+ Task</button> : null}
         </div>
@@ -300,6 +302,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
           key={openId}
           itemId={openId}
           statuses={list.statuses}
+          fields={list.fields}
           people={people}
           canEdit={canEdit}
           onClose={() => setOpenId(null)}
@@ -311,6 +314,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
         />
       ) : null}
 
+      {editingFields ? <FieldEditor listId={list.id} fields={list.fields} onClose={() => setEditingFields(false)} /> : null}
       {editingStatuses ? <StatusEditor listId={list.id} statuses={list.statuses} onClose={() => setEditingStatuses(false)} /> : null}
     </div>
   );
@@ -512,6 +516,141 @@ function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses:
   );
 }
 
+const FIELD_TYPE_LABELS: Record<CustomField["type"], string> = {
+  text: "Text",
+  long_text: "Long text",
+  number: "Number",
+  currency: "Money",
+  date: "Date",
+  checkbox: "Checkbox",
+  dropdown: "Dropdown",
+  labels: "Labels",
+  person: "People",
+  url: "Link",
+  email: "Email",
+  phone: "Phone",
+  rating: "Rating",
+  progress: "Progress"
+};
+
+function FieldRow({ field, value, people, disabled, onSave }: { field: CustomField; value: unknown; people: Person[]; disabled: boolean; onSave: (value: unknown) => void }) {
+  return (
+    <>
+      <span className="lw-prop-label" title={FIELD_TYPE_LABELS[field.type]}>{field.name}</span>
+      <span><FieldInput field={field} value={value} people={people} disabled={disabled} onSave={onSave} /></span>
+    </>
+  );
+}
+
+function FieldInput({ field, value, people, disabled, onSave }: { field: CustomField; value: unknown; people: Person[]; disabled: boolean; onSave: (value: unknown) => void }) {
+  const text = value === null || value === undefined ? "" : typeof value === "object" ? "" : String(value);
+  const many = Array.isArray(value) ? value.map((entry) => String(entry)) : [];
+  switch (field.type) {
+    case "checkbox":
+      return <input type="checkbox" checked={value === true || value === "true"} disabled={disabled} onChange={(event) => onSave(event.target.checked)} />;
+    case "date":
+      return <input type="date" value={text.slice(0, 10)} disabled={disabled} onChange={(event) => onSave(event.target.value || null)} />;
+    case "dropdown":
+      return (
+        <select value={text} disabled={disabled} onChange={(event) => onSave(event.target.value || null)}>
+          <option value="">—</option>
+          {field.options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+        </select>
+      );
+    case "labels":
+      return (
+        <select multiple className="lw-multi" value={many} disabled={disabled} onChange={(event) => onSave(Array.from(event.target.selectedOptions).map((option) => option.value))}>
+          {field.options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+        </select>
+      );
+    case "person":
+      return (
+        <select multiple className="lw-multi" value={many} disabled={disabled} onChange={(event) => onSave(Array.from(event.target.selectedOptions).map((option) => option.value))}>
+          {people.map((person) => <option key={person.id} value={person.id}>{person.fullName}</option>)}
+        </select>
+      );
+    case "long_text":
+      return <textarea rows={3} className="lw-field-text" defaultValue={text} disabled={disabled} onBlur={(event) => { if (event.target.value !== text) onSave(event.target.value || null); }} />;
+    case "number":
+    case "currency":
+    case "rating":
+    case "progress":
+      return (
+        <input type="number" step={field.type === "currency" ? "0.01" : "1"} min={field.type === "rating" || field.type === "progress" ? 0 : undefined} max={field.type === "rating" ? 5 : field.type === "progress" ? 100 : undefined}
+          defaultValue={text} disabled={disabled} onBlur={(event) => { if (event.target.value !== text) onSave(event.target.value === "" ? null : Number(event.target.value)); }} />
+      );
+    default:
+      return (
+        <input type={field.type === "url" ? "url" : field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"} className="lw-field-text"
+          defaultValue={text} disabled={disabled} onBlur={(event) => { if (event.target.value !== text) onSave(event.target.value || null); }} />
+      );
+  }
+}
+
+function FieldEditor({ listId, fields, onClose }: { listId: string; fields: CustomField[]; onClose: () => void }) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState<CustomField["type"]>("text");
+  const [options, setOptions] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const needsOptions = type === "dropdown" || type === "labels";
+
+  async function call(body: Record<string, unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/work/lists/" + listId + "/fields", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(data.message || "Could not save.");
+      window.location.reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save.");
+      setBusy(false);
+    }
+  }
+
+  const parseOptions = (raw: string) => raw.split(",").map((entry) => entry.trim()).filter(Boolean).map((entry, index) => ({ id: "opt-" + Date.now().toString(36) + "-" + index, name: entry }));
+
+  return (
+    <div className="lw-overlay lw-overlay--center" onClick={onClose}>
+      <div className="lw-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Edit fields">
+        <div className="lw-panel-top"><strong>Custom fields for this list</strong><button className="lw-close" onClick={onClose} aria-label="Close">✕</button></div>
+        <p className="lw-faint">Fields show up in every task's panel. Deleting a field deletes its values.</p>
+        <div className="lw-status-rows">
+          {fields.length === 0 ? <p className="lw-faint">No fields yet.</p> : null}
+          {fields.map((field) => (
+            <div key={field.id} className="lw-field-edit">
+              <input defaultValue={field.name} maxLength={60} aria-label="Field name" disabled={busy}
+                onBlur={(event) => { const next = event.target.value.trim(); if (next && next !== field.name) call({ action: "update", fieldId: field.id, name: next }); }} />
+              <span className="lw-faint">{FIELD_TYPE_LABELS[field.type]}{field.options.length ? " · " + field.options.map((option) => option.name).join(", ") : ""}</span>
+              <button className="lw-ghost" disabled={busy} onClick={() => { if (window.confirm("Delete the field " + field.name + " and all its values?")) call({ action: "delete", fieldId: field.id }); }} aria-label="Delete field">✕</button>
+            </div>
+          ))}
+        </div>
+        <form className="lw-field-add" onSubmit={(event) => {
+          event.preventDefault();
+          if (!name.trim()) return;
+          call({ action: "create", name: name.trim(), type, options: needsOptions ? parseOptions(options) : undefined });
+        }}>
+          <strong>Add a field</strong>
+          <div className="lw-field-add-row">
+            <input value={name} maxLength={60} placeholder="Field name" onChange={(event) => setName(event.target.value)} aria-label="New field name" />
+            <select value={type} onChange={(event) => setType(event.target.value as CustomField["type"])} aria-label="New field type">
+              {(Object.keys(FIELD_TYPE_LABELS) as CustomField["type"][]).map((key) => <option key={key} value={key}>{FIELD_TYPE_LABELS[key]}</option>)}
+            </select>
+          </div>
+          {needsOptions ? <input value={options} placeholder="Options, separated by commas" onChange={(event) => setOptions(event.target.value)} aria-label="Options" /> : null}
+          {error ? <p className="lw-error">{error}</p> : null}
+          <div className="lw-modal-actions">
+            <button type="button" className="lw-ghost" onClick={onClose}>Close</button>
+            <button type="submit" className="lw-primary" disabled={busy || !name.trim()}>{busy ? "Saving…" : "Add field"}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function QuickAdd({ onAdd, onCancel, autoOpen = false, label = "+ Add Task" }: { onAdd: (title: string) => Promise<unknown> | void; onCancel?: () => void; autoOpen?: boolean; label?: string }) {
   const [value, setValue] = useState("");
   const [open, setOpen] = useState(autoOpen);
@@ -533,9 +672,10 @@ function QuickAdd({ onAdd, onCancel, autoOpen = false, label = "+ Add Task" }: {
   );
 }
 
-function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch, onAddChild }: {
+function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen, onPatch, onAddChild }: {
   itemId: string;
   statuses: ListStatus[];
+  fields: CustomField[];
   people: Person[];
   canEdit: boolean;
   onClose: () => void;
@@ -619,6 +759,9 @@ function ItemPanel({ itemId, statuses, people, canEdit, onClose, onOpen, onPatch
                 <input value={draft.tags} placeholder="Comma separated" disabled={!canEdit} onChange={(event) => setDraft({ ...draft, tags: event.target.value })}
                   onBlur={() => save({ tags: draft.tags.split(",").map((tag) => tag.trim()).filter(Boolean) })} />
               </span>
+              {fields.map((field) => (
+                <FieldRow key={field.id + item.updatedAt} field={field} value={item.fieldValues[field.id]} people={people} disabled={!canEdit} onSave={(value) => save({ fieldValues: { [field.id]: value } })} />
+              ))}
             </div>
 
             <textarea className="lw-desc" rows={12} placeholder="Add description" value={draft.description} disabled={!canEdit}
@@ -808,6 +951,11 @@ const lwCss = [
   ".lw-status-row{display:grid;grid-template-columns:38px minmax(0,1fr) 120px 30px 30px 30px;gap:6px;align-items:center}",
   ".lw-status-row input[type=color]{width:36px;height:30px;padding:0;border:1px solid var(--lw-border);border-radius:6px;background:none}",
   ".lw-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}",
+  ".lw-field-text{width:100%}",
+  ".lw-field-edit{display:grid;grid-template-columns:minmax(0,200px) minmax(0,1fr) 30px;gap:8px;align-items:center}",
+  ".lw-field-edit .lw-faint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".lw-field-add{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--lw-border);padding-top:12px;margin-top:6px}",
+  ".lw-field-add-row{display:grid;grid-template-columns:minmax(0,1fr) 140px;gap:8px}",
   "@media (max-width:900px){.lw{margin:-16px -16px 0}.lw-table-wrap,.lw-cal{padding-left:16px;padding-right:16px}.lw-head,.lw-toolbar{padding-left:16px;padding-right:16px}.lw-groups,.lw-board{padding-left:16px;padding-right:16px}}",
   "@media (max-width:700px){.lw-colhead,.lw-row{grid-template-columns:minmax(0,1fr) 76px}.lw-colhead span:nth-child(2),.lw-colhead span:nth-child(4),.lw-row>.lw-cell:nth-child(2),.lw-row>.lw-cell:nth-child(4),.lw-tag,.lw-mini{display:none}.lw-props{grid-template-columns:1fr}}"
 ].join("");
