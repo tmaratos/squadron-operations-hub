@@ -3,7 +3,9 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
+import { runAutomations, type AutomationEvent } from "@/lib/work/automations";
 import { addChecklist, addChecklistEntry, addComment, archiveItem, getItemDetail, setChecklistEntryDone, updateItem } from "@/lib/work/items";
+import { listStatuses } from "@/lib/work/structure";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
 
@@ -52,6 +54,21 @@ export async function PATCH(request: Request, { params }: Params) {
     if (checklist) await addChecklist({ itemId, name: checklist.name });
     if (checklistEntry) await addChecklistEntry(checklistEntry);
     if (entryDone) await setChecklistEntryDone(entryDone.entryId, entryDone.done);
+
+    const after = await getItemDetail(itemId);
+    if (after) {
+      const events: AutomationEvent[] = [];
+      if (after.statusId && after.statusId !== before.statusId) {
+        const statusName = (await listStatuses(after.listId)).find((status) => status.id === after.statusId)?.name;
+        if (statusName) events.push({ type: "status_changed", statusName });
+      }
+      if (after.priority !== before.priority) events.push({ type: "priority_changed", priority: after.priority });
+      const previousTags = new Set(before.tags.map((tag) => tag.label));
+      const addedTags = after.tags.map((tag) => tag.label).filter((label) => !previousTags.has(label));
+      if (addedTags.length) events.push({ type: "tag_added", tags: addedTags });
+      if (after.assignees.some((person) => !before.assignees.some((previous) => previous.id === person.id))) events.push({ type: "assignee_added" });
+      if (events.length) await runAutomations({ itemId, listId: after.listId, events, userId: user.id });
+    }
 
     const changed = Object.keys(changes);
     if (comment) changed.push("comment");
