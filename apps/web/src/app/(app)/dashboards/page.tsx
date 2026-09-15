@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { DashboardEditor } from "@/components/work/dashboard-editor";
 import { requireUser } from "@/lib/auth/session";
 import { getDashboard, listDashboards, loadDashboardItems, renderWidget, type DashboardItem, type WidgetResult } from "@/lib/work/dashboards";
 import type { DashboardWidget } from "@/lib/work/types";
@@ -150,6 +151,10 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
   });
   const listRows = Array.from(byList.values()).sort((a, b) => b.open - a.open);
   const listMax = Math.max(1, ...listRows.map((row) => row.open));
+  const allLists = Array.from(new Map(items.map((item) => [item.listId, item.listName] as const)).entries()).map(([listId, name]) => ({ id: listId, name })).sort((a, b) => a.name.localeCompare(b.name));
+  const allTags = Array.from(new Set(items.flatMap((item) => item.tags))).sort();
+  const allStatuses = Array.from(new Set(items.map((item) => item.statusName).filter((name): name is string => Boolean(name)))).sort();
+  const canEdit = user.globalRole !== "READ_ONLY";
 
   const hour = (new Date().getUTCHours() + 20) % 24;
   const greeting = hour >= 4 && hour < 12 ? "Good morning" : hour >= 12 && hour < 18 ? "Good afternoon" : "Good evening";
@@ -173,6 +178,7 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
           </div>
         </div>
         <div className="cd-hero-side">
+          {dashboard && canEdit ? <DashboardEditor dashboardId={dashboard.id} widgets={widgets} lists={allLists} tags={allTags} statusNames={allStatuses} /> : null}
           <span className="cd-date">{new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" })}</span>
           {dashboards.length > 1 ? (
             <nav className="cd-switch" aria-label="Dashboards">
