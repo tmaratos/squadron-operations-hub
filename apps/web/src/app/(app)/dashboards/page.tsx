@@ -49,7 +49,7 @@ function ItemRows({ items, total, empty }: { items: DashboardItem[]; total: numb
         const due = relativeDue(item.dueOn);
         return (
           <li key={item.id}>
-            <Link href={"/lists/" + item.listId} className="cd-row">
+            <Link href={"/lists/" + item.listId + "?item=" + encodeURIComponent(item.id)} className="cd-row" title="Open this task">
               <span className="cd-row-status" style={{ background: item.statusColor ?? "#898781" }} title={item.statusName ?? "no status"} />
               <span className="cd-row-main">
                 <span className="cd-row-title">{item.title}</span>
