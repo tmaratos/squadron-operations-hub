@@ -533,15 +533,6 @@ const FIELD_TYPE_LABELS: Record<CustomField["type"], string> = {
   progress: "Progress"
 };
 
-function FieldRow({ field, value, people, disabled, onSave }: { field: CustomField; value: unknown; people: Person[]; disabled: boolean; onSave: (value: unknown) => void }) {
-  return (
-    <>
-      <span className="lw-prop-label" title={FIELD_TYPE_LABELS[field.type]}>{field.name}</span>
-      <span><FieldInput field={field} value={value} people={people} disabled={disabled} onSave={onSave} /></span>
-    </>
-  );
-}
-
 function FieldInput({ field, value, people, disabled, onSave }: { field: CustomField; value: unknown; people: Person[]; disabled: boolean; onSave: (value: unknown) => void }) {
   const text = value === null || value === undefined ? "" : typeof value === "object" ? "" : String(value);
   const many = Array.isArray(value) ? value.map((entry) => String(entry)) : [];
@@ -686,12 +677,16 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
   onAddChild: (title: string) => Promise<void>;
 }) {
   const [item, setItem] = useState<ItemDetail | null>(null);
-  const [draft, setDraft] = useState({ title: "", description: "", tags: "" });
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [tagDraft, setTagDraft] = useState("");
   const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
 
   function adopt(next: ItemDetail) {
     setItem(next);
-    setDraft({ title: next.title, description: next.description ?? "", tags: next.tags.map((tag) => tag.label).join(", ") });
+    setTitle(next.title);
+    setDescription(next.description ?? "");
   }
 
   useEffect(() => {
@@ -704,142 +699,368 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
     };
   }, [itemId]);
 
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !(event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLInputElement)) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   async function save(body: Record<string, unknown>) {
+    setSaving(true);
     const next = await onPatch(itemId, body);
     if (next) adopt(next);
+    setSaving(false);
   }
 
-  const currentStatus = statuses.find((status) => status.id === item?.statusId);
+  const grow = (element: HTMLTextAreaElement | null) => {
+    if (!element) return;
+    element.style.height = "auto";
+    element.style.height = element.scrollHeight + "px";
+  };
+
+  if (!item) {
+    return (
+      <div className="lw-overlay" onClick={onClose}>
+        <aside className="tp" onClick={(event) => event.stopPropagation()} aria-label="Task details">
+          <style>{tpCss}</style>
+          <header className="tp-top"><span className="tp-crumbs">Loading task…</span><button className="tp-icon" onClick={onClose} aria-label="Close">✕</button></header>
+        </aside>
+      </div>
+    );
+  }
+
+  const status = statuses.find((entry) => entry.id === item.statusId);
+  const doneStatus = statuses.find((entry) => entry.category === "DONE") ?? statuses.find((entry) => entry.category === "CLOSED");
+  const closedCategory = (statusId: string | null) => {
+    const match = statuses.find((entry) => entry.id === statusId);
+    return Boolean(match && (match.category === "DONE" || match.category === "CLOSED"));
+  };
+  const isDone = closedCategory(item.statusId);
+  const tags = item.tags.map((tag) => tag.label);
+  const addTag = () => {
+    const tag = tagDraft.trim().replace(/,+$/, "").toLowerCase();
+    setTagDraft("");
+    if (tag && !tags.includes(tag)) save({ tags: [...tags, tag] });
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  const late = Boolean(item.dueOn && item.dueOn < today && !isDone);
+  const unassigned = people.filter((person) => !item.assignees.some((assignee) => assignee.id === person.id));
+  const childDone = item.children.filter((child) => closedCategory(child.statusId)).length;
+  const priorityLabel = item.priority ? item.priority[0] + item.priority.slice(1).toLowerCase() : "Empty";
+
+  async function postComment() {
+    const body = comment.trim();
+    if (!body) return;
+    setComment("");
+    await save({ comment: body });
+  }
 
   return (
     <div className="lw-overlay" onClick={onClose}>
-      <aside className="lw-panel" onClick={(event) => event.stopPropagation()} aria-label="Task details">
-        <div className="lw-panel-top">
-          <span className="lw-crumbs">
-            {item?.listName}
-            {item?.ancestors.map((ancestor) => (
-              <span key={ancestor.id}> / <button onClick={() => onOpen(ancestor.id)}>{ancestor.title}</button></span>
+      <aside className="tp" onClick={(event) => event.stopPropagation()} aria-label="Task details">
+        <style>{tpCss}</style>
+        <header className="tp-top">
+          <nav className="tp-crumbs" aria-label="Location">
+            <span className="tp-crumb">{item.listName}</span>
+            {item.ancestors.map((ancestor) => (
+              <span key={ancestor.id} className="tp-crumb-wrap"><span className="tp-sep">/</span><button className="tp-crumb tp-crumb--link" onClick={() => onOpen(ancestor.id)}>{ancestor.title}</button></span>
             ))}
-          </span>
-          <button className="lw-close" onClick={onClose} aria-label="Close">✕</button>
-        </div>
-        {!item ? <p className="lw-faint">Loading…</p> : (
-          <div className="lw-panel-body">
-            <input className="lw-panel-title" value={draft.title} disabled={!canEdit}
-              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-              onBlur={() => { if (draft.title.trim() && draft.title !== item.title) save({ title: draft.title }); }} />
+          </nav>
+          <span className="tp-saving" aria-live="polite">{saving ? "Saving…" : "All changes saved"}</span>
+          <button className="tp-icon" onClick={onClose} aria-label="Close">✕</button>
+        </header>
 
-            <div className="lw-props">
-              <span className="lw-prop-label">Status</span>
-              <span>
-                <select className="lw-status-select" style={{ background: currentStatus?.color ?? "#87909e" }} value={item.statusId ?? ""} disabled={!canEdit} onChange={(event) => save({ statusId: event.target.value || null })}>
-                  {statuses.map((status) => <option key={status.id} value={status.id}>{status.name.toUpperCase()}</option>)}
-                </select>
-              </span>
-              <span className="lw-prop-label">Assignees</span>
-              <span>
-                <select multiple className="lw-multi" value={item.assignees.map((person) => person.id)} disabled={!canEdit}
-                  onChange={(event) => save({ assigneeIds: Array.from(event.target.selectedOptions).map((option) => option.value) })}>
-                  {people.map((person) => <option key={person.id} value={person.id}>{person.fullName}</option>)}
-                </select>
-              </span>
-              <span className="lw-prop-label">Dates</span>
-              <span className="lw-dates">
-                <input type="date" aria-label="Start date" value={item.startOn ?? ""} disabled={!canEdit} onChange={(event) => save({ startOn: event.target.value || null })} />
-                <span className="lw-faint">→</span>
-                <input type="date" aria-label="Due date" value={item.dueOn ?? ""} disabled={!canEdit} onChange={(event) => save({ dueOn: event.target.value || null })} />
-              </span>
-              <span className="lw-prop-label">Priority</span>
-              <span>
-                <select value={item.priority ?? ""} disabled={!canEdit} onChange={(event) => save({ priority: event.target.value || null })}>
-                  <option value="">Empty</option>
-                  {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority[0] + priority.slice(1).toLowerCase()}</option>)}
-                </select>
-              </span>
-              <span className="lw-prop-label">Tags</span>
-              <span>
-                <input value={draft.tags} placeholder="Comma separated" disabled={!canEdit} onChange={(event) => setDraft({ ...draft, tags: event.target.value })}
-                  onBlur={() => save({ tags: draft.tags.split(",").map((tag) => tag.trim()).filter(Boolean) })} />
-              </span>
-              {fields.map((field) => (
-                <FieldRow key={field.id + item.updatedAt} field={field} value={item.fieldValues[field.id]} people={people} disabled={!canEdit} onSave={(value) => save({ fieldValues: { [field.id]: value } })} />
-              ))}
+        <div className="tp-body">
+          <div className="tp-main">
+            <textarea
+              ref={grow}
+              className="tp-title"
+              rows={1}
+              value={title}
+              disabled={!canEdit}
+              aria-label="Task name"
+              onChange={(event) => { setTitle(event.target.value.replace(/\n/g, " ")); grow(event.target); }}
+              onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }}
+              onBlur={() => { if (title.trim() && title !== item.title) save({ title: title.trim() }); }}
+            />
+
+            <div className="tp-props">
+              <div className="tp-prop">
+                <span className="tp-label"><i>◎</i>Status</span>
+                <span className="tp-value">
+                  <span className="tp-status" style={{ background: status?.color ?? "#87909e" }}>
+                    {(status?.name ?? "no status").toUpperCase()} <span aria-hidden="true">▾</span>
+                    <select className="tp-overlay-select" value={item.statusId ?? ""} disabled={!canEdit} onChange={(event) => save({ statusId: event.target.value || null })} aria-label="Status">
+                      {statuses.map((entry) => <option key={entry.id} value={entry.id}>{entry.name.toUpperCase()}</option>)}
+                    </select>
+                  </span>
+                  {canEdit && doneStatus && !isDone ? (
+                    <button className="tp-done" onClick={() => save({ statusId: doneStatus.id })} title={"Mark " + doneStatus.name} aria-label="Mark complete">✓</button>
+                  ) : null}
+                </span>
+              </div>
+
+              <div className="tp-prop">
+                <span className="tp-label"><i>◍</i>Assignees</span>
+                <span className="tp-value tp-wrap">
+                  {item.assignees.map((person) => (
+                    <span key={person.id} className="tp-person">
+                      <span className="lw-avatar">{initials(person.fullName)}</span>
+                      {person.fullName}
+                      {canEdit ? <button className="tp-x" onClick={() => save({ assigneeIds: item.assignees.filter((entry) => entry.id !== person.id).map((entry) => entry.id) })} aria-label={"Remove " + person.fullName}>×</button> : null}
+                    </span>
+                  ))}
+                  {canEdit && unassigned.length ? (
+                    <span className="tp-add">
+                      + Add
+                      <select className="tp-overlay-select" value="" onChange={(event) => { if (event.target.value) save({ assigneeIds: [...item.assignees.map((entry) => entry.id), event.target.value] }); }} aria-label="Add assignee">
+                        <option value="">Add assignee</option>
+                        {unassigned.map((person) => <option key={person.id} value={person.id}>{person.fullName}</option>)}
+                      </select>
+                    </span>
+                  ) : null}
+                  {!item.assignees.length && !(canEdit && unassigned.length) ? <span className="tp-empty">Empty</span> : null}
+                </span>
+              </div>
+
+              <div className="tp-prop">
+                <span className="tp-label"><i>▦</i>Dates</span>
+                <span className="tp-value tp-wrap">
+                  <label className="tp-date"><span>Start</span><input type="date" value={item.startOn ?? ""} disabled={!canEdit} onChange={(event) => save({ startOn: event.target.value || null })} /></label>
+                  <span className="tp-sep">→</span>
+                  <label className={"tp-date" + (late ? " tp-date--late" : "")}><span>{late ? "Overdue" : "Due"}</span><input type="date" value={item.dueOn ?? ""} disabled={!canEdit} onChange={(event) => save({ dueOn: event.target.value || null })} /></label>
+                </span>
+              </div>
+
+              <div className="tp-prop">
+                <span className="tp-label"><i>⚑</i>Priority</span>
+                <span className="tp-value">
+                  <span className="tp-chip-select" style={{ color: item.priority ? PRIORITY_COLOR[item.priority] : undefined }}>
+                    ⚑ {priorityLabel}
+                    <select className="tp-overlay-select" value={item.priority ?? ""} disabled={!canEdit} onChange={(event) => save({ priority: event.target.value || null })} aria-label="Priority">
+                      <option value="">Empty</option>
+                      {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority[0] + priority.slice(1).toLowerCase()}</option>)}
+                    </select>
+                  </span>
+                </span>
+              </div>
+
+              <div className="tp-prop">
+                <span className="tp-label"><i>#</i>Tags</span>
+                <span className="tp-value tp-wrap">
+                  {item.tags.map((tag) => (
+                    <span key={tag.id} className={"tp-tag work-tag work-tag--" + tag.color}>
+                      {tag.label}
+                      {canEdit ? <button className="tp-x" onClick={() => save({ tags: tags.filter((entry) => entry !== tag.label) })} aria-label={"Remove tag " + tag.label}>×</button> : null}
+                    </span>
+                  ))}
+                  {canEdit ? (
+                    <input
+                      className="tp-tag-input"
+                      value={tagDraft}
+                      placeholder={item.tags.length ? "+ tag" : "Add a tag"}
+                      aria-label="Add tag"
+                      onChange={(event) => setTagDraft(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === "Enter" || event.key === ",") { event.preventDefault(); addTag(); } }}
+                      onBlur={addTag}
+                    />
+                  ) : !item.tags.length ? <span className="tp-empty">Empty</span> : null}
+                </span>
+              </div>
             </div>
 
-            <textarea className="lw-desc" rows={12} placeholder="Add description" value={draft.description} disabled={!canEdit}
-              onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-              onBlur={() => { if (draft.description !== (item.description ?? "")) save({ description: draft.description }); }} />
-
-            <section className="lw-section">
-              <h3>Subtasks <span className="lw-n">{item.children.length}</span></h3>
-              {item.children.map((child) => {
-                const status = statuses.find((entry) => entry.id === child.statusId);
-                return (
-                  <button key={child.id} className="lw-subitem" onClick={() => onOpen(child.id)}>
-                    <StatusIcon status={status} /> <span>{child.title}</span>
-                  </button>
-                );
-              })}
-              {canEdit ? <QuickAdd label="+ Add subtask" onAdd={async (title) => {
-                await onAddChild(title);
-                const data = await send("/api/work/items/" + itemId, "GET");
-                adopt(data.item);
-              }} /> : null}
-            </section>
-
-            <section className="lw-section">
-              <h3>Checklists</h3>
-              {item.checklists.map((checklist) => (
-                <div key={checklist.id} className="lw-checklist">
-                  <strong>{checklist.name} <span className="lw-n">{checklist.entries.filter((entry) => entry.done).length}/{checklist.entries.length}</span></strong>
-                  {checklist.entries.map((entry) => (
-                    <label key={entry.id} className="lw-entry">
-                      <input type="checkbox" checked={entry.done} disabled={!canEdit} onChange={(event) => save({ entryDone: { entryId: entry.id, done: event.target.checked } })} />
-                      <span className={entry.done ? "lw-done" : ""}>{entry.label}</span>
-                    </label>
+            {fields.length ? (
+              <section className="tp-section">
+                <h3 className="tp-h">Custom fields</h3>
+                <div className="tp-props">
+                  {fields.map((field) => (
+                    <div key={field.id + item.updatedAt} className="tp-prop">
+                      <span className="tp-label" title={FIELD_TYPE_LABELS[field.type]}><i>⊞</i>{field.name}</span>
+                      <span className="tp-value tp-field">
+                        <FieldInput field={field} value={item.fieldValues[field.id]} people={people} disabled={!canEdit} onSave={(value) => save({ fieldValues: { [field.id]: value } })} />
+                      </span>
+                    </div>
                   ))}
-                  {canEdit ? <QuickAdd label="+ Add item" onAdd={(label) => save({ checklistEntry: { checklistId: checklist.id, label } })} /> : null}
                 </div>
-              ))}
-              {canEdit ? <QuickAdd label="+ Add checklist" onAdd={(name) => save({ checklist: { name } })} /> : null}
-            </section>
-
-            {item.attachments.length ? (
-              <section className="lw-section">
-                <h3>Attachments</h3>
-                {item.attachments.map((file) => (
-                  <div key={file.id}>{file.url ? <a href={file.url} target="_blank" rel="noreferrer">{file.name}</a> : file.name}</div>
-                ))}
               </section>
             ) : null}
 
-            <section className="lw-section">
-              <h3>Activity <span className="lw-n">{item.comments.length}</span></h3>
+            <section className="tp-section">
+              <h3 className="tp-h">Description</h3>
+              <textarea
+                ref={grow}
+                className="tp-desc"
+                placeholder={canEdit ? "Add a description…" : "No description."}
+                value={description}
+                disabled={!canEdit}
+                aria-label="Description"
+                onChange={(event) => { setDescription(event.target.value); grow(event.target); }}
+                onBlur={() => { if (description !== (item.description ?? "")) save({ description }); }}
+              />
+            </section>
+
+            <section className="tp-section">
+              <h3 className="tp-h">
+                Subtasks <span className="tp-count">{childDone}/{item.children.length}</span>
+                {item.children.length ? <span className="tp-progress"><span style={{ width: (childDone / item.children.length) * 100 + "%" }} /></span> : null}
+              </h3>
+              <div className="tp-list">
+                {item.children.map((child) => (
+                  <button key={child.id} className="tp-sub" onClick={() => onOpen(child.id)}>
+                    <StatusIcon status={statuses.find((entry) => entry.id === child.statusId)} />
+                    <span className="tp-sub-title">{child.title}</span>
+                    <span className="tp-sub-due">{formatDue(child.dueOn).text}</span>
+                  </button>
+                ))}
+                {canEdit ? <QuickAdd label="+ Add subtask" onAdd={async (value) => {
+                  await onAddChild(value);
+                  const data = await send("/api/work/items/" + itemId, "GET");
+                  adopt(data.item);
+                }} /> : null}
+                {!canEdit && !item.children.length ? <p className="tp-empty tp-pad">No subtasks.</p> : null}
+              </div>
+            </section>
+
+            <section className="tp-section">
+              <h3 className="tp-h">Checklists</h3>
+              {item.checklists.map((checklist) => {
+                const done = checklist.entries.filter((entry) => entry.done).length;
+                return (
+                  <div key={checklist.id} className="tp-list">
+                    <div className="tp-checklist-head">
+                      <span className="tp-sub-title">{checklist.name}</span>
+                      <span className="tp-progress"><span style={{ width: (checklist.entries.length ? (done / checklist.entries.length) * 100 : 0) + "%" }} /></span>
+                      <span className="tp-count">{done}/{checklist.entries.length}</span>
+                    </div>
+                    {checklist.entries.map((entry) => (
+                      <label key={entry.id} className="tp-check">
+                        <input type="checkbox" checked={entry.done} disabled={!canEdit} onChange={(event) => save({ entryDone: { entryId: entry.id, done: event.target.checked } })} />
+                        <span className={entry.done ? "lw-done" : ""}>{entry.label}</span>
+                      </label>
+                    ))}
+                    {canEdit ? <QuickAdd label="+ Add item" onAdd={(label) => save({ checklistEntry: { checklistId: checklist.id, label } })} /> : null}
+                  </div>
+                );
+              })}
+              {canEdit ? <div className="tp-list tp-list--ghost"><QuickAdd label="+ New checklist" onAdd={(name) => save({ checklist: { name } })} /></div> : null}
+            </section>
+
+            {item.attachments.length ? (
+              <section className="tp-section">
+                <h3 className="tp-h">Attachments</h3>
+                <div className="tp-list">
+                  {item.attachments.map((file) => (
+                    <div key={file.id} className="tp-sub">{file.url ? <a href={file.url} target="_blank" rel="noreferrer">{file.name}</a> : file.name}</div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+          </div>
+
+          <aside className="tp-side" aria-label="Activity">
+            <h3 className="tp-h tp-side-head">Activity <span className="tp-count">{item.comments.length}</span></h3>
+            <div className="tp-feed">
+              <div className="tp-event">Task created {new Date(item.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</div>
               {item.comments.map((entry) => (
-                <div key={entry.id} className="lw-comment">
-                  <div className="lw-comment-head"><span className="lw-avatar">{initials(entry.authorName)}</span><strong>{entry.authorName}</strong> <span className="lw-faint">{new Date(entry.createdAt).toLocaleString()}</span></div>
-                  <div className="lw-comment-body">{entry.body}</div>
+                <div key={entry.id} className="tp-comment">
+                  <span className="lw-avatar">{initials(entry.authorName)}</span>
+                  <div className="tp-comment-card">
+                    <div className="tp-comment-head"><strong>{entry.authorName}</strong><span>{new Date(entry.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span></div>
+                    <div className="tp-comment-body">{entry.body}</div>
+                  </div>
                 </div>
               ))}
-              {canEdit ? (
-                <form className="lw-addform" onSubmit={async (event) => {
-                  event.preventDefault();
-                  if (!comment.trim()) return;
-                  await save({ comment });
-                  setComment("");
-                }}>
-                  <input value={comment} placeholder="Write a comment..." onChange={(event) => setComment(event.target.value)} />
-                  <button type="submit" className="lw-primary">Comment</button>
-                </form>
-              ) : null}
-            </section>
-          </div>
-        )}
+              <div className="tp-event">Last updated {new Date(item.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</div>
+            </div>
+            {canEdit ? (
+              <form className="tp-compose" onSubmit={(event) => { event.preventDefault(); postComment(); }}>
+                <textarea rows={3} value={comment} placeholder="Write a comment…" aria-label="Comment" onChange={(event) => setComment(event.target.value)}
+                  onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); postComment(); } }} />
+                <div className="tp-compose-row"><span>Ctrl + Enter to send</span><button type="submit" className="lw-primary" disabled={!comment.trim()}>Comment</button></div>
+              </form>
+            ) : null}
+          </aside>
+        </div>
       </aside>
     </div>
   );
 }
 
+const tpCss = [
+  ".tp{--tp-bg:var(--cu-bg,#fff);--tp-side:var(--cu-side,#f7f8f9);--tp-border:var(--cu-border,#e4e6eb);--tp-muted:var(--cu-muted,#656f7d);--tp-hover:var(--cu-hover,rgba(15,23,42,.05));width:min(1120px,100%);height:100%;display:flex;flex-direction:column;background:var(--tp-bg);color:var(--cu-text,#292d34);box-shadow:-12px 0 32px rgba(0,0,0,.35);color-scheme:light}",
+  "html[data-theme=dark] .tp{color-scheme:dark;--tp-bg:#1b1c1f;--tp-side:#17181b;--tp-border:#2c2e33;--tp-muted:#9ba1a9;--tp-hover:rgba(255,255,255,.06);color:#e3e4e6}",
+  ".tp-top{display:flex;align-items:center;gap:12px;height:48px;padding:0 12px 0 28px;border-bottom:1px solid var(--tp-border);flex:none}",
+  ".tp-crumbs{flex:1;min-width:0;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--tp-muted);overflow:hidden;white-space:nowrap}",
+  ".tp-crumb-wrap{display:inline-flex;align-items:center;min-width:0}",
+  ".tp-crumb{overflow:hidden;text-overflow:ellipsis;max-width:260px}.tp-crumb--link{border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:0}.tp-crumb--link:hover{color:#7b68ee}",
+  ".tp-sep{color:var(--tp-muted);opacity:.6;margin:0 4px}",
+  ".tp-saving{font-size:11px;color:var(--tp-muted);white-space:nowrap}",
+  ".tp-icon{display:grid;place-items:center;width:32px;height:32px;border:0;border-radius:6px;background:none;color:var(--tp-muted);cursor:pointer;font-size:15px}.tp-icon:hover{background:var(--tp-hover);color:inherit}",
+  ".tp-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px}",
+  ".tp-main{overflow-y:auto;padding:24px 36px 64px;display:flex;flex-direction:column;gap:26px}",
+  ".tp-side{border-left:1px solid var(--tp-border);background:var(--tp-side);display:flex;flex-direction:column;min-height:0}",
+  ".tp-title{display:block;width:calc(100% + 12px);border:0;outline:0;resize:none;overflow:hidden;background:transparent;color:inherit;font:inherit;font-size:26px;font-weight:700;line-height:1.3;padding:4px 6px;margin:0 -6px;border-radius:6px;box-shadow:none}",
+  ".tp-title:hover:not(:disabled),.tp-title:focus{background:var(--tp-hover)}",
+  ".tp-props{display:flex;flex-direction:column}",
+  ".tp-prop{display:grid;grid-template-columns:160px minmax(0,1fr);align-items:center;min-height:38px;gap:12px;border-radius:6px}",
+  ".tp-label{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--tp-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".tp-label i{font-style:normal;width:16px;text-align:center;opacity:.75;flex:none}",
+  ".tp-value{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px}.tp-wrap{flex-wrap:wrap;padding:4px 0}",
+  ".tp-status{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;color:#fff;font-size:11px;font-weight:700;letter-spacing:.03em;cursor:pointer}",
+  ".tp-overlay-select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:13px}",
+  ".tp-done{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--tp-border);border-radius:6px;background:none;color:var(--tp-muted);cursor:pointer;font-size:13px}.tp-done:hover{border-color:#0ca30c;color:#0ca30c}",
+  ".tp-person{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px 0 3px;border-radius:14px;background:var(--tp-hover);font-size:12px}",
+  ".tp-person .lw-avatar{border:0}",
+  ".tp-x{border:0;background:none;color:var(--tp-muted);cursor:pointer;font-size:15px;line-height:1;padding:0 4px;border-radius:4px}.tp-x:hover{color:#e5484d}",
+  ".tp-add{position:relative;display:inline-flex;align-items:center;height:28px;padding:0 12px;border:1px dashed var(--tp-border);border-radius:14px;color:var(--tp-muted);font-size:12px;cursor:pointer}.tp-add:hover{color:#7b68ee;border-color:#7b68ee}",
+  ".tp-empty{color:var(--tp-muted);font-size:13px}.tp-pad{margin:0;padding:10px 12px}",
+  ".tp-date{display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 4px 0 10px;border-radius:6px;background:var(--tp-hover);font-size:11px;color:var(--tp-muted);text-transform:uppercase;letter-spacing:.03em}",
+  ".tp-date input{border:0;outline:0;background:transparent;color:var(--cu-text,#292d34);font:inherit;font-size:13px;letter-spacing:0;text-transform:none;padding:0 4px;box-shadow:none;height:26px}",
+  "html[data-theme=dark] .tp-date input{color:#e3e4e6}",
+  ".tp-date--late{color:#e5484d;background:rgba(229,72,77,.12)}.tp-date--late input{color:#e5484d !important}",
+  ".tp-chip-select{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:6px;background:var(--tp-hover);font-size:12px;font-weight:600;cursor:pointer}",
+  ".tp-tag{display:inline-flex;align-items:center;gap:2px;height:24px;padding:0 2px 0 8px;border-radius:4px;font-size:12px}",
+  ".tp-tag-input{border:0;outline:0;background:transparent;color:inherit;font:inherit;font-size:12px;width:110px;height:26px;padding:0 6px;border-radius:4px;box-shadow:none}.tp-tag-input:hover,.tp-tag-input:focus{background:var(--tp-hover)}",
+  ".tp-section{display:flex;flex-direction:column;gap:10px}",
+  ".tp-h{margin:0;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--tp-muted);display:flex;align-items:center;gap:10px}",
+  ".tp-count{font-weight:500;letter-spacing:0;text-transform:none;font-size:12px;color:var(--tp-muted)}",
+  ".tp-field{padding:2px 0}",
+  ".tp-field input,.tp-field select,.tp-field textarea{border:1px solid transparent;outline:0;background:transparent;color:inherit;font:inherit;font-size:13px;border-radius:6px;padding:4px 8px;min-height:30px;box-shadow:none;max-width:100%}",
+  ".tp-field input:not([type=checkbox]),.tp-field textarea{width:100%}",
+  ".tp-field select{min-width:180px}",
+  ".tp-field input:hover,.tp-field select:hover,.tp-field textarea:hover{background:var(--tp-hover)}",
+  ".tp-field input:focus,.tp-field select:focus,.tp-field textarea:focus{border-color:#7b68ee;background:var(--tp-bg)}",
+  ".tp-field input::placeholder{color:var(--tp-muted)}",
+  ".tp-field .lw-multi{min-height:30px}",
+  ".tp-desc{display:block;width:calc(100% + 20px);min-height:90px;border:1px solid transparent;border-radius:8px;outline:0;resize:none;overflow:hidden;background:transparent;color:inherit;font:inherit;font-size:14px;line-height:1.7;padding:8px 10px;margin:0 -10px;box-shadow:none}",
+  ".tp-desc:hover:not(:disabled){background:var(--tp-hover)}.tp-desc:focus{border-color:#7b68ee;background:var(--tp-bg)}",
+  ".tp-progress{flex:0 1 120px;height:4px;border-radius:2px;background:var(--tp-hover);overflow:hidden}.tp-progress span{display:block;height:100%;border-radius:2px;background:#0ca30c}",
+  ".tp-list{border:1px solid var(--tp-border);border-radius:8px;overflow:hidden}",
+  ".tp-list--ghost{border-style:dashed}",
+  ".tp-sub{display:flex;align-items:center;gap:10px;width:100%;border:0;border-bottom:1px solid var(--tp-border);background:none;color:inherit;font:inherit;font-size:13px;padding:10px 12px;cursor:pointer;text-align:left}",
+  ".tp-sub:hover{background:var(--tp-hover)}.tp-sub-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tp-sub-due{font-size:12px;color:var(--tp-muted)}",
+  ".tp-list .lw-add{padding:9px 12px}.tp-list .lw-addform{padding:6px 12px;border-bottom:0}",
+  ".tp-check{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid var(--tp-border);font-size:13px;line-height:1.45;cursor:pointer}",
+  ".tp-check:hover{background:var(--tp-hover)}",
+  ".tp-check input{appearance:none;flex:none;width:16px;height:16px;margin:2px 0 0;border:1.5px solid var(--tp-muted);border-radius:4px;display:grid;place-items:center;cursor:pointer;background:transparent}",
+  ".tp-check input:checked{background:#0ca30c;border-color:#0ca30c}",
+  ".tp-check input:checked:after{content:'';width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:translateY(-1px) rotate(45deg)}",
+  ".tp-checklist-head{display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--tp-border);font-size:13px;font-weight:600}",
+  ".tp-side-head{padding:18px 20px 10px}",
+  ".tp-feed{flex:1;overflow-y:auto;padding:4px 20px 16px;display:flex;flex-direction:column;gap:14px}",
+  ".tp-event{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tp-muted)}.tp-event:before{content:'';width:6px;height:6px;border-radius:50%;background:var(--tp-muted);opacity:.5;flex:none}",
+  ".tp-comment{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;align-items:start}",
+  ".tp-comment-card{background:var(--tp-bg);border:1px solid var(--tp-border);border-radius:8px;padding:8px 10px}",
+  ".tp-comment-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:12px}.tp-comment-head span{color:var(--tp-muted);font-size:11px;white-space:nowrap}",
+  ".tp-comment-body{white-space:pre-wrap;font-size:13px;line-height:1.5;margin-top:4px;overflow-wrap:anywhere}",
+  ".tp-compose{border-top:1px solid var(--tp-border);padding:12px 16px 16px;display:flex;flex-direction:column;gap:8px}",
+  ".tp-compose textarea{width:100%;resize:none;border:1px solid var(--tp-border);border-radius:8px;background:var(--tp-bg);color:inherit;font:inherit;font-size:13px;line-height:1.5;padding:8px 10px;outline:0;box-shadow:none}.tp-compose textarea:focus{border-color:#7b68ee}",
+  ".tp-compose-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--tp-muted)}",
+  "@media (max-width:980px){.tp-body{grid-template-columns:minmax(0,1fr);overflow-y:auto}.tp-main{overflow:visible}.tp-side{border-left:0;border-top:1px solid var(--tp-border);min-height:auto}.tp-feed{overflow:visible}}",
+  "@media (max-width:600px){.tp-top{padding-left:16px}.tp-main{padding:18px 16px 40px}.tp-prop{grid-template-columns:112px minmax(0,1fr)}.tp-title{font-size:21px}.tp-saving{display:none}}"
+].join("");
 const lwCss = [
   ".lw{--lw-border:var(--cu-border,#e4e6eb);--lw-muted:var(--cu-muted,#656f7d);--lw-hover:var(--cu-hover,rgba(15,23,42,.05));--lw-bg:var(--cu-bg,#fff);display:flex;flex-direction:column;gap:0;margin:-20px -24px 0}",
   ".lw-head{display:flex;align-items:center;gap:8px;padding:12px 24px 6px}",
