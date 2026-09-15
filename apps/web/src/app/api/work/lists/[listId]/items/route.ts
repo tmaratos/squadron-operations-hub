@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
+import { runAutomations } from "@/lib/work/automations";
 import { createItem, getItemDetail, listItems } from "@/lib/work/items";
 
 const createItemSchema = z.object({
@@ -30,6 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ lis
     const { listId } = await params;
     const input = createItemSchema.parse(await request.json());
     const id = await createItem({ ...input, listId, userId: user.id });
+    await runAutomations({ itemId: id, listId, events: [{ type: "item_created" }], userId: user.id });
     await recordAuditEvent({
       actorUserId: user.id,
       action: "ITEM_CREATED",
