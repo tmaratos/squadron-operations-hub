@@ -47,7 +47,7 @@ const railItems: Array<{ key: RailKey; label: string; href: string; icon: typeof
   { key: "spaces", label: "Spaces", href: "/spaces", icon: Grid3x3 },
   { key: "planner", label: "Planner", href: "/calendar", icon: CalendarDays },
   { key: "docs", label: "Docs", href: "/documents", icon: FileText },
-  { key: "dashboards", label: "Dashboard", href: "/readiness", icon: LayoutDashboard },
+  { key: "dashboards", label: "Dashboard", href: "/dashboards", icon: LayoutDashboard },
   { key: "more", label: "More", href: "/processes", icon: NotebookTabs }
 ];
 
@@ -55,7 +55,7 @@ function railFor(pathname: string): RailKey {
   if (pathname.startsWith("/spaces") || pathname.startsWith("/lists")) return "spaces";
   if (pathname.startsWith("/calendar") || pathname.startsWith("/meetings")) return "planner";
   if (pathname.startsWith("/documents")) return "docs";
-  if (pathname.startsWith("/readiness") || pathname.startsWith("/reports")) return "dashboards";
+  if (pathname.startsWith("/dashboards") || pathname.startsWith("/readiness") || pathname.startsWith("/reports")) return "dashboards";
   return "home";
 }
 
@@ -257,6 +257,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
           {rail === "docs" ? hubSections.filter((_, index) => navigationGroups[index].label === "Knowledge") : null}
           {rail === "dashboards" ? (
             <section className="cu-section">
+              {navLink("/dashboards", "Command Dashboard", <LayoutDashboard size={15} />)}
               {navLink("/", "Squadron Overview", <LayoutDashboard size={15} />)}
               {navLink("/readiness", "Readiness", <LayoutDashboard size={15} />)}
               {navLink("/reports", "Reports", <LayoutDashboard size={15} />)}
