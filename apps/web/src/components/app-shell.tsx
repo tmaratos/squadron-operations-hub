@@ -22,13 +22,13 @@ import {
   NotebookTabs,
   Plug,
   Plus,
-  Search,
   Settings,
   Star,
   Sun,
   X
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { CommandPalette } from "@/components/command-palette";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import type { SpaceNode } from "@/lib/work/types";
@@ -190,11 +190,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
             </div>
           ) : null}
         </div>
-        <label className="cu-search">
-          <Search size={14} />
-          <input aria-label="Search" placeholder="Search" />
-          <kbd>Ctrl K</kbd>
-        </label>
+        <CommandPalette lists={spaceTree.flatMap((space) => [...space.lists, ...space.folders.flatMap((folder) => folder.lists)]).map((list) => ({ id: list.id, name: list.name, openItems: list.openItems }))} />
         <div className="cu-top-actions">
           <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
