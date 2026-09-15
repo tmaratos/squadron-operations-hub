@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import type { CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
+import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
 
 type Person = { id: string; fullName: string };
 type Mode = "list" | "board" | "table" | "calendar";
@@ -61,6 +61,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingStatuses, setEditingStatuses] = useState(false);
   const [editingFields, setEditingFields] = useState(false);
+  const [editingAutomations, setEditingAutomations] = useState(false);
   const [error, setError] = useState("");
 
   const statusById = useMemo(() => new Map(list.statuses.map((status) => [status.id, status] as const)), [list.statuses]);
@@ -194,6 +195,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.5" /></svg>
             </button>
           )}
+          {canEdit ? <button className="lw-ghost" onClick={() => setEditingAutomations(true)}>⚡ Automations</button> : null}
           {canEdit ? <button className="lw-ghost" onClick={() => setEditingFields(true)}>⊞ Fields{list.fields.length ? " " + list.fields.length : ""}</button> : null}
           {canEdit ? <button className="lw-ghost" onClick={() => setEditingStatuses(true)}>⚙ Statuses</button> : null}
           {canEdit ? <button className="lw-primary" onClick={() => { setMode("list"); setAddingIn(visibleStatuses[0]?.id ?? null); }}>+ Task</button> : null}
@@ -314,6 +316,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
         />
       ) : null}
 
+      {editingAutomations ? <AutomationEditor listId={list.id} statuses={list.statuses} people={people} onClose={() => setEditingAutomations(false)} /> : null}
       {editingFields ? <FieldEditor listId={list.id} fields={list.fields} onClose={() => setEditingFields(false)} /> : null}
       {editingStatuses ? <StatusEditor listId={list.id} statuses={list.statuses} onClose={() => setEditingStatuses(false)} /> : null}
     </div>
@@ -546,7 +549,7 @@ function FieldInput({ field, value, people, disabled, onSave }: { field: CustomF
     case "dropdown":
       return (
         <select value={text ? optionId(text) : ""} disabled={disabled} onChange={(event) => onSave(event.target.value || null)}>
-          <option value="">—</option>
+          <option value="">Empty</option>
           {field.options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
         </select>
       );
@@ -563,18 +566,18 @@ function FieldInput({ field, value, people, disabled, onSave }: { field: CustomF
         </select>
       );
     case "long_text":
-      return <textarea rows={3} className="lw-field-text" defaultValue={text} disabled={disabled} onBlur={(event) => { if (event.target.value !== text) onSave(event.target.value || null); }} />;
+      return <textarea rows={3} className="lw-field-text" placeholder="Empty" defaultValue={text} disabled={disabled} onBlur={(event) => { if (event.target.value !== text) onSave(event.target.value || null); }} />;
     case "number":
     case "currency":
     case "rating":
     case "progress":
       return (
         <input type="number" step={field.type === "currency" ? "0.01" : "1"} min={field.type === "rating" || field.type === "progress" ? 0 : undefined} max={field.type === "rating" ? 5 : field.type === "progress" ? 100 : undefined}
-          defaultValue={text} disabled={disabled} onBlur={(event) => { if (event.target.value !== text) onSave(event.target.value === "" ? null : Number(event.target.value)); }} />
+          placeholder="Empty" defaultValue={text} disabled={disabled} onBlur={(event) => { if (event.target.value !== text) onSave(event.target.value === "" ? null : Number(event.target.value)); }} />
       );
     default:
       return (
-        <input type={field.type === "url" ? "url" : field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"} className="lw-field-text"
+        <input placeholder="Empty" type={field.type === "url" ? "url" : field.type === "email" ? "email" : field.type === "phone" ? "tel" : "text"} className="lw-field-text"
           defaultValue={text} disabled={disabled} onBlur={(event) => { if (event.target.value !== text) onSave(event.target.value || null); }} />
       );
   }
@@ -639,6 +642,298 @@ function FieldEditor({ listId, fields, onClose }: { listId: string; fields: Cust
             <button type="submit" className="lw-primary" disabled={busy || !name.trim()}>{busy ? "Saving…" : "Add field"}</button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+type RunRow = { automationId: string; outcome: string; detail: string | null; createdAt: string };
+
+function describeTrigger(trigger: AutomationTrigger): string {
+  switch (trigger.type) {
+    case "item_created":
+      return "a task is created";
+    case "status_changed":
+      return trigger.toStatusName ? "status changes to " + trigger.toStatusName : "status changes";
+    case "priority_changed":
+      return trigger.toPriority ? "priority changes to " + trigger.toPriority.toLowerCase() : "priority changes";
+    case "tag_added":
+      return trigger.tag ? "tag '" + trigger.tag + "' is added" : "a tag is added";
+    case "assignee_added":
+      return "someone is assigned";
+    default:
+      return "something happens";
+  }
+}
+
+function describeCondition(condition: AutomationCondition): string {
+  switch (condition.type) {
+    case "has_tag":
+      return "it has tag '" + condition.tag + "'";
+    case "priority_is":
+      return "priority is " + condition.priority.toLowerCase();
+    case "status_is":
+      return "status is " + condition.statusName;
+    case "no_assignee":
+      return "nobody is assigned";
+    default:
+      return "a condition matches";
+  }
+}
+
+function describeAction(action: AutomationAction, people: Person[]): string {
+  switch (action.type) {
+    case "set_status":
+      return "set status to " + action.statusName;
+    case "set_priority":
+      return "set priority to " + action.priority.toLowerCase();
+    case "add_tag":
+      return "add tag '" + action.tag + "'";
+    case "remove_tag":
+      return "remove tag '" + action.tag + "'";
+    case "assign":
+      return "assign " + (people.find((person) => person.id === action.userId)?.fullName ?? "a member");
+    case "add_comment":
+      return "post the comment '" + (action.body.length > 60 ? action.body.slice(0, 60) + "…" : action.body) + "'";
+    case "set_due_in_days":
+      return action.days === 0 ? "set the due date to today" : "set the due date " + action.days + " days out";
+    default:
+      return "do something";
+  }
+}
+
+const TRIGGER_LABELS: Record<AutomationTrigger["type"], string> = {
+  status_changed: "Status changes",
+  item_created: "Task is created",
+  priority_changed: "Priority changes",
+  tag_added: "Tag is added",
+  assignee_added: "Someone is assigned"
+};
+const CONDITION_LABELS: Record<AutomationCondition["type"], string> = {
+  has_tag: "Task has tag",
+  priority_is: "Priority is",
+  status_is: "Status is",
+  no_assignee: "Nobody is assigned"
+};
+const ACTION_LABELS: Record<AutomationAction["type"], string> = {
+  add_comment: "Post a comment",
+  set_status: "Change status",
+  set_priority: "Change priority",
+  add_tag: "Add a tag",
+  remove_tag: "Remove a tag",
+  assign: "Assign someone",
+  set_due_in_days: "Set due date"
+};
+
+function AutomationEditor({ listId, statuses, people, onClose }: { listId: string; statuses: ListStatus[]; people: Person[]; onClose: () => void }) {
+  const url = "/api/work/lists/" + listId + "/automations";
+  const [automations, setAutomations] = useState<Automation[] | null>(null);
+  const [runs, setRuns] = useState<RunRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [name, setName] = useState("");
+  const [trigger, setTrigger] = useState<{ type: AutomationTrigger["type"]; value: string }>({ type: "status_changed", value: "" });
+  const [condition, setCondition] = useState<{ type: "" | AutomationCondition["type"]; value: string }>({ type: "", value: "" });
+  const [action, setAction] = useState<{ type: AutomationAction["type"]; value: string }>({ type: "add_comment", value: "" });
+
+  type Payload = { automations?: Automation[]; runs?: RunRow[]; message?: string };
+  const apply = (data: Payload) => {
+    if (data.automations) setAutomations(data.automations);
+    if (data.runs) setRuns(data.runs);
+  };
+
+  useEffect(() => {
+    fetch(url).then((response) => response.json() as Promise<Payload>).then(apply).catch(() => setError("Could not load automations."));
+  }, [url]);
+
+  async function call(body: Record<string, unknown>) {
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = (await response.json().catch(() => ({}))) as Payload;
+      if (!response.ok) throw new Error(data.message || "Could not save.");
+      apply(data);
+      return true;
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save.");
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function buildTrigger(): AutomationTrigger {
+    const value = trigger.value.trim();
+    switch (trigger.type) {
+      case "status_changed":
+        return value ? { type: "status_changed", toStatusName: value } : { type: "status_changed" };
+      case "priority_changed":
+        return value ? { type: "priority_changed", toPriority: value as ItemPriority } : { type: "priority_changed" };
+      case "tag_added":
+        return value ? { type: "tag_added", tag: value.toLowerCase() } : { type: "tag_added" };
+      case "assignee_added":
+        return { type: "assignee_added" };
+      default:
+        return { type: "item_created" };
+    }
+  }
+
+  function buildConditions(): AutomationCondition[] | null {
+    const value = condition.value.trim();
+    switch (condition.type) {
+      case "has_tag":
+        return value ? [{ type: "has_tag", tag: value.toLowerCase() }] : null;
+      case "priority_is":
+        return value ? [{ type: "priority_is", priority: value as ItemPriority }] : null;
+      case "status_is":
+        return value ? [{ type: "status_is", statusName: value }] : null;
+      case "no_assignee":
+        return [{ type: "no_assignee" }];
+      default:
+        return [];
+    }
+  }
+
+  function buildAction(): AutomationAction | null {
+    const value = action.value.trim();
+    switch (action.type) {
+      case "set_status":
+        return value ? { type: "set_status", statusName: value } : null;
+      case "set_priority":
+        return value ? { type: "set_priority", priority: value as ItemPriority } : null;
+      case "add_tag":
+        return value ? { type: "add_tag", tag: value.toLowerCase() } : null;
+      case "remove_tag":
+        return value ? { type: "remove_tag", tag: value.toLowerCase() } : null;
+      case "assign":
+        return value ? { type: "assign", userId: value } : null;
+      case "add_comment":
+        return value ? { type: "add_comment", body: value } : null;
+      case "set_due_in_days":
+        return value !== "" && Number.isFinite(Number(value)) ? { type: "set_due_in_days", days: Math.max(0, Math.min(365, Math.round(Number(value)))) } : null;
+      default:
+        return null;
+    }
+  }
+
+  const builtTrigger = buildTrigger();
+  const builtConditions = buildConditions();
+  const builtAction = buildAction();
+  const ready = builtConditions !== null && builtAction !== null;
+  const sentence = "When " + describeTrigger(builtTrigger)
+    + (builtConditions && builtConditions.length ? ", if " + describeCondition(builtConditions[0]) : "")
+    + ", then " + (builtAction ? describeAction(builtAction, people) : "…");
+
+  async function create() {
+    if (!builtAction || !builtConditions) return;
+    const ok = await call({ action: "create", name: name.trim() || sentence.slice(0, 100), trigger: builtTrigger, conditions: builtConditions, actions: [builtAction] });
+    if (ok) {
+      setName("");
+      setAction({ ...action, value: "" });
+    }
+  }
+
+  const statusOptions = (placeholder: string, value: string, onChange: (next: string) => void) => (
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <option value="">{placeholder}</option>
+      {statuses.map((status) => <option key={status.id} value={status.name}>{status.name}</option>)}
+    </select>
+  );
+  const priorityOptions = (placeholder: string, value: string, onChange: (next: string) => void) => (
+    <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <option value="">{placeholder}</option>
+      {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority[0] + priority.slice(1).toLowerCase()}</option>)}
+    </select>
+  );
+  const nameOf = (automationId: string) => automations?.find((automation) => automation.id === automationId)?.name ?? "Deleted rule";
+
+  return (
+    <div className="lw-overlay lw-overlay--center" onClick={onClose}>
+      <div className="lw-modal au-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Automations">
+        <div className="lw-panel-top"><strong>⚡ Automations for this list</strong><button className="lw-close" onClick={onClose} aria-label="Close">✕</button></div>
+        <p className="lw-faint">Rules run by themselves when tasks in this list change. A rule's actions never set off other rules.</p>
+        {error ? <p className="lw-error" role="alert">{error}</p> : null}
+
+        <section className="au-rules">
+          {automations === null ? <p className="lw-faint">Loading…</p> : null}
+          {automations && automations.length === 0 ? <p className="lw-faint">No rules yet. Build your first one below.</p> : null}
+          {automations?.map((automation) => (
+            <div key={automation.id} className={"au-rule" + (automation.enabled ? "" : " is-off")}>
+              <button type="button" role="switch" aria-checked={automation.enabled} aria-label={(automation.enabled ? "Turn off " : "Turn on ") + automation.name} className="au-switch" disabled={busy}
+                onClick={() => call({ action: "toggle", automationId: automation.id, enabled: !automation.enabled })} />
+              <div className="au-rule-text">
+                <strong>{automation.name}</strong>
+                <span>
+                  When {describeTrigger(automation.trigger)}
+                  {automation.conditions.length ? ", if " + automation.conditions.map(describeCondition).join(" and ") : ""}
+                  , then {automation.actions.map((entry) => describeAction(entry, people)).join(", then ")}
+                </span>
+                <small>{automation.lastRunAt ? "Last ran " + new Date(automation.lastRunAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Has not run yet"}</small>
+              </div>
+              <button type="button" className="lw-ghost" disabled={busy} aria-label={"Delete " + automation.name}
+                onClick={() => { if (window.confirm("Delete the rule " + automation.name + "?")) call({ action: "delete", automationId: automation.id }); }}>✕</button>
+            </div>
+          ))}
+        </section>
+
+        <section className="au-builder">
+          <strong>New rule</strong>
+          <div className="au-step">
+            <span className="au-step-label">When</span>
+            <select value={trigger.type} onChange={(event) => setTrigger({ type: event.target.value as AutomationTrigger["type"], value: "" })}>
+              {(Object.keys(TRIGGER_LABELS) as AutomationTrigger["type"][]).map((key) => <option key={key} value={key}>{TRIGGER_LABELS[key]}</option>)}
+            </select>
+            {trigger.type === "status_changed" ? statusOptions("to any status", trigger.value, (value) => setTrigger({ ...trigger, value })) : null}
+            {trigger.type === "priority_changed" ? priorityOptions("to any priority", trigger.value, (value) => setTrigger({ ...trigger, value })) : null}
+            {trigger.type === "tag_added" ? <input value={trigger.value} maxLength={40} placeholder="any tag" onChange={(event) => setTrigger({ ...trigger, value: event.target.value })} /> : null}
+          </div>
+          <div className="au-step">
+            <span className="au-step-label">If</span>
+            <select value={condition.type} onChange={(event) => setCondition({ type: event.target.value as "" | AutomationCondition["type"], value: "" })}>
+              <option value="">Always (no condition)</option>
+              {(Object.keys(CONDITION_LABELS) as AutomationCondition["type"][]).map((key) => <option key={key} value={key}>{CONDITION_LABELS[key]}</option>)}
+            </select>
+            {condition.type === "status_is" ? statusOptions("choose a status", condition.value, (value) => setCondition({ ...condition, value })) : null}
+            {condition.type === "priority_is" ? priorityOptions("choose a priority", condition.value, (value) => setCondition({ ...condition, value })) : null}
+            {condition.type === "has_tag" ? <input value={condition.value} maxLength={40} placeholder="tag name" onChange={(event) => setCondition({ ...condition, value: event.target.value })} /> : null}
+          </div>
+          <div className="au-step">
+            <span className="au-step-label">Then</span>
+            <select value={action.type} onChange={(event) => setAction({ type: event.target.value as AutomationAction["type"], value: "" })}>
+              {(Object.keys(ACTION_LABELS) as AutomationAction["type"][]).map((key) => <option key={key} value={key}>{ACTION_LABELS[key]}</option>)}
+            </select>
+            {action.type === "set_status" ? statusOptions("choose a status", action.value, (value) => setAction({ ...action, value })) : null}
+            {action.type === "set_priority" ? priorityOptions("choose a priority", action.value, (value) => setAction({ ...action, value })) : null}
+            {action.type === "add_tag" || action.type === "remove_tag" ? <input value={action.value} maxLength={40} placeholder="tag name" onChange={(event) => setAction({ ...action, value: event.target.value })} /> : null}
+            {action.type === "assign" ? (
+              <select value={action.value} onChange={(event) => setAction({ ...action, value: event.target.value })}>
+                <option value="">choose a member</option>
+                {people.map((person) => <option key={person.id} value={person.id}>{person.fullName}</option>)}
+              </select>
+            ) : null}
+            {action.type === "set_due_in_days" ? <input type="number" min={0} max={365} value={action.value} placeholder="days from now" onChange={(event) => setAction({ ...action, value: event.target.value })} /> : null}
+          </div>
+          {action.type === "add_comment" ? <textarea rows={3} maxLength={2000} value={action.value} placeholder="Comment to post on the task" onChange={(event) => setAction({ ...action, value: event.target.value })} /> : null}
+          <p className="au-preview">{sentence}</p>
+          <div className="au-create">
+            <input value={name} maxLength={100} placeholder="Rule name (optional)" onChange={(event) => setName(event.target.value)} aria-label="Rule name" />
+            <button type="button" className="lw-primary" disabled={busy || !ready} onClick={create}>{busy ? "Saving…" : "Create rule"}</button>
+          </div>
+        </section>
+
+        {runs.length ? (
+          <section className="au-runs">
+            <strong>Recent runs</strong>
+            {runs.map((run, index) => (
+              <div key={run.automationId + run.createdAt + index} className="au-run">
+                <span className={"au-badge au-badge--" + run.outcome.toLowerCase()}>{run.outcome === "SUCCESS" ? "✓ Ran" : run.outcome === "FAILED" ? "! Failed" : "– Skipped"}</span>
+                <span className="au-run-text"><strong>{nameOf(run.automationId)}</strong>{run.detail ? " — " + run.detail : ""}</span>
+                <span className="lw-faint">{new Date(run.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
+              </div>
+            ))}
+          </section>
+        ) : null}
       </div>
     </div>
   );
@@ -1191,6 +1486,28 @@ const lwCss = [
   ".lw-field-edit .lw-faint{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
   ".lw-field-add{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--lw-border);padding-top:12px;margin-top:6px}",
   ".lw-field-add-row{display:grid;grid-template-columns:minmax(0,1fr) 140px;gap:8px}",
+  ".lw-tools{flex-wrap:wrap;justify-content:flex-end}",
+  ".au-modal{width:min(760px,100%)}",
+  ".au-rules{display:flex;flex-direction:column;gap:8px;margin:12px 0}",
+  ".au-rule{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;border:1px solid var(--lw-border);border-radius:10px}",
+  ".au-rule.is-off .au-rule-text{opacity:.55}",
+  ".au-rule-text{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:13px}.au-rule-text span{color:var(--lw-muted)}.au-rule-text small{font-size:11px;color:var(--lw-muted)}",
+  ".au-switch{position:relative;width:36px;height:20px;border-radius:10px;border:0;padding:0;background:var(--lw-border);cursor:pointer;flex:none;transition:background .15s}",
+  ".au-switch:after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .15s;box-shadow:0 1px 2px rgba(0,0,0,.3)}",
+  ".au-switch[aria-checked=true]{background:#7b68ee}.au-switch[aria-checked=true]:after{transform:translateX(16px)}",
+  ".au-builder{display:flex;flex-direction:column;gap:10px;padding:14px;border:1px solid rgba(123,104,238,.35);border-radius:10px;background:rgba(123,104,238,.06)}",
+  ".au-step{display:grid;grid-template-columns:52px minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:center}",
+  ".au-step select,.au-step input,.au-builder textarea,.au-create input{font-size:13px;min-width:0}",
+  ".au-step-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#7b68ee}",
+  ".au-preview{margin:0;font-size:13px;padding:8px 10px;border-radius:6px;background:var(--lw-hover)}",
+  ".au-create{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}",
+  ".au-runs{display:flex;flex-direction:column;gap:6px;margin-top:14px}",
+  ".au-run{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;font-size:12px;padding:6px 0;border-bottom:1px solid var(--lw-border)}",
+  ".au-run-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".au-badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap}",
+  ".au-badge--success{background:rgba(12,163,12,.15);color:#0a8a0a}.au-badge--failed{background:rgba(208,59,59,.15);color:#d03b3b}.au-badge--skipped{background:var(--lw-hover);color:var(--lw-muted)}",
+  "html[data-theme=dark] .au-badge--success{color:#5fd35f}html[data-theme=dark] .au-badge--failed{color:#f19b9b}",
+  "@media (max-width:600px){.au-step{grid-template-columns:44px minmax(0,1fr)}.au-step>*:nth-child(3){grid-column:2}}",
   ".work-tag--blue{background:rgba(42,120,214,.14);color:#1c5cab}",
   ".work-tag--green{background:rgba(12,163,12,.14);color:#0a6b0a}",
   ".work-tag--amber{background:rgba(229,154,0,.18);color:#8a5a00}",
