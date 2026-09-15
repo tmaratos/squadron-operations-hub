@@ -7,9 +7,10 @@ import { getListDetail } from "@/lib/work/structure";
 
 export const dynamic = "force-dynamic";
 
-export default async function ListPage({ params }: { params: Promise<{ listId: string }> }) {
+export default async function ListPage({ params, searchParams }: { params: Promise<{ listId: string }>; searchParams: Promise<{ item?: string }> }) {
   const user = await requireUser();
   const { listId } = await params;
+  const { item } = await searchParams;
   const list = await getListDetail(listId);
   if (!list) notFound();
   const [items, people] = await Promise.all([listItems(listId), listAssignableUsers()]);
@@ -21,7 +22,7 @@ export default async function ListPage({ params }: { params: Promise<{ listId: s
         {list.folderName ? " / " + list.folderName : ""}
         {" / " + list.name}
       </nav>
-      <ListWorkspace list={list} initialItems={items} people={people} canEdit={user.globalRole !== "READ_ONLY"} />
+      <ListWorkspace list={list} initialItems={items} people={people} canEdit={user.globalRole !== "READ_ONLY"} initialOpenId={item && items.some((entry) => entry.id === item) ? item : null} />
     </div>
   );
 }
