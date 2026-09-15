@@ -48,7 +48,7 @@ function StatusIcon({ status }: { status?: ListStatus }) {
   return <span className="lw-sicon lw-sicon--todo" style={{ borderColor: color }} title={status?.name ?? "no status"} />;
 }
 
-export function ListWorkspace({ list, initialItems, people, canEdit }: { list: ListDetail; initialItems: WorkItem[]; people: Person[]; canEdit: boolean }) {
+export function ListWorkspace({ list, initialItems, people, canEdit, initialOpenId }: { list: ListDetail; initialItems: WorkItem[]; people: Person[]; canEdit: boolean; initialOpenId?: string | null }) {
   const [items, setItems] = useState<WorkItem[]>(initialItems);
   const [mode, setMode] = useState<Mode>("list");
   const [search, setSearch] = useState("");
@@ -58,10 +58,17 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [addingIn, setAddingIn] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
   const [editingStatuses, setEditingStatuses] = useState(false);
   const [editingFields, setEditingFields] = useState(false);
   const [editingAutomations, setEditingAutomations] = useState(false);
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
   const [error, setError] = useState("");
 
   const statusById = useMemo(() => new Map(list.statuses.map((status) => [status.id, status] as const)), [list.statuses]);
@@ -114,6 +121,27 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
     }
   }
 
+  const doneStatus = list.statuses.find((entry) => entry.category === "DONE") ?? list.statuses.find((entry) => entry.category === "CLOSED");
+  const openStatus = list.statuses.find((entry) => entry.category === "NOT_STARTED") ?? list.statuses[0];
+
+  // One click to finish (or reopen) a task, always with an Undo so a slip is never a problem.
+  async function toggleDone(item: WorkItem) {
+    const wasClosed = isClosed(item);
+    const target = wasClosed ? openStatus : doneStatus;
+    if (!target) return;
+    const previous = item.statusId;
+    const result = await patch(item.id, { statusId: target.id });
+    if (result) {
+      setToast({
+        text: (wasClosed ? "Reopened: " : "Marked done: ") + item.title,
+        undo: async () => {
+          setToast(null);
+          await patch(item.id, { statusId: previous });
+        }
+      });
+    }
+  }
+
   function renderRow(item: WorkItem, depth: number): ReactNode {
     const kids = (childrenOf.get(item.id) ?? []).filter(matches);
     const status = item.statusId ? statusById.get(item.statusId) : undefined;
@@ -134,7 +162,19 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
             >
               <svg viewBox="0 0 10 10" width="9" height="9" style={{ transform: open ? "rotate(90deg)" : "none" }} aria-hidden="true"><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
             </button>
-            <StatusIcon status={status} />
+            <button
+              type="button"
+              className="lw-complete"
+              title={isClosed(item) ? "Reopen this task" : "Mark as done"}
+              aria-label={(isClosed(item) ? "Reopen: " : "Mark done: ") + item.title}
+              disabled={!canEdit}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleDone(item);
+              }}
+            >
+              <StatusIcon status={status} />
+            </button>
             <span className={"lw-title" + (isClosed(item) ? " lw-title--closed" : "")}>{item.title}</span>
             {item.childCount ? <span className="lw-mini" title="Subtasks">⑂ {item.childCount}</span> : null}
             {item.checklistTotal ? <span className="lw-mini" title="Checklist">☑ {item.checklistDone}/{item.checklistTotal}</span> : null}
@@ -316,6 +356,13 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
         />
       ) : null}
 
+      {toast ? (
+        <div className="lw-toast" role="status" aria-live="polite">
+          <span className="lw-toast-text">{toast.text}</span>
+          {toast.undo ? <button type="button" className="lw-toast-undo" onClick={toast.undo}>Undo</button> : null}
+          <button type="button" className="lw-toast-close" onClick={() => setToast(null)} aria-label="Dismiss">✕</button>
+        </div>
+      ) : null}
       {editingAutomations ? <AutomationEditor listId={list.id} statuses={list.statuses} people={people} onClose={() => setEditingAutomations(false)} /> : null}
       {editingFields ? <FieldEditor listId={list.id} fields={list.fields} onClose={() => setEditingFields(false)} /> : null}
       {editingStatuses ? <StatusEditor listId={list.id} statuses={list.statuses} onClose={() => setEditingStatuses(false)} /> : null}
@@ -1393,7 +1440,17 @@ const lwCss = [
   ".lw-pill{display:inline-flex;align-items:center;gap:6px;color:#fff;text-transform:uppercase;font-size:11px;font-weight:700;padding:3px 9px 3px 6px;border-radius:5px;letter-spacing:.02em}",
   ".lw-pill .lw-sicon{border-color:#fff !important;background:transparent !important}",
   ".lw-n{font-size:12px;color:var(--lw-muted);font-weight:500}",
-  ".lw-group-add{opacity:0;border:0;background:none;color:var(--lw-muted);font:inherit;font-size:12px;cursor:pointer}",
+  ".lw-group-add{border:0;background:none;color:var(--lw-muted);font:inherit;font-size:12px;cursor:pointer;padding:4px 8px;border-radius:6px}",
+  ".lw-group-add:hover{color:#7b68ee;background:var(--lw-hover)}",
+  ".lw-complete{display:grid;place-items:center;width:26px;height:26px;margin:-4px -2px;border:0;border-radius:50%;background:none;padding:0;cursor:pointer;flex:none}",
+  ".lw-complete:hover:not(:disabled){background:rgba(12,163,12,.16)}",
+  ".lw-complete:hover:not(:disabled) .lw-sicon{border-color:#0ca30c !important}",
+  ".lw-complete:disabled{cursor:default}",
+  ".lw-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:130;display:flex;align-items:center;gap:12px;max-width:min(600px,calc(100vw - 32px));padding:10px 10px 10px 16px;border-radius:10px;background:#292d34;color:#fff;font-size:14px;box-shadow:0 12px 30px rgba(0,0,0,.35)}",
+  "html[data-theme=dark] .lw-toast{background:#f0f1f3;color:#1b1c1f}",
+  ".lw-toast-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".lw-toast-undo{border:0;background:#7b68ee;color:#fff;font:inherit;font-size:13px;font-weight:700;padding:6px 14px;border-radius:6px;cursor:pointer;flex:none}",
+  ".lw-toast-close{border:0;background:none;color:inherit;opacity:.7;font-size:14px;cursor:pointer;padding:4px 6px;flex:none}",
   ".lw-colhead,.lw-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 110px 100px;align-items:center}",
   ".lw-colhead{font-size:11px;color:var(--lw-muted);padding:4px 0 6px 44px;border-bottom:1px solid var(--lw-border)}",
   ".lw-row{min-height:38px;border-bottom:1px solid var(--lw-border);cursor:pointer}",
