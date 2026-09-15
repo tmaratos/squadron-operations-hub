@@ -211,8 +211,8 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
           );
         })}
         <div className="cu-rail-spacer" />
-        <Link href="/integrations" className={"cu-rail-item" + (active("/integrations") ? " is-active" : "")}>
-          <span className="cu-rail-icon"><Plug size={18} /></span><span>Apps</span>
+        <Link href="/connections" className={"cu-rail-item" + (active("/connections") ? " is-active" : "")} title="Connect your email, files and AI">
+          <span className="cu-rail-icon"><Plug size={18} /></span><span>Connect</span>
         </Link>
         <Link href="/settings" className={"cu-rail-item" + (active("/settings") ? " is-active" : "")}>
           <span className="cu-rail-icon"><Settings size={18} /></span><span>Settings</span>
