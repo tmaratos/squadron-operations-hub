@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -163,6 +164,10 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
 
       <header className="cu-topbar">
         <button className="cu-mobile" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={18} /></button>
+        <Link href="/" className="cu-brand" aria-label="TN-170 Squadron Operations Hub home">
+          <Image src="/tn170-logo.png" alt="TN-170 emblem" width={30} height={30} priority />
+          <span className="cu-brand-text"><strong>TN-170</strong><small>Operations Hub</small></span>
+        </Link>
         <div className="cu-ws">
           <button type="button" className="cu-ws-button" onClick={() => setWorkspaceMenuOpen((open) => !open)} aria-expanded={workspaceMenuOpen} aria-haspopup="menu">
             <span className="cu-ws-avatar">{currentWorkspace.shortName}</span>
@@ -285,6 +290,9 @@ const shellCss = [
   ".cu-shell{display:grid;grid-template-columns:64px 264px minmax(0,1fr);grid-template-rows:44px minmax(0,1fr);height:100vh;overflow:hidden;background:var(--cu-bg);color:var(--cu-text)}",
   ".cu-topbar{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 12px;background:var(--cu-top);border-bottom:1px solid var(--cu-border)}",
   ".cu-mobile,.cu-close{display:none;border:0;background:none;color:inherit;cursor:pointer}",
+  ".cu-brand{display:flex;align-items:center;gap:8px;color:inherit;text-decoration:none;padding-right:10px;border-right:1px solid var(--cu-border)}",
+  ".cu-brand img{width:30px;height:30px;object-fit:contain;flex:none}",
+  ".cu-brand-text{display:grid;line-height:1.1}.cu-brand-text strong{font-size:13px}.cu-brand-text small{font-size:10px;color:var(--cu-muted)}",
   ".cu-ws{position:relative}",
   ".cu-ws-button{display:flex;align-items:center;gap:8px;border:0;background:none;color:inherit;cursor:pointer;padding:4px 8px;border-radius:6px;font:inherit;font-size:13px}",
   ".cu-ws-button:hover{background:var(--cu-hover)}",
@@ -330,7 +338,8 @@ const shellCss = [
   ".cu-shell{grid-template-columns:minmax(0,1fr)}",
   ".cu-rail{display:none}",
   ".cu-mobile,.cu-close{display:grid;place-items:center}",
-  ".cu-ws-button strong,.cu-search kbd{display:none}",
+  ".cu-ws-button strong,.cu-search kbd,.cu-brand-text{display:none}",
+  ".cu-brand{border-right:0;padding-right:0}",
   ".cu-sidebar{position:fixed;top:0;bottom:0;left:0;width:min(300px,86vw);z-index:90;transform:translateX(-105%);transition:transform .18s ease}",
   ".cu-sidebar.is-open{transform:none}",
   ".cu-backdrop{display:block;position:fixed;inset:0;z-index:85;border:0;background:rgba(0,0,0,.4)}",
