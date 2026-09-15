@@ -59,7 +59,9 @@ export async function createGoogleAuthorizationUrl(): Promise<string> {
     code_challenge: challenge,
     code_challenge_method: "S256",
     access_type: "offline",
-    include_granted_scopes: "true"
+    include_granted_scopes: "true",
+    // Always show the Google account chooser so members signed in to several Google accounts can pick the right one.
+    prompt: "select_account"
   });
   return `${AUTHORIZATION_ENDPOINT}?${params}`;
 }
