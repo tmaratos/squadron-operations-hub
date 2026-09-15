@@ -1007,6 +1007,121 @@ function QuickAdd({ onAdd, onCancel, autoOpen = false, label = "+ Add Task" }: {
   );
 }
 
+type AssistAction = "summarize" | "tags" | "subtasks";
+
+// Squadron AI helper inside a task. Every result is a suggestion; nothing is saved until the member clicks Add or Post.
+function AssistBox({ itemId, canEdit, onAddTag, onAddSubtasks, onComment }: {
+  itemId: string;
+  canEdit: boolean;
+  onAddTag: (tag: string) => Promise<void>;
+  onAddSubtasks: (titles: string[]) => Promise<void>;
+  onComment: (body: string) => Promise<void>;
+}) {
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState<"" | AssistAction>("");
+  const [note, setNote] = useState("");
+  const [summary, setSummary] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [steps, setSteps] = useState<Array<{ text: string; picked: boolean }>>([]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/work/items/" + itemId + "/assist")
+      .then((response) => response.json() as Promise<{ available?: boolean }>)
+      .then((data) => {
+        if (active) setAvailable(Boolean(data.available));
+      })
+      .catch(() => {
+        if (active) setAvailable(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [itemId]);
+
+  async function ask(action: AssistAction) {
+    setBusy(action);
+    setNote("");
+    try {
+      const response = await fetch("/api/work/items/" + itemId + "/assist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+      const data = (await response.json().catch(() => ({}))) as { message?: string; summary?: string; tags?: string[]; subtasks?: string[] };
+      if (!response.ok) throw new Error(data.message || "Squadron AI couldn't answer right now. Try again in a minute.");
+      if (action === "summarize") setSummary(data.summary || "No summary came back. Try again.");
+      if (action === "tags") {
+        setTags(data.tags ?? []);
+        if (!(data.tags ?? []).length) setNote("No new tags to suggest for this task.");
+      }
+      if (action === "subtasks") {
+        setSteps((data.subtasks ?? []).map((text) => ({ text, picked: true })));
+        if (!(data.subtasks ?? []).length) setNote("No next steps came back. Try again.");
+      }
+    } catch (caught) {
+      setNote(caught instanceof Error ? caught.message : "Squadron AI couldn't answer right now.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (available === null) return null;
+
+  return (
+    <section className="tp-section tp-ai" aria-label="Squadron AI">
+      <h3 className="tp-h">✨ Squadron AI <span className="tp-count">runs on the squadron's own server</span></h3>
+      {!available ? <p className="tp-empty">Squadron AI isn't set up yet.</p> : (
+        <>
+          <div className="tp-ai-buttons">
+            <button type="button" className="tp-ai-btn" disabled={Boolean(busy)} onClick={() => ask("summarize")}>{busy === "summarize" ? "Working…" : "Summarize"}</button>
+            {canEdit ? <button type="button" className="tp-ai-btn" disabled={Boolean(busy)} onClick={() => ask("tags")}>{busy === "tags" ? "Working…" : "Suggest tags"}</button> : null}
+            {canEdit ? <button type="button" className="tp-ai-btn" disabled={Boolean(busy)} onClick={() => ask("subtasks")}>{busy === "subtasks" ? "Working…" : "Suggest next steps"}</button> : null}
+          </div>
+          {busy ? <p className="tp-ai-wait" role="status">Squadron AI is working. This can take up to a minute.</p> : null}
+          {note ? <p className="tp-ai-note" role="status">{note}</p> : null}
+
+          {summary ? (
+            <div className="tp-ai-card">
+              <p>{summary}</p>
+              <div className="tp-ai-actions">
+                {canEdit ? <button type="button" className="lw-primary" onClick={async () => { await onComment(summary); setSummary(""); }}>Post as comment</button> : null}
+                <button type="button" className="lw-ghost" onClick={() => setSummary("")}>Dismiss</button>
+              </div>
+            </div>
+          ) : null}
+
+          {tags.length ? (
+            <div className="tp-ai-card">
+              <p>Suggested tags. Click one to add it:</p>
+              <div className="tp-ai-tags">
+                {tags.map((tag) => (
+                  <button key={tag} type="button" className="tp-ai-tag" onClick={async () => { await onAddTag(tag); setTags((current) => current.filter((entry) => entry !== tag)); }}>+ {tag}</button>
+                ))}
+              </div>
+              <div className="tp-ai-actions"><button type="button" className="lw-ghost" onClick={() => setTags([])}>Dismiss</button></div>
+            </div>
+          ) : null}
+
+          {steps.length ? (
+            <div className="tp-ai-card">
+              <p>Suggested next steps. Uncheck any you don't want:</p>
+              {steps.map((step, index) => (
+                <label key={index} className="tp-check">
+                  <input type="checkbox" checked={step.picked} onChange={(event) => setSteps(steps.map((entry, position) => (position === index ? { ...entry, picked: event.target.checked } : entry)))} />
+                  <span>{step.text}</span>
+                </label>
+              ))}
+              <div className="tp-ai-actions">
+                <button type="button" className="lw-primary" disabled={!steps.some((step) => step.picked)} onClick={async () => { await onAddSubtasks(steps.filter((step) => step.picked).map((step) => step.text)); setSteps([]); }}>Add as subtasks</button>
+                <button type="button" className="lw-ghost" onClick={() => setSteps([])}>Dismiss</button>
+              </div>
+            </div>
+          ) : null}
+
+          <p className="tp-ai-fine">Suggestions only. Nothing changes until you click Add or Post.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen, onPatch, onAddChild }: {
   itemId: string;
   statuses: ListStatus[];
@@ -1213,6 +1328,18 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
               </div>
             </div>
 
+            <AssistBox
+              itemId={itemId}
+              canEdit={canEdit}
+              onAddTag={(tag) => save({ tags: Array.from(new Set([...tags, tag])) })}
+              onAddSubtasks={async (titles) => {
+                for (const value of titles) await onAddChild(value);
+                const data = await send("/api/work/items/" + itemId, "GET");
+                adopt(data.item);
+              }}
+              onComment={(body) => save({ comment: body })}
+            />
+
             {fields.length ? (
               <section className="tp-section">
                 <h3 className="tp-h">Custom fields</h3>
@@ -1400,6 +1527,19 @@ const tpCss = [
   ".tp-compose{border-top:1px solid var(--tp-border);padding:12px 16px 16px;display:flex;flex-direction:column;gap:8px}",
   ".tp-compose textarea{width:100%;resize:none;border:1px solid var(--tp-border);border-radius:8px;background:var(--tp-bg);color:inherit;font:inherit;font-size:13px;line-height:1.5;padding:8px 10px;outline:0;box-shadow:none}.tp-compose textarea:focus{border-color:#7b68ee}",
   ".tp-compose-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;color:var(--tp-muted)}",
+  ".tp-ai{padding:14px 16px;border-radius:10px;background:linear-gradient(135deg,rgba(123,104,238,.10),rgba(42,120,214,.06));border:1px solid rgba(123,104,238,.25)}",
+  ".tp-ai-buttons{display:flex;flex-wrap:wrap;gap:8px}",
+  ".tp-ai-btn{min-height:36px;padding:0 16px;border-radius:8px;border:1px solid rgba(123,104,238,.45);background:var(--tp-bg);color:inherit;font:inherit;font-size:14px;font-weight:600;cursor:pointer}",
+  ".tp-ai-btn:hover:not(:disabled){border-color:#7b68ee;color:#7b68ee}.tp-ai-btn:disabled{opacity:.55;cursor:default}",
+  ".tp-ai-wait{margin:0;font-size:13px;color:var(--tp-muted)}",
+  ".tp-ai-note{margin:0;font-size:13px;color:#b87700}html[data-theme=dark] .tp-ai-note{color:#f0b429}",
+  ".tp-ai-card{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:8px;background:var(--tp-bg);border:1px solid var(--tp-border)}",
+  ".tp-ai-card p{margin:0;font-size:14px;line-height:1.55}",
+  ".tp-ai-card .tp-check{border-bottom:0;padding:6px 0}",
+  ".tp-ai-tags{display:flex;flex-wrap:wrap;gap:6px}",
+  ".tp-ai-tag{border:1px dashed rgba(123,104,238,.6);background:none;color:#7b68ee;font:inherit;font-size:13px;padding:4px 10px;border-radius:14px;cursor:pointer}.tp-ai-tag:hover{background:rgba(123,104,238,.12)}",
+  ".tp-ai-actions{display:flex;gap:8px;flex-wrap:wrap}",
+  ".tp-ai-fine{margin:0;font-size:12px;color:var(--tp-muted)}",
   // The global theme styles every input, select and textarea (html[data-theme] input {...}); the panel's borderless controls need higher specificity to stay borderless.
   "html .tp .tp-title,html .tp .tp-desc,html .tp .tp-tag-input,html .tp .tp-date input,html .tp .tp-field input,html .tp .tp-field select,html .tp .tp-field textarea{background:transparent;border-color:transparent;color:inherit;outline:none}",
   "html .tp .tp-title:hover:not(:disabled),html .tp .tp-title:focus,html .tp .tp-desc:hover:not(:disabled),html .tp .tp-tag-input:hover,html .tp .tp-tag-input:focus,html .tp .tp-field input:hover,html .tp .tp-field select:hover,html .tp .tp-field textarea:hover{background:var(--tp-hover)}",
