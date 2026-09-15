@@ -12,6 +12,7 @@ import {
   GraduationCap,
   History,
   LayoutGrid,
+  Link2,
   Megaphone,
   NotebookTabs,
   PackageCheck,
@@ -84,6 +85,7 @@ export const navigationGroups: NavigationGroup[] = [
 
 export const utilityNavigation: NavigationItem[] = [
   { label: "Action Center", href: "/notifications", icon: Activity },
+  { label: "My Connections", href: "/connections", icon: Link2 },
   { label: "Integrations", href: "/integrations", icon: Plug },
   { label: "History", href: "/audit", icon: History },
   { label: "System Settings", href: "/settings", icon: Settings }
