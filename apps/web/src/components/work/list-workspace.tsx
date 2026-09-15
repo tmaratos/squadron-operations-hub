@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
 
 type Person = { id: string; fullName: string };
-type Mode = "list" | "board";
+type Mode = "list" | "board" | "table" | "calendar";
+
+const MODE_LABELS: Record<Mode, string> = { list: "☰ List", board: "▦ Board", table: "▤ Table", calendar: "▣ Calendar" };
+const CATEGORY_LABELS: Record<ListStatus["category"], string> = { NOT_STARTED: "Not started", ACTIVE: "Active", DONE: "Done", CLOSED: "Closed" };
 type ApiResult = { message?: string; item: ItemDetail; items: WorkItem[] };
 
 const PRIORITIES: ItemPriority[] = ["URGENT", "HIGH", "NORMAL", "LOW"];
@@ -56,6 +59,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [addingIn, setAddingIn] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [editingStatuses, setEditingStatuses] = useState(false);
   const [error, setError] = useState("");
 
   const statusById = useMemo(() => new Map(list.statuses.map((status) => [status.id, status] as const)), [list.statuses]);
@@ -168,9 +172,9 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
       </header>
 
       <div className="lw-views" role="tablist">
-        {(["list", "board"] as Mode[]).map((value) => (
+        {(Object.keys(MODE_LABELS) as Mode[]).map((value) => (
           <button key={value} role="tab" aria-selected={mode === value} className={mode === value ? "is-active" : ""} onClick={() => setMode(value)}>
-            {value === "list" ? "☰ List" : "▦ Board"}
+            {MODE_LABELS[value]}
           </button>
         ))}
       </div>
@@ -189,7 +193,8 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
               <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.5" /></svg>
             </button>
           )}
-          {canEdit ? <button className="lw-primary" onClick={() => setAddingIn(visibleStatuses[0]?.id ?? null)}>+ Task</button> : null}
+          {canEdit ? <button className="lw-ghost" onClick={() => setEditingStatuses(true)}>⚙ Statuses</button> : null}
+          {canEdit ? <button className="lw-primary" onClick={() => { setMode("list"); setAddingIn(visibleStatuses[0]?.id ?? null); }}>+ Task</button> : null}
         </div>
       </div>
       {error ? <p className="lw-error" role="alert">{error}</p> : null}
@@ -236,6 +241,16 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
             </section>
           ) : null}
         </div>
+      ) : mode === "table" ? (
+        <TableView
+          items={items.filter(matches)}
+          statuses={list.statuses}
+          canEdit={canEdit}
+          onOpen={setOpenId}
+          onPatch={patch}
+        />
+      ) : mode === "calendar" ? (
+        <CalendarView items={items.filter(matches)} statusById={statusById} onOpen={setOpenId} />
       ) : (
         <div className="lw-board">
           {visibleStatuses.map((status) => {
@@ -295,6 +310,204 @@ export function ListWorkspace({ list, initialItems, people, canEdit }: { list: L
           }}
         />
       ) : null}
+
+      {editingStatuses ? <StatusEditor listId={list.id} statuses={list.statuses} onClose={() => setEditingStatuses(false)} /> : null}
+    </div>
+  );
+}
+
+function TableView({ items, statuses, canEdit, onOpen, onPatch }: {
+  items: WorkItem[];
+  statuses: ListStatus[];
+  canEdit: boolean;
+  onOpen: (id: string) => void;
+  onPatch: (id: string, body: Record<string, unknown>) => Promise<ItemDetail | null>;
+}) {
+  const [sort, setSort] = useState<{ key: "title" | "status" | "due" | "priority"; dir: 1 | -1 }>({ key: "due", dir: 1 });
+  const rank: Record<string, number> = { URGENT: 0, HIGH: 1, NORMAL: 2, LOW: 3 };
+  const statusOrder = new Map(statuses.map((status, index) => [status.id, index] as const));
+  const titleOf = new Map(items.map((item) => [item.id, item.title] as const));
+  const sorted = [...items].sort((a, b) => {
+    let result = 0;
+    if (sort.key === "title") result = a.title.localeCompare(b.title);
+    if (sort.key === "status") result = (statusOrder.get(a.statusId ?? "") ?? 99) - (statusOrder.get(b.statusId ?? "") ?? 99);
+    if (sort.key === "due") result = (a.dueOn ?? "9999").localeCompare(b.dueOn ?? "9999");
+    if (sort.key === "priority") result = (rank[a.priority ?? ""] ?? 9) - (rank[b.priority ?? ""] ?? 9);
+    return result * sort.dir;
+  });
+  const header = (key: typeof sort.key, label: string) => (
+    <th>
+      <button className="lw-th" onClick={() => setSort({ key, dir: sort.key === key ? (sort.dir === 1 ? -1 : 1) : 1 })}>
+        {label}{sort.key === key ? (sort.dir === 1 ? " ↑" : " ↓") : ""}
+      </button>
+    </th>
+  );
+
+  return (
+    <div className="lw-table-wrap">
+      <table className="lw-table">
+        <thead>
+          <tr>
+            {header("title", "Name")}
+            {header("status", "Status")}
+            <th>Assignees</th>
+            <th>Start</th>
+            {header("due", "Due date")}
+            {header("priority", "Priority")}
+            <th>Tags</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((item) => {
+            const status = statuses.find((entry) => entry.id === item.statusId);
+            return (
+              <tr key={item.id}>
+                <td className="lw-td-name">
+                  <button className="lw-link" onClick={() => onOpen(item.id)}>{item.title}</button>
+                  {item.parentId && titleOf.has(item.parentId) ? <span className="lw-faint lw-parent">in {titleOf.get(item.parentId)}</span> : null}
+                </td>
+                <td>
+                  <select className="lw-status-select" style={{ background: status?.color ?? "#87909e" }} value={item.statusId ?? ""} disabled={!canEdit} onChange={(event) => onPatch(item.id, { statusId: event.target.value || null })}>
+                    {statuses.map((entry) => <option key={entry.id} value={entry.id}>{entry.name.toUpperCase()}</option>)}
+                  </select>
+                </td>
+                <td>{item.assignees.map((person) => person.fullName).join(", ") || <span className="lw-faint">—</span>}</td>
+                <td>
+                  <input type="date" className="lw-cell-input" value={item.startOn ?? ""} disabled={!canEdit} onChange={(event) => onPatch(item.id, { startOn: event.target.value || null })} />
+                </td>
+                <td>
+                  <input type="date" className="lw-cell-input" value={item.dueOn ?? ""} disabled={!canEdit} onChange={(event) => onPatch(item.id, { dueOn: event.target.value || null })} />
+                </td>
+                <td>
+                  <select className="lw-cell-input" value={item.priority ?? ""} disabled={!canEdit} onChange={(event) => onPatch(item.id, { priority: event.target.value || null })}>
+                    <option value="">—</option>
+                    {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority[0] + priority.slice(1).toLowerCase()}</option>)}
+                  </select>
+                </td>
+                <td className="lw-td-tags">{item.tags.map((tag) => <span key={tag.id} className={"lw-tag work-tag work-tag--" + tag.color}>{tag.label}</span>)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {sorted.length === 0 ? <p className="lw-faint" style={{ padding: 16 }}>No tasks match.</p> : null}
+    </div>
+  );
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+function CalendarView({ items, statusById, onOpen }: { items: WorkItem[]; statusById: Map<string, ListStatus>; onOpen: (id: string) => void }) {
+  const now = new Date();
+  const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
+  const first = new Date(cursor.year, cursor.month, 1);
+  const start = new Date(cursor.year, cursor.month, 1 - first.getDay());
+  const days = Array.from({ length: 42 }, (_, index) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + index));
+  const key = (date: Date) => date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+  const todayKey = key(now);
+  const byDay = new Map<string, WorkItem[]>();
+  items.forEach((item) => {
+    if (item.dueOn) byDay.set(item.dueOn, [...(byDay.get(item.dueOn) ?? []), item]);
+  });
+  const undated = items.filter((item) => !item.dueOn).length;
+  const move = (delta: number) => {
+    const next = new Date(cursor.year, cursor.month + delta, 1);
+    setCursor({ year: next.getFullYear(), month: next.getMonth() });
+  };
+
+  return (
+    <div className="lw-cal">
+      <div className="lw-cal-head">
+        <button className="lw-ghost" onClick={() => move(-1)} aria-label="Previous month">‹</button>
+        <button className="lw-ghost" onClick={() => setCursor({ year: now.getFullYear(), month: now.getMonth() })}>Today</button>
+        <button className="lw-ghost" onClick={() => move(1)} aria-label="Next month">›</button>
+        <h2>{first.toLocaleDateString(undefined, { month: "long", year: "numeric" })}</h2>
+        <span className="lw-faint">{undated} without a due date</span>
+      </div>
+      <div className="lw-cal-grid">
+        {WEEKDAYS.map((day) => <div key={day} className="lw-cal-weekday">{day}</div>)}
+        {days.map((date) => {
+          const dayKey = key(date);
+          const dayItems = byDay.get(dayKey) ?? [];
+          return (
+            <div key={dayKey} className={"lw-cal-day" + (date.getMonth() !== cursor.month ? " is-outside" : "") + (dayKey === todayKey ? " is-today" : "")}>
+              <span className="lw-cal-date">{date.getDate()}</span>
+              {dayItems.slice(0, 4).map((item) => {
+                const status = item.statusId ? statusById.get(item.statusId) : undefined;
+                return (
+                  <button key={item.id} className="lw-cal-item" style={{ borderLeftColor: status?.color ?? "#87909e" }} onClick={() => onOpen(item.id)} title={item.title}>
+                    {item.title}
+                  </button>
+                );
+              })}
+              {dayItems.length > 4 ? <span className="lw-faint lw-cal-more">+{dayItems.length - 4} more</span> : null}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+type StatusDraft = { id: string | null; name: string; color: string; category: ListStatus["category"] };
+
+function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses: ListStatus[]; onClose: () => void }) {
+  const [rows, setRows] = useState<StatusDraft[]>(statuses.map((status) => ({ id: status.id, name: status.name, color: /^#[0-9a-fA-F]{6}$/.test(status.color) ? status.color : "#87909e", category: status.category })));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const update = (index: number, change: Partial<StatusDraft>) => setRows(rows.map((row, position) => (position === index ? { ...row, ...change } : row)));
+  const moveRow = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= rows.length) return;
+    const next = [...rows];
+    [next[index], next[target]] = [next[target], next[index]];
+    setRows(next);
+  };
+
+  async function save() {
+    setSaving(true);
+    setError("");
+    try {
+      const response = await fetch("/api/work/lists/" + listId + "/statuses", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ statuses: rows.map((row) => ({ ...row, name: row.name.trim() })) })
+      });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(data.message || "Could not save.");
+      window.location.reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not save.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="lw-overlay lw-overlay--center" onClick={onClose}>
+      <div className="lw-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Edit statuses">
+        <div className="lw-panel-top"><strong>Statuses for this list</strong><button className="lw-close" onClick={onClose} aria-label="Close">✕</button></div>
+        <p className="lw-faint">Tasks in a deleted status lose their status. Done and Closed statuses count as finished.</p>
+        <div className="lw-status-rows">
+          {rows.map((row, index) => (
+            <div key={(row.id ?? "new") + index} className="lw-status-row">
+              <input type="color" value={row.color} onChange={(event) => update(index, { color: event.target.value })} aria-label="Status color" />
+              <input value={row.name} maxLength={40} onChange={(event) => update(index, { name: event.target.value })} aria-label="Status name" />
+              <select value={row.category} onChange={(event) => update(index, { category: event.target.value as ListStatus["category"] })} aria-label="Status type">
+                {(Object.keys(CATEGORY_LABELS) as ListStatus["category"][]).map((category) => <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>)}
+              </select>
+              <button className="lw-ghost" onClick={() => moveRow(index, -1)} aria-label="Move up">↑</button>
+              <button className="lw-ghost" onClick={() => moveRow(index, 1)} aria-label="Move down">↓</button>
+              <button className="lw-ghost" onClick={() => setRows(rows.filter((_, position) => position !== index))} disabled={rows.length === 1} aria-label="Delete status">✕</button>
+            </div>
+          ))}
+        </div>
+        <button className="lw-add" style={{ paddingLeft: 4 }} onClick={() => setRows([...rows, { id: null, name: "new status", color: "#7b68ee", category: "ACTIVE" }])}>+ Add status</button>
+        {error ? <p className="lw-error">{error}</p> : null}
+        <div className="lw-modal-actions">
+          <button className="lw-ghost" onClick={onClose}>Cancel</button>
+          <button className="lw-primary" onClick={save} disabled={saving || rows.some((row) => !row.name.trim())}>{saving ? "Saving…" : "Save statuses"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -566,6 +779,35 @@ const lwCss = [
   ".lw-comment{padding:10px 0;border-bottom:1px solid var(--lw-border);font-size:13px}",
   ".lw-comment-head{display:flex;align-items:center;gap:8px}.lw-comment-head span:last-child{font-size:12px}",
   ".lw-comment-body{white-space:pre-wrap;margin:6px 0 0 30px}",
-  "@media (max-width:900px){.lw{margin:-16px -16px 0}.lw-head,.lw-toolbar{padding-left:16px;padding-right:16px}.lw-groups,.lw-board{padding-left:16px;padding-right:16px}}",
+  ".lw-table-wrap{overflow-x:auto;padding:0 24px 40px}",
+  ".lw-table{width:100%;border-collapse:collapse;font-size:13px;min-width:900px}",
+  ".lw-table th{position:sticky;top:0;background:var(--lw-bg);text-align:left;font-size:11px;font-weight:500;color:var(--lw-muted);border-bottom:1px solid var(--lw-border);padding:8px 6px}",
+  ".lw-table td{border-bottom:1px solid var(--lw-border);padding:5px 6px;vertical-align:middle}",
+  ".lw-table tr:hover td{background:var(--lw-hover)}",
+  ".lw-th{border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:0}",
+  ".lw-td-name{max-width:340px}.lw-td-tags{max-width:220px;white-space:nowrap;overflow:hidden}",
+  ".lw-td-tags .lw-tag{margin-right:4px}",
+  ".lw-link{border:0;background:none;color:inherit;font:inherit;font-weight:500;text-align:left;cursor:pointer;padding:0;display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".lw-link:hover{color:#7b68ee}.lw-parent{display:block;font-size:11px}",
+  ".lw-cell-input{font-size:12px;background:transparent;color:inherit;border:1px solid transparent;border-radius:4px;padding:2px 4px}",
+  ".lw-cell-input:hover,.lw-cell-input:focus{border-color:var(--lw-border)}",
+  ".lw-cal{padding:12px 24px 40px}",
+  ".lw-cal-head{display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap}.lw-cal-head h2{margin:0 10px;font-size:16px}",
+  ".lw-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border-top:1px solid var(--lw-border);border-left:1px solid var(--lw-border)}",
+  ".lw-cal-weekday{font-size:11px;color:var(--lw-muted);padding:6px;border-right:1px solid var(--lw-border);border-bottom:1px solid var(--lw-border)}",
+  ".lw-cal-day{min-height:104px;padding:4px;border-right:1px solid var(--lw-border);border-bottom:1px solid var(--lw-border);display:flex;flex-direction:column;gap:3px;min-width:0}",
+  ".lw-cal-day.is-outside{opacity:.45}",
+  ".lw-cal-date{font-size:12px;color:var(--lw-muted);align-self:flex-end;width:22px;height:22px;display:grid;place-items:center;border-radius:50%}",
+  ".lw-cal-day.is-today .lw-cal-date{background:#7b68ee;color:#fff}",
+  ".lw-cal-item{border:0;border-left:3px solid;background:var(--lw-hover);color:inherit;font:inherit;font-size:11px;text-align:left;padding:2px 5px;border-radius:3px;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".lw-cal-item:hover{color:#7b68ee}.lw-cal-more{font-size:11px}",
+  ".lw-overlay--center{justify-content:center;align-items:flex-start;padding:60px 16px}",
+  ".lw-modal{width:min(620px,100%);max-height:calc(100vh - 120px);overflow-y:auto;background:var(--lw-bg);border:1px solid var(--lw-border);border-radius:10px;padding:16px 20px;box-shadow:0 20px 50px rgba(0,0,0,.35)}",
+  "html[data-theme=dark] .lw-modal{background:#1b1c1f;color:#e3e4e6}",
+  ".lw-status-rows{display:flex;flex-direction:column;gap:6px;margin:10px 0}",
+  ".lw-status-row{display:grid;grid-template-columns:38px minmax(0,1fr) 120px 30px 30px 30px;gap:6px;align-items:center}",
+  ".lw-status-row input[type=color]{width:36px;height:30px;padding:0;border:1px solid var(--lw-border);border-radius:6px;background:none}",
+  ".lw-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}",
+  "@media (max-width:900px){.lw{margin:-16px -16px 0}.lw-table-wrap,.lw-cal{padding-left:16px;padding-right:16px}.lw-head,.lw-toolbar{padding-left:16px;padding-right:16px}.lw-groups,.lw-board{padding-left:16px;padding-right:16px}}",
   "@media (max-width:700px){.lw-colhead,.lw-row{grid-template-columns:minmax(0,1fr) 76px}.lw-colhead span:nth-child(2),.lw-colhead span:nth-child(4),.lw-row>.lw-cell:nth-child(2),.lw-row>.lw-cell:nth-child(4),.lw-tag,.lw-mini{display:none}.lw-props{grid-template-columns:1fr}}"
 ].join("");
