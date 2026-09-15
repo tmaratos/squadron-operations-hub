@@ -1,5 +1,5 @@
 import { getDatabase } from "@/lib/cloudflare";
-import { parseJson, WORKSPACE_ID } from "./structure";
+import { nowIso, parseJson, WORKSPACE_ID } from "./structure";
 import type { Dashboard, DashboardWidget, ViewConfig, WidgetType } from "./types";
 
 // Dashboards are rows in D1; their cards are computed from the items in the workspace at request time.
@@ -153,4 +153,47 @@ export function renderWidget(widget: DashboardWidget, items: DashboardItem[]): W
     default:
       return { kind: "text", text: widget.config.text ?? "" };
   }
+}
+
+export interface WidgetInput {
+  type: WidgetType;
+  title: string;
+  config: DashboardWidget["config"];
+  w?: number;
+}
+
+export async function createWidget(dashboardId: string, input: WidgetInput): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = nowIso();
+  await getDatabase()
+    .prepare(
+      "INSERT INTO dashboard_widgets (id, dashboard_id, widget_type, title, config_json, grid_x, grid_y, grid_w, grid_h, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, 0, (SELECT COALESCE(MAX(grid_y), 0) + 1 FROM dashboard_widgets WHERE dashboard_id = ?), ?, 3, ?, ?)"
+    )
+    .bind(id, dashboardId, input.type, input.title.trim(), JSON.stringify(input.config ?? {}), dashboardId, input.w ?? 6, now, now)
+    .run();
+  return id;
+}
+
+export async function updateWidget(widgetId: string, input: Partial<WidgetInput>): Promise<void> {
+  const db = getDatabase();
+  const current = await db.prepare("SELECT widget_type, title, config_json, grid_w FROM dashboard_widgets WHERE id = ?").bind(widgetId)
+    .first<{ widget_type: WidgetType; title: string; config_json: string; grid_w: number }>();
+  if (!current) throw new Error("Card not found.");
+  await db.prepare("UPDATE dashboard_widgets SET widget_type = ?, title = ?, config_json = ?, grid_w = ?, updated_at = ? WHERE id = ?")
+    .bind(input.type ?? current.widget_type, input.title?.trim() || current.title, input.config ? JSON.stringify(input.config) : current.config_json, input.w ?? current.grid_w, nowIso(), widgetId)
+    .run();
+}
+
+export async function deleteWidget(widgetId: string): Promise<void> {
+  await getDatabase().prepare("DELETE FROM dashboard_widgets WHERE id = ?").bind(widgetId).run();
+}
+
+// Saves the card order: position in the array becomes grid_y, and grid_x resets so order is purely top to bottom.
+export async function reorderWidgets(dashboardId: string, widgetIds: string[]): Promise<void> {
+  const db = getDatabase();
+  const now = nowIso();
+  await db.batch(widgetIds.map((widgetId, index) =>
+    db.prepare("UPDATE dashboard_widgets SET grid_y = ?, grid_x = 0, updated_at = ? WHERE id = ? AND dashboard_id = ?").bind(index, now, widgetId, dashboardId)
+  ));
 }
