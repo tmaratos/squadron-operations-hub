@@ -545,6 +545,8 @@ function FieldRow({ field, value, people, disabled, onSave }: { field: CustomFie
 function FieldInput({ field, value, people, disabled, onSave }: { field: CustomField; value: unknown; people: Person[]; disabled: boolean; onSave: (value: unknown) => void }) {
   const text = value === null || value === undefined ? "" : typeof value === "object" ? "" : String(value);
   const many = Array.isArray(value) ? value.map((entry) => String(entry)) : [];
+  // Values imported from ClickUp are stored by option name; values saved here are stored by option id. Accept both.
+  const optionId = (raw: string) => field.options.find((option) => option.id === raw || option.name.toLowerCase() === raw.toLowerCase())?.id ?? raw;
   switch (field.type) {
     case "checkbox":
       return <input type="checkbox" checked={value === true || value === "true"} disabled={disabled} onChange={(event) => onSave(event.target.checked)} />;
@@ -552,14 +554,14 @@ function FieldInput({ field, value, people, disabled, onSave }: { field: CustomF
       return <input type="date" value={text.slice(0, 10)} disabled={disabled} onChange={(event) => onSave(event.target.value || null)} />;
     case "dropdown":
       return (
-        <select value={text} disabled={disabled} onChange={(event) => onSave(event.target.value || null)}>
+        <select value={text ? optionId(text) : ""} disabled={disabled} onChange={(event) => onSave(event.target.value || null)}>
           <option value="">—</option>
           {field.options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
         </select>
       );
     case "labels":
       return (
-        <select multiple className="lw-multi" value={many} disabled={disabled} onChange={(event) => onSave(Array.from(event.target.selectedOptions).map((option) => option.value))}>
+        <select multiple className="lw-multi" value={many.map(optionId)} disabled={disabled} onChange={(event) => onSave(Array.from(event.target.selectedOptions).map((option) => option.value))}>
           {field.options.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
         </select>
       );
