@@ -15,6 +15,8 @@ interface CloudflareEnv {
   // Cloudflare Workers AI binding (declared in wrangler.jsonc).
   AI?: { run: (model: string, input: Record<string, unknown>) => Promise<unknown> };
   WORKERS_AI_MODEL?: string;
+  // "true" lets the Hub use Cloudflare Workers AI, which is only free up to a daily allowance.
+  AI_ALLOW_CLOUDFLARE?: string;
   // Optional: the squadron's own Ollama server, reached through the Cloudflare Tunnel.
   LOCAL_AI_URL?: string;
   LOCAL_AI_MODEL?: string;
