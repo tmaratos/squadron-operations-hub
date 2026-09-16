@@ -70,22 +70,6 @@ function ItemRows({ items, total, empty }: { items: DashboardItem[]; total: numb
   );
 }
 
-function Bars({ rows, color, empty }: { rows: Array<{ label: string; value: number; color?: string | null }>; color?: string; empty: string }) {
-  if (rows.length === 0) return <div className="cd-empty">{empty}</div>;
-  const max = Math.max(1, ...rows.map((row) => row.value));
-  return (
-    <div className="cd-bars">
-      {rows.map((row) => (
-        <div key={row.label} className="cd-bar" title={row.label + ": " + row.value}>
-          <span className="cd-bar-label">{row.label}</span>
-          <span className="cd-bar-track"><span className="cd-bar-fill" style={{ width: Math.max(2, (row.value / max) * 100) + "%", background: row.color ?? color ?? "var(--cd-accent)" }} /></span>
-          <span className="cd-bar-value">{row.value}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function StatusStack({ rows }: { rows: Array<{ label: string; value: number; color?: string | null }> }) {
   const total = rows.reduce((sum, row) => sum + row.value, 0);
   if (!total) return <div className="cd-empty">No open work.</div>;
@@ -132,8 +116,6 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
   const counts = rendered.filter((entry) => entry.widget.type === "count");
   const lists = rendered.filter((entry) => entry.widget.type === "item_list");
   const statusWidget = rendered.find((entry) => entry.widget.type === "status_breakdown");
-  const peopleWidget = rendered.find((entry) => entry.widget.type === "assignee_workload");
-  const tagWidget = rendered.find((entry) => entry.widget.type === "tag_breakdown");
   const others = rendered.filter((entry) => entry.widget.type === "text");
 
   const strip = Array.from({ length: 14 }, (_, index) => {
