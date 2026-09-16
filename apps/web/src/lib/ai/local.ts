@@ -7,6 +7,8 @@ import { getCloudflareEnv } from "@/lib/cloudflare";
 const DEFAULT_MODEL = "qwen3:1.7b";
 
 interface LocalAiEnv {
+  // Preferred: a private VPC Service binding that reaches Ollama through the hp-server tunnel. No keys, never public.
+  SQUADRON_AI?: { fetch: (input: string | Request, init?: RequestInit) => Promise<Response> };
   LOCAL_AI_URL?: string;
   LOCAL_AI_MODEL?: string;
   LOCAL_AI_ACCESS_CLIENT_ID?: string;
@@ -25,6 +27,7 @@ function env(): LocalAiEnv {
 
 export function isLocalAiConfigured(): boolean {
   const values = env();
+  if (values.SQUADRON_AI) return true;
   return Boolean(values.LOCAL_AI_URL && values.LOCAL_AI_ACCESS_CLIENT_ID && values.LOCAL_AI_ACCESS_CLIENT_SECRET);
 }
 
@@ -40,15 +43,19 @@ function withNoThink(messages: ChatMessage[]): ChatMessage[] {
 
 export async function localChat(messages: ChatMessage[], options: { json?: boolean; maxTokens?: number } = {}): Promise<string> {
   const values = env();
-  if (!values.LOCAL_AI_URL || !values.LOCAL_AI_ACCESS_CLIENT_ID || !values.LOCAL_AI_ACCESS_CLIENT_SECRET) throw new LocalAiNotConfiguredError();
+  const usingBinding = Boolean(values.SQUADRON_AI);
+  if (!usingBinding && (!values.LOCAL_AI_URL || !values.LOCAL_AI_ACCESS_CLIENT_ID || !values.LOCAL_AI_ACCESS_CLIENT_SECRET)) throw new LocalAiNotConfiguredError();
 
-  const response = await fetch(values.LOCAL_AI_URL.replace(/\/+$/, "") + "/api/chat", {
+  const url = usingBinding ? "http://squadron-ai/api/chat" : values.LOCAL_AI_URL!.replace(/\/+$/, "") + "/api/chat";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (!usingBinding) {
+    headers["CF-Access-Client-Id"] = values.LOCAL_AI_ACCESS_CLIENT_ID!;
+    headers["CF-Access-Client-Secret"] = values.LOCAL_AI_ACCESS_CLIENT_SECRET!;
+  }
+
+  const request = {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "CF-Access-Client-Id": values.LOCAL_AI_ACCESS_CLIENT_ID,
-      "CF-Access-Client-Secret": values.LOCAL_AI_ACCESS_CLIENT_SECRET
-    },
+    headers,
     body: JSON.stringify({
       model: values.LOCAL_AI_MODEL || DEFAULT_MODEL,
       messages: withNoThink(messages),
@@ -59,7 +66,9 @@ export async function localChat(messages: ChatMessage[], options: { json?: boole
       options: { temperature: 0.2, num_predict: options.maxTokens ?? 300, num_ctx: 4096 }
     }),
     signal: AbortSignal.timeout(90000)
-  });
+  };
+
+  const response = usingBinding && values.SQUADRON_AI ? await values.SQUADRON_AI.fetch(url, request) : await fetch(url, request);
   if (!response.ok) throw new Error("Squadron AI answered with an error (" + response.status + "). Try again in a minute.");
   const data = (await response.json()) as { message?: { content?: string } };
   return (data.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
