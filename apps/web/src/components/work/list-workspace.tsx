@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
 
-type Person = { id: string; fullName: string };
+type Person = { id: string; fullName: string; pending?: boolean };
 type Mode = "list" | "board" | "table" | "calendar";
 
 const MODE_LABELS: Record<Mode, string> = { list: "☰ List", board: "▦ Board", table: "▤ Table", calendar: "▣ Calendar" };
@@ -1274,7 +1274,7 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                       + Add
                       <select className="tp-overlay-select" value="" onChange={(event) => { if (event.target.value) save({ assigneeIds: [...item.assignees.map((entry) => entry.id), event.target.value] }); }} aria-label="Add assignee">
                         <option value="">Add assignee</option>
-                        {unassigned.map((person) => <option key={person.id} value={person.id}>{person.fullName}</option>)}
+                        {unassigned.map((person) => <option key={person.id} value={person.id}>{person.fullName}{person.pending ? " (not signed in yet)" : ""}</option>)}
                       </select>
                     </span>
                   ) : null}
