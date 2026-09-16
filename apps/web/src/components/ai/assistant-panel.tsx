@@ -123,7 +123,7 @@ export function AssistantPanel() {
   return (
     <>
       <style>{apCss}</style>
-      <button type="button" className="ap-open" onClick={() => setOpen(true)} aria-label="Ask the Hub to do something">✨ Ask</button>
+      <button type="button" className="ap-open" onClick={() => setOpen(true)} aria-label="Ask the Hub to do something"><span aria-hidden="true">✨</span><span className="ap-open-text">Ask</span></button>
       {open ? (
         <div className="ap-overlay" onMouseDown={() => setOpen(false)}>
           <aside className="ap" onMouseDown={(event) => event.stopPropagation()} aria-label="Ask the Hub">
@@ -256,5 +256,16 @@ const apCss = [
   ".ap-primary{border:0;background:#7b68ee;color:#fff;font:inherit;font-size:14px;font-weight:600;padding:10px 18px;border-radius:8px;cursor:pointer}",
   ".ap-primary:disabled{opacity:.5;cursor:default}",
   ".ap-ghost{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:14px;padding:9px 16px;border-radius:8px;cursor:pointer}",
-  "@media (max-width:760px){.ap-body{grid-template-columns:minmax(0,1fr)}.ap-side{display:none}.ap-open span{display:none}}"
+  "@media (max-width:760px){",
+  ".ap-body{grid-template-columns:minmax(0,1fr)}",
+  ".ap-side{display:none}",
+  ".ap-open{flex:0 0 auto;width:36px;height:34px;padding:0;justify-content:center;font-size:15px}",
+  ".ap-open-text{display:none}",
+  ".ap{width:100%}",
+  ".ap-msg{max-width:92%}",
+  ".ap-compose{padding:10px 12px calc(12px + env(safe-area-inset-bottom))}",
+  ".ap-compose textarea{font-size:16px}",
+  ".ap-plan{margin:0 12px}",
+  ".ap-feed{padding:12px}",
+  "}"
 ].join("");
