@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { applyPlan, buildPlan, describeStep, planSchema } from "@/lib/ai/agent";
-import { aiSource, AiUnavailableError } from "@/lib/ai/provider";
+import { AiUnavailableError, sourceForUser } from "@/lib/ai/provider";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
@@ -15,8 +15,7 @@ const requestSchema = z.discriminatedUnion("action", [
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
-  const source = aiSource();
-  return NextResponse.json({ available: source !== "none", source });
+  return NextResponse.json(await sourceForUser(user.id));
 }
 
 export async function POST(request: Request) {
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
     const input = requestSchema.parse(await request.json());
 
     if (input.action === "plan") {
-      const plan = await buildPlan(input.prompt);
+      const plan = await buildPlan(input.prompt, user.id);
       return NextResponse.json({ reply: plan.reply, steps: plan.steps, descriptions: plan.steps.map(describeStep) });
     }
 
