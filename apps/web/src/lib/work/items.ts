@@ -287,7 +287,10 @@ export async function setChecklistEntryDone(entryId: string, done: boolean): Pro
   await getDatabase().prepare("UPDATE item_checklist_entries SET done = ? WHERE id = ?").bind(done ? 1 : 0, entryId).run();
 }
 
-export async function listAssignableUsers(): Promise<Array<{ id: string; fullName: string }>> {
-  const result = await getDatabase().prepare("SELECT id, full_name FROM users WHERE suspended_at IS NULL ORDER BY full_name COLLATE NOCASE").all<{ id: string; full_name: string }>();
-  return result.results.map((user) => ({ id: user.id, fullName: user.full_name }));
+// Everyone who can be given work, including members an administrator added who have not signed in yet.
+export async function listAssignableUsers(): Promise<Array<{ id: string; fullName: string; pending: boolean }>> {
+  const result = await getDatabase()
+    .prepare("SELECT id, full_name, status FROM users WHERE suspended_at IS NULL AND status IN ('APPROVED', 'PENDING') ORDER BY full_name COLLATE NOCASE")
+    .all<{ id: string; full_name: string; status: string }>();
+  return result.results.map((user) => ({ id: user.id, fullName: user.full_name, pending: user.status === "PENDING" }));
 }
