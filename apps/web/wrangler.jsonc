@@ -8,9 +8,6 @@
     "directory": ".open-next/assets",
     "binding": "ASSETS"
   },
-  "ai": {
-    "binding": "AI"
-  },
   "observability": {
     "enabled": true
   },
@@ -28,7 +25,6 @@
     "SESSION_TTL_HOURS": "12",
     "GOOGLE_REDIRECT_URI": "https://tn170adminhub.tristanmaratos.com/api/auth/google/callback",
     "GOOGLE_SHARED_DRIVE_ID": "0ALYSj1KARR19Uk9PVA",
-    "GOOGLE_DRIVE_MAX_UPLOAD_MB": "10",
-    "AI_ALLOW_CLOUDFLARE": "false"
+    "GOOGLE_DRIVE_MAX_UPLOAD_MB": "10"
   }
 }
