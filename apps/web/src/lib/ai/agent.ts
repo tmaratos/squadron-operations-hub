@@ -4,7 +4,7 @@ import { createWidget, listDashboards } from "@/lib/work/dashboards";
 import { createItem, updateItem } from "@/lib/work/items";
 import { createList, getWorkspaceTree } from "@/lib/work/structure";
 import { parseJsonReply } from "./local";
-import { aiChat } from "./provider";
+import { aiChatFor } from "./provider";
 
 // The Hub assistant proposes work in plain English and only acts after a member approves the plan.
 // Every step maps to an ordinary Hub action, so the assistant can never do more than a member could do by hand.
@@ -50,7 +50,7 @@ async function workspaceContext() {
   return { spaces, lists, tags: tags.map((tag) => tag.label), dashboards };
 }
 
-export async function buildPlan(prompt: string): Promise<PlanResult> {
+export async function buildPlan(prompt: string, userId: string): Promise<PlanResult> {
   const context = await workspaceContext();
   const system = [
     "You help a Civil Air Patrol squadron run their work tracker. Turn the member's request into a short plan of actions.",
@@ -65,7 +65,7 @@ export async function buildPlan(prompt: string): Promise<PlanResult> {
     "Tags: " + context.tags.slice(0, 60).join(", ")
   ].join("\n");
 
-  const raw = await aiChat([
+  const raw = await aiChatFor(userId, [
     { role: "system", content: system },
     { role: "user", content: prompt }
   ], { json: true, maxTokens: 700 });
