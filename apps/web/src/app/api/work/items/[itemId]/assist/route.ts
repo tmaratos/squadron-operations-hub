@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { isLocalAiConfigured, localChat, LocalAiNotConfiguredError, parseJsonReply } from "@/lib/ai/local";
+import { parseJsonReply } from "@/lib/ai/local";
+import { aiChat, aiSource, AiUnavailableError } from "@/lib/ai/provider";
 import { getCurrentUser } from "@/lib/auth/session";
 import { listTaskTags } from "@/lib/operations/tasks";
 import { assertSameOrigin } from "@/lib/security/origin";
@@ -17,7 +18,8 @@ function clip(value: string | null | undefined, max: number): string {
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
-  return NextResponse.json({ available: isLocalAiConfigured() });
+  const source = aiSource();
+  return NextResponse.json({ available: source !== "none", source });
 }
 
 export async function POST(request: Request, { params }: { params: Promise<{ itemId: string }> }) {
@@ -33,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ite
     const task = "Task title: " + item.title + "\n\nTask details:\n" + (clip(item.description, 3500) || "(no details)");
 
     if (action === "summarize") {
-      const summary = await localChat([
+      const summary = await aiChat([
         { role: "system", content: "You summarize Civil Air Patrol squadron tasks for busy volunteers. Write 2 or 3 short sentences in plain English: what the task is, what is still open, and any date. No preamble, no lists." },
         { role: "user", content: task }
       ], { maxTokens: 160 });
@@ -42,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ite
 
     if (action === "tags") {
       const allowed = (await listTaskTags()).map((tag) => tag.label.toLowerCase());
-      const reply = await localChat([
+      const reply = await aiChat([
         { role: "system", content: "Choose up to 4 tags that fit the task, using ONLY tags from the allowed list. Reply with JSON only, like {\"tags\": [\"tag one\", \"tag two\"]}." },
         { role: "user", content: "Allowed tags: " + allowed.join(", ") + "\n\n" + task }
       ], { json: true, maxTokens: 80 });
@@ -55,7 +57,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ite
       return NextResponse.json({ tags: suggestions });
     }
 
-    const reply = await localChat([
+    const reply = await aiChat([
       { role: "system", content: "Break the task into 3 to 6 short, concrete next steps a volunteer could do. Each step under 12 words, starting with a verb. Reply with JSON only, like {\"subtasks\": [\"Call the facility manager\", \"Email the finance committee\"]}." },
       { role: "user", content: task + (item.children.length ? "\n\nExisting subtasks (do not repeat): " + item.children.map((child) => child.title).join("; ") : "") }
     ], { json: true, maxTokens: 220 });
@@ -68,7 +70,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ite
     return NextResponse.json({ subtasks });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ message: "That request was invalid." }, { status: 400 });
-    if (error instanceof LocalAiNotConfiguredError) return NextResponse.json({ message: error.message }, { status: 503 });
+    if (error instanceof AiUnavailableError) return NextResponse.json({ message: error.message }, { status: 503 });
     console.error(error);
     return NextResponse.json({ message: error instanceof Error && /timed out|abort/i.test(error.message) ? "Squadron AI took too long to answer. Try again in a minute." : "Squadron AI couldn't answer right now. Try again in a minute." }, { status: 502 });
   }
