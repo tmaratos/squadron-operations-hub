@@ -12,4 +12,12 @@ interface CloudflareEnv {
   GOOGLE_TOKEN_ENCRYPTION_KEY?: string;
   GOOGLE_ROOT_FOLDER_ID?: string;
   GOOGLE_DRIVE_MAX_UPLOAD_MB?: string;
+  // Cloudflare Workers AI binding (declared in wrangler.jsonc).
+  AI?: { run: (model: string, input: Record<string, unknown>) => Promise<unknown> };
+  WORKERS_AI_MODEL?: string;
+  // Optional: the squadron's own Ollama server, reached through the Cloudflare Tunnel.
+  LOCAL_AI_URL?: string;
+  LOCAL_AI_MODEL?: string;
+  LOCAL_AI_ACCESS_CLIENT_ID?: string;
+  LOCAL_AI_ACCESS_CLIENT_SECRET?: string;
 }
