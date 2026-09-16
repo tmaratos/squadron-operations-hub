@@ -11,6 +11,13 @@
   "observability": {
     "enabled": true
   },
+  // Private link to the squadron AI server (Ollama on hp-server) through the hp-server Cloudflare Tunnel.
+  "vpc_services": [
+    {
+      "binding": "SQUADRON_AI",
+      "service_id": "01a0a81c-0b70-7c91-b79a-eedf0c537649"
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
