@@ -4,6 +4,7 @@ import Link from "next/link";
 import { DashboardEditor } from "@/components/work/dashboard-editor";
 import { requireUser } from "@/lib/auth/session";
 import { getDashboard, listDashboards, loadDashboardItems, renderWidget, type DashboardItem, type WidgetResult } from "@/lib/work/dashboards";
+import { listDuties, outlook } from "@/lib/work/duties";
 import type { DashboardWidget } from "@/lib/work/types";
 
 export const dynamic = "force-dynamic";
@@ -151,6 +152,27 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
   });
   const listRows = Array.from(byList.values()).sort((a, b) => b.open - a.open);
   const listMax = Math.max(1, ...listRows.map((row) => row.open));
+
+  // What each role owes and when, from the duty catalog. Nothing here is guessed: every duty carries its source.
+  const duties = await listDuties();
+  const dutyOutlook = await outlook(5);
+  const roleMap = new Map<string, { role: string; count: number; unverified: number }>();
+  duties.forEach((duty) => {
+    const entry = roleMap.get(duty.role) ?? { role: duty.role, count: 0, unverified: 0 };
+    entry.count += 1;
+    if (duty.confidence === "UNVERIFIED") entry.unverified += 1;
+    roleMap.set(duty.role, entry);
+  });
+  const roleRows = Array.from(roleMap.values()).sort((a, b) => b.count - a.count);
+  const roleMax = Math.max(1, ...roleRows.map((row) => row.count));
+  const yearMap = new Map<string, number>();
+  dutyOutlook.forEach((entry) => {
+    const year = entry.dueOn.slice(0, 4);
+    yearMap.set(year, (yearMap.get(year) ?? 0) + 1);
+  });
+  const yearRows = Array.from(yearMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  const yearMax = Math.max(1, ...yearRows.map((row) => row[1]));
+  const next90 = open.filter((item) => item.dueOn && item.dueOn >= today && item.dueOn <= isoDay(90)).length;
   const allLists = Array.from(new Map(items.map((item) => [item.listId, item.listName] as const)).entries()).map(([listId, name]) => ({ id: listId, name })).sort((a, b) => a.name.localeCompare(b.name));
   const allTags = Array.from(new Set(items.flatMap((item) => item.tags))).sort();
   const allStatuses = Array.from(new Set(items.map((item) => item.statusName).filter((name): name is string => Boolean(name)))).sort();
@@ -217,7 +239,7 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
           <section className="cd-card cd-strip-card">
             <div className="cd-card-head">
               <h2>Next 14 days</h2>
-              <span className="cd-muted">{strip.reduce((sum, entry) => sum + entry.count, 0)} due · {undated} without a date</span>
+              <span className="cd-muted">{strip.reduce((sum, entry) => sum + entry.count, 0)} due · {next90} in 90 days · {undated} without a date</span>
             </div>
             <div className="cd-strip">
               {strip.map((entry, index) => {
@@ -267,24 +289,53 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
                 ))}
               </div>
             </article>
-            {peopleWidget ? (
-              <article className="cd-card">
-                <div className="cd-card-head"><h2>{peopleWidget.widget.title}</h2></div>
-                <Bars rows={breakdownRows(peopleWidget.result)} empty="Nobody assigned yet." />
-              </article>
-            ) : null}
           </section>
 
-          {tagWidget ? (
-            <section className="cd-card">
-              <div className="cd-card-head"><h2>{tagWidget.widget.title}</h2><span className="cd-muted">open tasks per tag</span></div>
-              <div className="cd-tags">
-                {breakdownRows(tagWidget.result).map((row) => (
-                  <span key={row.label} className="cd-tag"><span>{row.label}</span><strong>{row.value}</strong></span>
-                ))}
+          <section className="cd-two">
+            <article className="cd-card">
+              <div className="cd-card-head">
+                <h2>Duties by role</h2>
+                <Link className="cd-link" href="/duties">Manage duties</Link>
               </div>
-            </section>
-          ) : null}
+              {roleRows.length === 0 ? (
+                <div className="cd-blank">
+                  <p><strong>No duties recorded yet.</strong></p>
+                  <p>This is where each role&rsquo;s recurring obligations live, with the regulation or squadron document each one comes from.</p>
+                  <p>Add them on the Duties page, or have the assistant read a regulation and propose them for your approval.</p>
+                </div>
+              ) : (
+                <div className="cd-bars">
+                  {roleRows.map((row) => (
+                    <Link key={row.role} href="/duties" className="cd-bar cd-bar--link" title={row.role + ": " + row.count + " duties"}>
+                      <span className="cd-bar-label">{row.role}</span>
+                      <span className="cd-bar-track"><span className="cd-bar-fill" style={{ width: Math.max(2, (row.count / roleMax) * 100) + "%" }} /></span>
+                      <span className="cd-bar-value">{row.count}{row.unverified ? <em className="cd-unverified"> · {row.unverified} to confirm</em> : null}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </article>
+
+            <article className="cd-card">
+              <div className="cd-card-head">
+                <h2>Next five years</h2>
+                <span className="cd-muted">{dutyOutlook.length} dated obligations</span>
+              </div>
+              {yearRows.length === 0 ? (
+                <div className="cd-blank"><p>Once duties are recorded, every year ahead is worked out from their schedules and shown here.</p></div>
+              ) : (
+                <div className="cd-years">
+                  {yearRows.map(([year, count]) => (
+                    <div key={year} className="cd-year">
+                      <span className="cd-year-label">{year}</span>
+                      <span className="cd-bar-track"><span className="cd-bar-fill" style={{ width: Math.max(3, (count / yearMax) * 100) + "%" }} /></span>
+                      <span className="cd-bar-value">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </article>
+          </section>
 
           {others.map(({ widget, result }) => (
             <section key={widget.id} className="cd-card">
@@ -314,6 +365,12 @@ const cdCss = [
   ".cd-switch{display:flex;gap:4px;padding:3px;border-radius:8px;background:rgba(255,255,255,.12)}",
   ".cd-switch a{padding:4px 10px;border-radius:6px;color:#fff;text-decoration:none;font-size:12px;opacity:.8}.cd-switch a.is-active{background:#fff;color:#1f3a78;opacity:1;font-weight:600}",
   ".cd-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}",
+  ".cd-link{font-size:12px;color:#7b68ee;text-decoration:none}.cd-link:hover{text-decoration:underline}",
+  ".cd-blank{display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.55;color:var(--cd-muted)}.cd-blank strong{color:inherit}",
+  ".cd-unverified{font-style:normal;color:var(--cd-muted)}",
+  ".cd-years{display:flex;flex-direction:column;gap:9px}",
+  ".cd-year{display:grid;grid-template-columns:52px minmax(0,1fr) 34px;gap:10px;align-items:center;font-size:13px}",
+  ".cd-year-label{font-weight:600;font-variant-numeric:tabular-nums}",
   ".cd-kpi{position:relative;padding:14px 16px 12px;border-radius:12px;background:var(--cd-card);border:1px solid var(--cd-border);overflow:hidden;transition:transform .15s ease,box-shadow .15s ease}",
   ".cd-kpi:before{content:'';position:absolute;inset:0 0 auto 0;height:3px;background:var(--tone)}",
   ".cd-kpi:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.12)}",
@@ -377,5 +434,16 @@ const cdCss = [
   ".cd-tag{display:inline-flex;align-items:center;gap:8px;padding:5px 6px 5px 11px;border-radius:999px;border:1px solid var(--cd-border);font-size:12px}",
   ".cd-tag strong{min-width:22px;text-align:center;padding:1px 6px;border-radius:999px;background:color-mix(in srgb,var(--cd-accent) 16%,transparent);color:var(--cd-accent);font-variant-numeric:tabular-nums}",
   "@media (max-width:1100px){.cd-three{grid-template-columns:repeat(2,minmax(0,1fr))}}",
-  "@media (max-width:760px){.cd-two,.cd-three{grid-template-columns:minmax(0,1fr)}.cd-hero{padding:18px}.cd-hero h1{font-size:21px}.cd-hero-side{align-items:flex-start}.cd-strip{grid-template-columns:repeat(7,minmax(0,1fr))}.cd-strip-day:nth-child(n+8){display:none}.cd-chip{display:none}}"
+  "@media (max-width:760px){.cd-two,.cd-three{grid-template-columns:minmax(0,1fr)}.cd-hero{padding:18px}.cd-hero h1{font-size:21px}.cd-hero-side{align-items:flex-start}.cd-strip{grid-template-columns:repeat(7,minmax(0,1fr))}.cd-strip-day:nth-child(n+8){display:none}.cd-chip{display:none}}",
+  "@media (max-width:600px){",
+  ".cd-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}",
+  ".cd-kpi{padding:12px}",
+  ".cd-kpi-value{font-size:30px;margin:6px 0 8px}",
+  ".cd-kpi-label{font-size:12px}",
+  ".cd-kpi-foot{font-size:10px}",
+  ".cd-hero h1{font-size:19px}",
+  ".cd-summary{font-size:13px}",
+  ".cd-bar{grid-template-columns:minmax(0,92px) minmax(0,1fr) auto}",
+  ".cd-item-list{display:none}",
+  "}"
 ].join("");
