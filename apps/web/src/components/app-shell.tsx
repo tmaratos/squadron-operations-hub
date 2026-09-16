@@ -28,6 +28,7 @@ import {
   X
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { CommandPalette } from "@/components/command-palette";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
@@ -191,6 +192,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
           ) : null}
         </div>
         <CommandPalette lists={spaceTree.flatMap((space) => [...space.lists, ...space.folders.flatMap((folder) => folder.lists)]).map((list) => ({ id: list.id, name: list.name, openItems: list.openItems }))} />
+        <AssistantPanel />
         <div className="cu-top-actions">
           <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
