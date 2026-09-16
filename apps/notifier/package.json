@@ -1,0 +1,11 @@
+{
+  "name": "@squadron/notifier",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.42.0"
+  }
+}

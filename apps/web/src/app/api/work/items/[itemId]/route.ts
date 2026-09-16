@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
+import { notifyAssigned, notifyComment, notifyStatus } from "@/lib/notify/events";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { runAutomations, type AutomationEvent } from "@/lib/work/automations";
 import { addChecklist, addChecklistEntry, addComment, archiveItem, getItemDetail, setChecklistEntryDone, updateItem } from "@/lib/work/items";
@@ -66,8 +67,20 @@ export async function PATCH(request: Request, { params }: Params) {
       const previousTags = new Set(before.tags.map((tag) => tag.label));
       const addedTags = after.tags.map((tag) => tag.label).filter((label) => !previousTags.has(label));
       if (addedTags.length) events.push({ type: "tag_added", tags: addedTags });
-      if (after.assignees.some((person) => !before.assignees.some((previous) => previous.id === person.id))) events.push({ type: "assignee_added" });
+      const newlyAssigned = after.assignees.filter((person) => !before.assignees.some((previous) => previous.id === person.id));
+      if (newlyAssigned.length) events.push({ type: "assignee_added" });
       if (events.length) await runAutomations({ itemId, listId: after.listId, events, userId: user.id });
+
+      // Tell the people who need to know. A failure here must never cost the member their save.
+      const actor = { id: user.id, fullName: user.fullName };
+      try {
+        await notifyAssigned({ item: after, addedUserIds: newlyAssigned.map((person) => person.id), actor });
+        if (comment) await notifyComment({ item: after, comment, actor });
+        const statusEvent = events.find((event) => event.type === "status_changed");
+        if (statusEvent && statusEvent.type === "status_changed") await notifyStatus({ item: after, statusName: statusEvent.statusName, actor });
+      } catch (notifyError) {
+        console.error(notifyError);
+      }
     }
 
     const changed = Object.keys(changes);

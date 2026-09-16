@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Bell,
   CalendarDays,
   Check,
   ChevronDown,
@@ -30,6 +29,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { CommandPalette } from "@/components/command-palette";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import type { SpaceNode } from "@/lib/work/types";
@@ -197,7 +197,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
           <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
-          <Link href="/notifications" aria-label="Notifications"><Bell size={16} /></Link>
+          <NotificationBell />
           <span className="cu-avatar" title={user.fullName}>{initials(user.fullName)}</span>
         </div>
       </header>
