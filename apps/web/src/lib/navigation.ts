@@ -48,6 +48,7 @@ export const navigationGroups: NavigationGroup[] = [
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
       { label: "Meetings", href: "/meetings", icon: NotebookTabs },
       { label: "Reports", href: "/reports", icon: FileBarChart },
+      { label: "Duties by role", href: "/duties", icon: ClipboardCheck },
       { label: "Inspections", href: "/inspections", icon: ShieldCheck },
       { label: "Readiness", href: "/readiness", icon: Gauge }
     ]
