@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { PeoplePicker } from "./people-picker";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
 
 type Person = { id: string; fullName: string; pending?: boolean };
@@ -1137,6 +1138,7 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [tagDraft, setTagDraft] = useState("");
+  const [pickingPerson, setPickingPerson] = useState(false);
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -1203,7 +1205,6 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
   };
   const today = new Date().toISOString().slice(0, 10);
   const late = Boolean(item.dueOn && item.dueOn < today && !isDone);
-  const unassigned = people.filter((person) => !item.assignees.some((assignee) => assignee.id === person.id));
   const childDone = item.children.filter((child) => closedCategory(child.statusId)).length;
   const priorityLabel = item.priority ? item.priority[0] + item.priority.slice(1).toLowerCase() : "Empty";
 
@@ -1269,16 +1270,19 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                       {canEdit ? <button className="tp-x" onClick={() => save({ assigneeIds: item.assignees.filter((entry) => entry.id !== person.id).map((entry) => entry.id) })} aria-label={"Remove " + person.fullName}>×</button> : null}
                     </span>
                   ))}
-                  {canEdit && unassigned.length ? (
-                    <span className="tp-add">
-                      + Add
-                      <select className="tp-overlay-select" value="" onChange={(event) => { if (event.target.value) save({ assigneeIds: [...item.assignees.map((entry) => entry.id), event.target.value] }); }} aria-label="Add assignee">
-                        <option value="">Add assignee</option>
-                        {unassigned.map((person) => <option key={person.id} value={person.id}>{person.fullName}{person.pending ? " (not signed in yet)" : ""}</option>)}
-                      </select>
+                  {canEdit ? (
+                    <span className="tp-add-wrap">
+                      <button type="button" className="tp-add" onClick={() => setPickingPerson(true)}>+ Add</button>
+                      {pickingPerson ? (
+                        <PeoplePicker
+                          excludeUserIds={item.assignees.map((entry) => entry.id)}
+                          onClose={() => setPickingPerson(false)}
+                          onPick={(person) => save({ assigneeIds: [...item.assignees.map((entry) => entry.id), person.userId] })}
+                        />
+                      ) : null}
                     </span>
                   ) : null}
-                  {!item.assignees.length && !(canEdit && unassigned.length) ? <span className="tp-empty">Empty</span> : null}
+                  {!item.assignees.length && !canEdit ? <span className="tp-empty">Empty</span> : null}
                 </span>
               </div>
 
@@ -1483,7 +1487,8 @@ const tpCss = [
   ".tp-person{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px 0 3px;border-radius:14px;background:var(--tp-hover);font-size:12px}",
   ".tp-person .lw-avatar{border:0}",
   ".tp-x{border:0;background:none;color:var(--tp-muted);cursor:pointer;font-size:15px;line-height:1;padding:0 4px;border-radius:4px}.tp-x:hover{color:#e5484d}",
-  ".tp-add{position:relative;display:inline-flex;align-items:center;height:28px;padding:0 12px;border:1px dashed var(--tp-border);border-radius:14px;color:var(--tp-muted);font-size:12px;cursor:pointer}.tp-add:hover{color:#7b68ee;border-color:#7b68ee}",
+  ".tp-add-wrap{position:relative;display:inline-flex}",
+  ".tp-add{position:relative;background:none;font:inherit;display:inline-flex;align-items:center;height:28px;padding:0 12px;border:1px dashed var(--tp-border);border-radius:14px;color:var(--tp-muted);font-size:12px;cursor:pointer}.tp-add:hover{color:#7b68ee;border-color:#7b68ee}",
   ".tp-empty{color:var(--tp-muted);font-size:13px}.tp-pad{margin:0;padding:10px 12px}",
   ".tp-date{display:inline-flex;align-items:center;gap:4px;height:30px;padding:0 4px 0 10px;border-radius:6px;background:var(--tp-hover);font-size:11px;color:var(--tp-muted);text-transform:uppercase;letter-spacing:.03em}",
   ".tp-date input{border:0;outline:0;background:transparent;color:var(--cu-text,#292d34);font:inherit;font-size:13px;letter-spacing:0;text-transform:none;padding:0 4px;box-shadow:none;height:26px}",
