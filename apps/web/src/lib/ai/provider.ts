@@ -3,9 +3,11 @@ import { getDatabase } from "@/lib/cloudflare";
 import { isLocalAiConfigured, localChat, type ChatMessage } from "./local";
 import { isVendorProvider, vendorChat } from "./vendors";
 
-// Where the Hub's intelligence comes from, in order of preference:
-// 1. Cloudflare Workers AI - runs on the same platform as the Hub, nothing for the squadron to set up.
-// 2. The squadron's own Ollama server - private but slow; used when Workers AI is not bound.
+// Where the Hub's intelligence comes from:
+// 1. The squadron's own Ollama server - always free and private. This is the default.
+// 2. Cloudflare Workers AI - faster and smarter, but only free up to a daily allowance, so it stays OFF
+//    until an administrator sets AI_ALLOW_CLOUDFLARE to "true". It can then cost money past that allowance.
+// 3. A member's own AI account (Claude, ChatGPT, Gemini and so on) - see aiChatFor; they pay for their own use.
 const DEFAULT_WORKERS_MODEL = "@cf/meta/llama-3.1-8b-instruct-fast";
 
 export type AiSource = "cloudflare" | "squadron-server" | "none";
@@ -13,6 +15,11 @@ export type AiSource = "cloudflare" | "squadron-server" | "none";
 interface AiEnv {
   AI?: { run: (model: string, input: Record<string, unknown>) => Promise<unknown> };
   WORKERS_AI_MODEL?: string;
+  AI_ALLOW_CLOUDFLARE?: string;
+}
+
+function cloudflareAllowed(env: AiEnv): boolean {
+  return Boolean(env.AI) && env.AI_ALLOW_CLOUDFLARE === "true";
 }
 
 export class AiUnavailableError extends Error {
@@ -23,8 +30,8 @@ export class AiUnavailableError extends Error {
 
 export function aiSource(): AiSource {
   const env = getCloudflareEnv() as unknown as AiEnv;
-  if (env.AI) return "cloudflare";
   if (isLocalAiConfigured()) return "squadron-server";
+  if (cloudflareAllowed(env)) return "cloudflare";
   return "none";
 }
 
@@ -49,6 +56,7 @@ export async function aiChatFor(userId: string, messages: ChatMessage[], options
   const choice = await preferredProvider(userId);
   if (choice && isVendorProvider(choice)) return vendorChat(choice, userId, messages, options);
   if (choice === "squadron-server" && isLocalAiConfigured()) return localChat(messages, options);
+  if (choice === "cloudflare") return aiChat(messages, options);
   return aiChat(messages, options);
 }
 
@@ -58,7 +66,7 @@ export async function aiChat(messages: ChatMessage[], options: { json?: boolean;
   if (source === "none") throw new AiUnavailableError();
 
   const env = getCloudflareEnv() as unknown as AiEnv;
-  if (!env.AI) throw new AiUnavailableError();
+  if (!cloudflareAllowed(env) || !env.AI) throw new AiUnavailableError();
   const result = (await env.AI.run(env.WORKERS_AI_MODEL || DEFAULT_WORKERS_MODEL, {
     messages,
     max_tokens: options.maxTokens ?? 300,
