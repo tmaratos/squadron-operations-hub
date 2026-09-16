@@ -785,3 +785,51 @@ html[data-theme="dark"] .announcement-list article, html[data-theme="dark"] .qui
 html[data-theme="dark"] .home-quick-actions a { background: #13243a; border-color: #283d59; color: #dce6f4; }
 html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="dark"] textarea { background: #0b1727; border-color: #2a3f5b; color: #f6f8fc; }
 
+
+
+/* ---------------------------------------------------------------
+   PHONE LAYOUT FIXES
+   The original home page was laid out for a desktop window: card headers
+   had fixed heights, the hero was pinned to 505px, and body text sat at
+   9-11px. On a phone that clipped headings and buried the content.
+   These rules only apply at phone widths.
+   --------------------------------------------------------------- */
+@media (max-width: 760px) {
+  .welcome-hero { min-height: 0; }
+  .welcome-hero__content { padding: 18px 16px; }
+  .welcome-hero h1 { font-size: 21px; }
+  .welcome-hero h1 span { font-size: 19px; }
+  .welcome-hero p { margin: 8px 0 14px; font-size: 13px; line-height: 1.5; }
+
+  .hero-metrics { gap: 10px; }
+  .hero-metrics article { min-height: 0; padding: 12px; }
+  .hero-metrics b { font-size: 20px; }
+  .hero-metrics strong { font-size: 13px; }
+  .hero-metrics small { font-size: 11px; white-space: normal; }
+
+  .home-card > header,
+  .quick-actions-card > header,
+  .section-card__header { height: auto; min-height: 0; padding: 14px 16px; }
+  .home-card > header h2,
+  .section-card__header h2 { font-size: 16px; line-height: 1.3; }
+  .home-card > header p,
+  .section-card__header p { margin-top: 4px; font-size: 13px; line-height: 1.45; }
+
+  .see-all-link { display: inline-flex; align-items: center; gap: 6px; margin: 2px 16px 14px; min-height: 44px; font-size: 14px; font-weight: 600; }
+
+  .home-task-list { padding: 0 16px 6px; }
+  .home-task-list article { min-height: 52px; gap: 10px; font-size: 13px; }
+  .home-task-list strong { font-size: 14px; white-space: normal; }
+
+  .quick-links-grid { grid-template-columns: 1fr; padding: 0 16px 8px; gap: 8px; }
+  .quick-links-grid a { min-height: 52px; padding: 10px 14px; font-size: 14px; }
+
+  .home-card a strong,
+  .quick-links-grid strong { display: block; font-size: 14px; line-height: 1.3; }
+  .home-card a small,
+  .home-card a span { display: block; font-size: 12px; line-height: 1.45; }
+
+  .announcement-list article,
+  .event-list article { font-size: 13px; }
+  .home-empty { font-size: 13px; padding: 14px 16px; }
+}
