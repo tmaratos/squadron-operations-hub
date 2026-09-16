@@ -17,4 +17,6 @@ interface CloudflareEnv {
   LOCAL_AI_MODEL?: string;
   LOCAL_AI_ACCESS_CLIENT_ID?: string;
   LOCAL_AI_ACCESS_CLIENT_SECRET?: string;
+  // The mailbox that Email Routing delivers to, e.g. tasks@example.org. Members get tasks+code@ addresses from it.
+  EMAIL_INTAKE_ADDRESS?: string;
 }
