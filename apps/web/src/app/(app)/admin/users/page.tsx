@@ -1,4 +1,5 @@
 import { PageHeader } from "@/components/page-header";
+import { AddMember } from "@/components/admin/add-member";
 import { UserAdministration } from "@/components/admin/user-administration";
 import { listUsers } from "@/lib/auth/repository";
 import { requireRole } from "@/lib/auth/session";
@@ -11,6 +12,7 @@ export default async function UserAdministrationPage() {
   return (
     <div className="page-stack">
       <PageHeader eyebrow="Security and succession" title="User Administration" description="Manage Hub roles and suspend Hub access. Google Drive membership is managed by squadron command staff." />
+      <AddMember />
       <UserAdministration actor={actor} users={users} />
     </div>
   );

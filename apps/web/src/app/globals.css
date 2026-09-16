@@ -706,8 +706,8 @@ body { background: #f8faff; font-size: 14px; }
 
 .tasks-card > header { height: 44px; }.task-tabs { height: 35px; padding: 0 20px; display: flex; align-items: stretch; gap: 32px; color: #617396; font-size: 9px; border-bottom: 1px solid #e7ebf2; }
 .task-tabs > * { display: flex; align-items: center; }.task-tabs b { color: #0069eb; border-bottom: 2px solid #167bf5; }
-.home-task-list { padding: 0 20px 7px; }.home-task-list article { min-height: 39px; display: grid; grid-template-columns: 16px minmax(0,1.6fr) .8fr .55fr .7fr 18px; align-items: center; gap: 11px; border-bottom: 1px solid #e7ebf2; color: #273d65; font-size: 9px; }
-.home-task-list article:last-child { border-bottom: 0; }.task-checkbox { width: 13px; height: 13px; border: 1px solid #aebed6; border-radius: 3px; }.home-task-list strong { overflow: hidden; color: #122247; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.home-task-list { padding: 0 20px 7px; }.home-task-list article, .home-task-list .home-task-row { min-height: 39px; display: grid; grid-template-columns: 16px minmax(0,1.6fr) .8fr .55fr .7fr 18px; align-items: center; gap: 11px; border-bottom: 1px solid #e7ebf2; color: #273d65; font-size: 9px; }
+.home-task-list article:last-child, .home-task-list .home-task-row:last-child { border-bottom: 0; }.task-checkbox { width: 13px; height: 13px; border: 1px solid #aebed6; border-radius: 3px; }.home-task-list strong { overflow: hidden; color: #122247; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .task-due { display: flex; align-items: center; gap: 5px; color: #63779b; }.task-priority { font-size: 9px; }.task-priority--critical, .task-priority--high { color: #167653; }.task-priority--normal { color: #8a6412; }.task-priority--low { color: #507098; }
 .task-area { padding: 5px 8px; justify-self: start; border-radius: 6px; background: #eee8ff; color: #6740c5; font-size: 8px; white-space: nowrap; }
 .home-empty { padding: 24px; color: #66789d; font-size: 11px; }
@@ -747,7 +747,7 @@ input, select, textarea { color-scheme: light; }
   .hub-topbar { padding: 0 10px; gap: 8px; }.hub-search kbd, .hub-alert, .hub-profile > span:nth-child(2), .hub-profile svg { display: none; }.hub-profile { min-width: 38px; grid-template-columns: 38px; }
   .hub-main { padding: 86px 10px 10px; }.welcome-hero__content { padding: 20px; }.hero-metrics { grid-template-columns: 1fr; }.welcome-hero { min-height: 505px; }
   .documents-head { display: none; }.documents-list article { grid-template-columns: 22px minmax(0,1fr) 30px 18px; }.documents-list article > span:nth-child(3), .documents-list article > span:nth-child(4) { display: none; }
-  .home-quick-actions { grid-template-columns: 1fr 1fr; }.task-tabs { gap: 14px; overflow-x: auto; }.home-task-list article { grid-template-columns: 16px 1fr 18px; }.task-due, .task-priority, .task-area { display: none; }
+  .home-quick-actions { grid-template-columns: 1fr 1fr; }.task-tabs { gap: 14px; overflow-x: auto; }.home-task-list article, .home-task-list .home-task-row { grid-template-columns: 16px 1fr 18px; }.task-due, .task-priority, .task-area { display: none; }
 }
 
 /* Persistent dark theme */
@@ -777,7 +777,7 @@ html[data-theme="dark"] .home-card, html[data-theme="dark"] .section-card, html[
 html[data-theme="dark"] .home-card > header h2, html[data-theme="dark"] .section-card__header h2,
 html[data-theme="dark"] .page-header h1, html[data-theme="dark"] .metric-card__label { color: #f6f8fc; }
 html[data-theme="dark"] .documents-list article, html[data-theme="dark"] .event-list article,
-html[data-theme="dark"] .home-task-list article, html[data-theme="dark"] .section-card__header { border-color: #223650; }
+html[data-theme="dark"] .home-task-list article, html[data-theme="dark"] .home-task-list .home-task-row, html[data-theme="dark"] .section-card__header { border-color: #223650; }
 html[data-theme="dark"] .documents-list b, html[data-theme="dark"] .documents-list article > span:nth-child(3),
 html[data-theme="dark"] .documents-list article > span:nth-child(4), html[data-theme="dark"] .home-task-list strong,
 html[data-theme="dark"] .event-list article > div:last-child strong { color: #dce6f4; }
@@ -818,7 +818,7 @@ html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="
   .see-all-link { display: inline-flex; align-items: center; gap: 6px; margin: 2px 16px 14px; min-height: 44px; font-size: 14px; font-weight: 600; }
 
   .home-task-list { padding: 0 16px 6px; }
-  .home-task-list article { min-height: 52px; gap: 10px; font-size: 13px; }
+  .home-task-list article, .home-task-list .home-task-row { min-height: 52px; gap: 10px; font-size: 13px; }
   .home-task-list strong { font-size: 14px; white-space: normal; }
 
   .quick-links-grid { grid-template-columns: 1fr; padding: 0 16px 8px; gap: 8px; }
@@ -833,3 +833,8 @@ html[data-theme="dark"] input, html[data-theme="dark"] select, html[data-theme="
   .event-list article { font-size: 13px; }
   .home-empty { font-size: 13px; padding: 14px 16px; }
 }
+
+/* Task rows on the overview are links: the whole row opens the item. */
+.home-task-list .home-task-row { text-decoration: none; }
+.home-task-list .home-task-row:hover { background: rgba(123,104,238,0.07); }
+html[data-theme="dark"] .home-task-list .home-task-row:hover { background: rgba(123,104,238,0.16); }
