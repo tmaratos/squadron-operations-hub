@@ -278,6 +278,14 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
 
       {mobileOpen ? <button className="cu-backdrop" onClick={() => setMobileOpen(false)} aria-label="Close navigation" /> : null}
       <main className="cu-main">{children}</main>
+
+      {/* Phone navigation: the four places members actually go, always within thumb reach. */}
+      <nav className="cu-bottom" aria-label="Main sections">
+        <Link href="/" className={"cu-bottom-item" + (pathname === "/" ? " is-active" : "")}><Home size={20} /><span>Home</span></Link>
+        <Link href="/tasks" className={"cu-bottom-item" + (active("/tasks") ? " is-active" : "")}><ClipboardCheck size={20} /><span>My Tasks</span></Link>
+        <Link href="/spaces" className={"cu-bottom-item" + (active("/spaces") || active("/lists") ? " is-active" : "")}><Grid3x3 size={20} /><span>Lists</span></Link>
+        <Link href="/dashboards" className={"cu-bottom-item" + (active("/dashboards") ? " is-active" : "")}><LayoutDashboard size={20} /><span>Dashboard</span></Link>
+      </nav>
     </div>
   );
 }
@@ -332,6 +340,7 @@ const shellCss = [
   ".cu-empty{margin:4px 8px;font-size:12px;color:var(--cu-muted)}",
   ".cu-main{min-width:0;min-height:0;overflow-y:auto;padding:20px 24px;background:var(--cu-bg)}",
   ".cu-backdrop{display:none}",
+  ".cu-bottom{display:none}",
   "@media (max-width:900px){",
   ".cu-shell{grid-template-columns:minmax(0,1fr)}",
   ".cu-rail{display:none}",
@@ -341,7 +350,13 @@ const shellCss = [
   ".cu-sidebar{position:fixed;top:0;bottom:0;left:0;width:min(300px,86vw);z-index:90;transform:translateX(-105%);transition:transform .18s ease}",
   ".cu-sidebar.is-open{transform:none}",
   ".cu-backdrop{display:block;position:fixed;inset:0;z-index:85;border:0;background:rgba(0,0,0,.4)}",
-  ".cu-main{padding:16px}",
+  ".cu-main{padding:16px 16px 84px}",
+  ".cu-topbar{gap:8px;padding:0 10px}",
+  ".cu-brand img{width:26px;height:26px}",
+  ".cu-search{flex:1 1 auto;margin:0}",
+  ".cu-bottom{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--cu-side);border-top:1px solid var(--cu-border);padding:6px 4px calc(6px + env(safe-area-inset-bottom));}",
+  ".cu-bottom-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;color:var(--cu-muted);text-decoration:none;font-size:11px;font-weight:600;min-height:52px;justify-content:center}",
+  ".cu-bottom-item.is-active{color:#7b68ee;background:var(--cu-active)}",
   "}"
 ].join("\n");
 
