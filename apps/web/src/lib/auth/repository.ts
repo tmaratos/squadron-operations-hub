@@ -1,4 +1,5 @@
 import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
+import { rosterMemberForEmail } from "@/lib/org/roster";
 import { linkPersonnelMemberToUser } from "@/lib/operations/personnel";
 import type { AccessRequestRecord, AuthenticatedUser, GlobalRole, UserRecord, UserStatus } from "./types";
 
@@ -48,6 +49,9 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
 export async function upsertGoogleUser(input: { email: string; fullName: string }): Promise<UserRecord> {
   const email = input.email.trim().toLowerCase();
   const now = new Date().toISOString();
+  // The roster name wins over whatever Google calls someone today ("Maratos, Tristan" vs "Tristan Maratos").
+  const rosterMember = await rosterMemberForEmail(email);
+  input = { ...input, fullName: rosterMember?.fullName ?? input.fullName };
   const existing = await findUserByEmail(email);
   if (existing) {
     if (existing.status === "SUSPENDED" || existing.status === "ARCHIVED") {

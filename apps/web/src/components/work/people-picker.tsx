@@ -11,6 +11,8 @@ export interface PickablePerson {
   dutyTitle: string | null;
   source: "hub" | "drive";
   pending: boolean;
+  capid: string | null;
+  rank: string | null;
 }
 
 export function PeoplePicker({
@@ -98,7 +100,7 @@ export function PeoplePicker({
         ref={field}
         className="pp-field"
         value={query}
-        placeholder="Type a name or email"
+        placeholder="Type a name, CAPID or email"
         aria-label={label}
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => { if (event.key === "Enter" && rows.length) { event.preventDefault(); choose(rows[0]); } }}
@@ -118,7 +120,7 @@ export function PeoplePicker({
             <span className="pp-avatar">{initials(person.fullName)}</span>
             <span className="pp-who">
               <strong>{person.fullName}</strong>
-              <small>{person.dutyTitle ? person.dutyTitle + " · " + person.email : person.email}</small>
+              <small>{[person.dutyTitle, person.capid ? "CAPID " + person.capid : null, person.capid && person.email.endsWith("@tncap.us") ? null : person.email].filter(Boolean).join(" · ")}</small>
             </span>
             {busyEmail === person.email ? <span className="pp-tag">Adding…</span>
               : person.source === "drive" ? <span className="pp-tag">Has Drive access</span>

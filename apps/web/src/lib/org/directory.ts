@@ -1,5 +1,6 @@
 import { getUserGoogleAccessToken } from "@/lib/auth/google-oauth";
 import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
+import { capidFromLookup, rosterLookup } from "./roster";
 
 // The org directory answers "who can I give this to?" the way Gmail does: you type a name, you pick a person.
 // Two sources are merged. Hub accounts are people who can already be assigned work. The TN-170 Shared Drive
@@ -17,6 +18,9 @@ export interface DirectoryPerson {
   source: "hub" | "drive";
   /** A Hub account that exists but has never been signed into. */
   pending: boolean;
+  /** From the eServices roster, when the address can be tied to a CAPID. */
+  capid: string | null;
+  rank: string | null;
 }
 
 interface DrivePermission {
@@ -33,7 +37,7 @@ export interface DirectoryResult {
 }
 
 export async function listDirectory(actorUserId: string, query = ""): Promise<DirectoryResult> {
-  const [hub, drive] = await Promise.all([hubPeople(), drivePeople(actorUserId)]);
+  const [hub, drive, roster] = await Promise.all([hubPeople(), drivePeople(actorUserId), rosterLookup()]);
 
   const byEmail = new Map<string, DirectoryPerson>();
   hub.forEach((person) => byEmail.set(person.email, person));
@@ -42,13 +46,23 @@ export async function listDirectory(actorUserId: string, query = ""): Promise<Di
     byEmail.set(person.email, person);
   });
 
+  // Name people the way CAP does. Google's display names are inconsistent, and some are just the CAPID.
+  byEmail.forEach((person) => {
+    const capid = capidFromLookup(person.email, roster);
+    const member = capid ? roster.byCapid.get(capid) : null;
+    person.capid = capid;
+    if (!member) return;
+    person.fullName = member.fullName;
+    person.rank = member.rank || null;
+  });
+
   const needle = query.trim().toLowerCase();
   const people = [...byEmail.values()]
-    .filter((person) => !needle || person.fullName.toLowerCase().includes(needle) || person.email.toLowerCase().includes(needle))
+    .filter((person) => !needle || [person.fullName, person.email, person.capid ?? ""].some((value) => value.toLowerCase().includes(needle)))
     .sort((left, right) => {
       // People who can be assigned right now come first; then alphabetical, so the list never reshuffles oddly.
       if (Boolean(left.userId) !== Boolean(right.userId)) return left.userId ? -1 : 1;
-      return left.fullName.localeCompare(right.fullName);
+      return surname(left.fullName).localeCompare(surname(right.fullName)) || left.fullName.localeCompare(right.fullName);
     });
 
   return { people, driveNote: drive.note };
@@ -66,7 +80,9 @@ async function hubPeople(): Promise<DirectoryPerson[]> {
     fullName: row.full_name,
     dutyTitle: row.duty_title,
     source: "hub" as const,
-    pending: row.status === "PENDING"
+    pending: row.status === "PENDING",
+    capid: null,
+    rank: null
   }));
 }
 
@@ -109,7 +125,9 @@ async function drivePeople(actorUserId: string): Promise<{ people: DirectoryPers
           fullName: permission.displayName?.trim() || email.split("@")[0],
           dutyTitle: null,
           source: "drive",
-          pending: false
+          pending: false,
+          capid: null,
+          rank: null
         });
       });
       pageToken = payload.nextPageToken;
@@ -140,4 +158,9 @@ export async function ensurePerson(input: { email: string; fullName: string }): 
     .bind(id, email, input.fullName.trim() || email.split("@")[0], now, now)
     .run();
   return { userId: id, created: true };
+}
+
+function surname(name: string): string {
+  const parts = name.replace(/,.*$/, "").split(/\s+/).filter((part) => part && !/^(jr|sr|ii|iii|iv)\.?$/i.test(part));
+  return (name.includes(",") ? name.split(",")[0] : parts[parts.length - 1] ?? name).toLowerCase();
 }
