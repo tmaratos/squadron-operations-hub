@@ -7,9 +7,12 @@ import { getCloudflareEnv } from "@/lib/cloudflare";
 // 5.7 GB RAM, no GPU). It is what anybody waiting for an answer gets.
 const DEFAULT_MODEL = "qwen3:1.7b";
 
-// Reading a regulation is worth more care than speed: it happens in the background, a person is not sitting
-// watching it, and a missed requirement is expensive. The bigger model is used only for work like that.
-export const CAREFUL_MODEL = "qwen3:4b";
+// Background work - reading a regulation - gets a bigger context window and much longer to answer, but the
+// same model. qwen3:4b was tried here and could not finish: on two cores it generates a few tokens a
+// second, so every chunk hit the time limit and produced nothing at all after half an hour. A model that
+// answers is worth more than a better model that does not, and what protects the quality of an extraction
+// is the quote check, not the size of the model.
+export const CAREFUL_MODEL = "qwen3:1.7b";
 
 interface LocalAiEnv {
   // Preferred: a private VPC Service binding that reaches Ollama through the hp-server tunnel. No keys, never public.
@@ -73,7 +76,7 @@ export async function localChat(messages: ChatMessage[], options: { json?: boole
       options: { temperature: 0.2, num_predict: options.maxTokens ?? 300, num_ctx: options.model ? 8192 : 4096 }
     }),
     // The careful model is slower on hardware without a GPU, so it is given longer before giving up.
-    signal: AbortSignal.timeout(options.model ? 240000 : 90000)
+    signal: AbortSignal.timeout(options.model ? 420000 : 90000)
   };
 
   const response = usingBinding && values.SQUADRON_AI ? await values.SQUADRON_AI.fetch(url, request) : await fetch(url, request);
