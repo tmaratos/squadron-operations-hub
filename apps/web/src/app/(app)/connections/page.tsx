@@ -1,6 +1,7 @@
 import { AiChoiceCard } from "@/components/connections/ai-choice-card";
 import { ConnectionsBoard } from "@/components/connections/connections-board";
 import { EmailIntakeCard } from "@/components/connections/email-intake-card";
+import { MailSuggestions } from "@/components/connections/mail-suggestions";
 import { PageHeader } from "@/components/page-header";
 import { aiSource, preferredProvider } from "@/lib/ai/provider";
 import { isVendorProvider } from "@/lib/ai/vendors";
@@ -29,6 +30,7 @@ export default async function ConnectionsPage() {
         description="Connect your own accounts so the Hub can work with them. Only you can use what you connect here."
       />
       <EmailIntakeCard address={intake.address} />
+      <MailSuggestions />
       <AiChoiceCard
         providers={PROVIDERS}
         connected={connectedAi}

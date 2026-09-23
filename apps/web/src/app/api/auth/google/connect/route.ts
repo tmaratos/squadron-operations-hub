@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createGoogleAuthorizationUrl, GMAIL_SCOPE } from "@/lib/auth/google-oauth";
+import { createGoogleAuthorizationUrl, GMAIL_READ_SCOPE, GMAIL_SCOPE } from "@/lib/auth/google-oauth";
 import { getCurrentUser } from "@/lib/auth/session";
 
 // Adding a Google permission to an account that already exists - today that means Gmail drafting.
@@ -10,10 +10,13 @@ export async function GET(request: Request) {
   if (!user) return NextResponse.redirect(new URL("/login", request.url));
 
   const wanted = new URL(request.url).searchParams.get("scope");
-  if (wanted !== "gmail") return NextResponse.redirect(new URL("/connections?error=unknown_permission", request.url));
+  const scopes = wanted === "gmail" ? [GMAIL_SCOPE]
+    : wanted === "gmail-read" ? [GMAIL_SCOPE, GMAIL_READ_SCOPE]
+    : null;
+  if (!scopes) return NextResponse.redirect(new URL("/connections?error=unknown_permission", request.url));
 
   try {
-    return NextResponse.redirect(await createGoogleAuthorizationUrl([GMAIL_SCOPE]));
+    return NextResponse.redirect(await createGoogleAuthorizationUrl(scopes));
   } catch (error) {
     console.error(error);
     return NextResponse.redirect(new URL("/connections?error=configuration", request.url));

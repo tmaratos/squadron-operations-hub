@@ -15,6 +15,15 @@ const SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/d
 // deliberately the limit: the Hub writes the message into their own Gmail drafts, and a person sends it.
 export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
 
+// Reading is a separate, bigger ask, and it is optional. Google has no "only the mail I labelled" scope,
+// so this grants read access to the mailbox. The Hub opens only messages carrying the member's chosen
+// label, and says plainly that the permission is wider than what it uses. Forwarding needs none of this.
+export const GMAIL_READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+
+export function hasGmailReadScope(scopes: string | null | undefined): boolean {
+  return (scopes ?? "").split(/\s+/).includes(GMAIL_READ_SCOPE);
+}
+
 export function hasGmailScope(scopes: string | null | undefined): boolean {
   return (scopes ?? "").split(/\s+/).includes(GMAIL_SCOPE);
 }

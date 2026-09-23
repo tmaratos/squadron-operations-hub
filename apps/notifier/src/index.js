@@ -19,22 +19,35 @@ export default {
     if (!env.NOTIFIER_TRIGGER_SECRET || request.headers.get("x-trigger") !== env.NOTIFIER_TRIGGER_SECRET) {
       return new Response("Forbidden", { status: 403 });
     }
-    const summary = await run({ cron: url.searchParams.get("cron") || "manual" }, env);
+    const forced = url.searchParams.get("digest");
+    const summary = forced === "EVENING" || forced === "MORNING"
+      ? { raised: await raiseDeadlineNotices(env), sent: await deliver(env, forced), digest: forced, forced: true }
+      : await run({ cron: "manual" }, env);
     return Response.json(summary);
   }
 };
 
+// The squadron is in Oak Ridge, Tennessee, which is Eastern. A fixed UTC hour would drift an hour every
+// time daylight saving changes, so the worker wakes up hourly and asks what time it actually is there.
+const SQUADRON_TIME_ZONE = "America/New_York";
+
+function squadronHour(now = new Date()) {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone: SQUADRON_TIME_ZONE,
+    hour: "numeric",
+    hour12: false
+  }).format(now);
+  return Number(hour) % 24;
+}
+
 async function run(event, env) {
-  // Two daily passes. The evening one is the default, because squadron work gets dealt with after work;
-  // the morning one is for members who would rather start the day with it. Deadlines are raised in the
-  // morning pass so an evening digest already carries the day's news.
-  const cron = String(event.cron || "");
-  const morning = cron.startsWith("0 11");
-  const evening = cron.startsWith("0 23");
-  const digest = morning ? "MORNING" : evening ? "EVENING" : null;
-  const raised = morning || evening ? await raiseDeadlineNotices(env) : 0;
+  // Two daily passes, both in squadron time. The evening one is the default, because squadron work gets
+  // dealt with after the day job; the morning one is for members who would rather start the day with it.
+  const hour = squadronHour();
+  const digest = hour === 18 ? "EVENING" : hour === 6 ? "MORNING" : null;
+  const raised = digest ? await raiseDeadlineNotices(env) : 0;
   const sent = await deliver(env, digest);
-  return { raised, sent, digest, cron: event.cron ?? null };
+  return { raised, sent, digest, squadronHour: hour, cron: event.cron ?? null };
 }
 
 // ---------------------------------------------------------------- deadlines
