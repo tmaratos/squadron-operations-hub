@@ -7,9 +7,10 @@
     "enabled": true
   },
   "triggers": {
-    // Quarter past each hour carries the "as things happen" notices.
-    // 11:00 UTC is 06:00 Central, which is when the once-a-day email goes out and deadlines are checked.
-    "crons": ["15 * * * *", "0 11 * * *"]
+    // Quarter past each hour catches up anything the Hub could not send at the time.
+    // 23:00 UTC is 18:00 Central: the end-of-day digest, which is what most members get.
+    // 11:00 UTC is 06:00 Central, for members who choose the morning instead.
+    "crons": ["15 * * * *", "0 23 * * *", "0 11 * * *"]
   },
   "vars": {
     "NOTIFY_FROM": "TN-170 Operations Hub <hub@tristanmaratos.com>"

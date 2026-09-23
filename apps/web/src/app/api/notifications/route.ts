@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
-import { listNotifications, markRead, savePrefs, unreadCount, type NotificationPrefs } from "@/lib/notify/notifications";
+import { listNotifications, markRead, savePrefs, sendTestEmail, unreadCount, type NotificationPrefs } from "@/lib/notify/notifications";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 export async function GET() {
@@ -30,7 +30,8 @@ const schema = z.union([
       cadence: z.enum(["IMMEDIATE", "DAILY"]),
       leadDays: z.number().int().min(0).max(30)
     })
-  })
+  }),
+  z.object({ action: z.literal("test") })
 ]);
 
 export async function POST(request: Request) {
@@ -43,6 +44,11 @@ export async function POST(request: Request) {
     if (input.action === "read") {
       await markRead(user.id, input.ids);
       return NextResponse.json({ unread: await unreadCount(user.id) });
+    }
+
+    if (input.action === "test") {
+      const result = await sendTestEmail(user.id);
+      return NextResponse.json({ message: result.message }, { status: result.ok ? 200 : 400 });
     }
 
     await savePrefs(user.id, input.prefs as NotificationPrefs);

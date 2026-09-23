@@ -25,10 +25,16 @@ export default {
 };
 
 async function run(event, env) {
-  const daily = String(event.cron || "").startsWith("0 11"); // the morning pass also sends the DAILY digests
-  const raised = await raiseDeadlineNotices(env);
-  const sent = await deliver(env, daily);
-  return { raised, sent, cron: event.cron ?? null };
+  // Two daily passes. The evening one is the default, because squadron work gets dealt with after work;
+  // the morning one is for members who would rather start the day with it. Deadlines are raised in the
+  // morning pass so an evening digest already carries the day's news.
+  const cron = String(event.cron || "");
+  const morning = cron.startsWith("0 11");
+  const evening = cron.startsWith("0 23");
+  const digest = morning ? "MORNING" : evening ? "EVENING" : null;
+  const raised = morning || evening ? await raiseDeadlineNotices(env) : 0;
+  const sent = await deliver(env, digest);
+  return { raised, sent, digest, cron: event.cron ?? null };
 }
 
 // ---------------------------------------------------------------- deadlines
@@ -105,11 +111,12 @@ async function raiseDeadlineNotices(env) {
 
 // ---------------------------------------------------------------- delivery
 
-async function deliver(env, includeDaily) {
+async function deliver(env, digestWindow) {
   const rows = await env.DB.prepare(
     `SELECT n.id, n.user_id, n.kind, n.title, n.body, n.url, n.created_at,
             u.email AS email, u.full_name AS full_name,
-            COALESCE(p.cadence, 'DAILY') AS cadence
+            COALESCE(p.cadence, 'DAILY') AS cadence,
+            COALESCE(p.digest_when, 'EVENING') AS digest_when
      FROM notifications n
      JOIN users u ON u.id = n.user_id
      LEFT JOIN notification_prefs p ON p.user_id = n.user_id
@@ -120,7 +127,8 @@ async function deliver(env, includeDaily) {
 
   const byUser = new Map();
   for (const row of rows.results || []) {
-    if (row.cadence === "DAILY" && !includeDaily) continue;
+    // Immediate notices are sent by the Hub itself; anything of theirs still sitting here is a catch-up.
+    if (row.cadence === "DAILY" && row.digest_when !== digestWindow) continue;
     if (!byUser.has(row.user_id)) byUser.set(row.user_id, []);
     byUser.get(row.user_id).push(row);
   }

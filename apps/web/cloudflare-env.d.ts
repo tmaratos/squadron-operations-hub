@@ -19,4 +19,8 @@ interface CloudflareEnv {
   LOCAL_AI_ACCESS_CLIENT_SECRET?: string;
   // The mailbox that Email Routing delivers to, e.g. tasks@example.org. Members get tasks+code@ addresses from it.
   EMAIL_INTAKE_ADDRESS?: string;
+  // Outgoing mail. NOTIFY_FROM is a plain var; the provider key is a secret.
+  NOTIFY_FROM?: string;
+  RESEND_API_KEY?: string;
+  BREVO_API_KEY?: string;
 }

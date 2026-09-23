@@ -13,7 +13,8 @@ const KIND_LABEL: Record<string, { icon: string; label: string; tone: string }> 
   DUE_SOON: { icon: "◷", label: "Coming up", tone: "warning" },
   OVERDUE: { icon: "!", label: "Overdue", tone: "danger" },
   STATUS: { icon: "✓", label: "Status changed", tone: "success" },
-  MENTION: { icon: "@", label: "Mentioned you", tone: "accent" }
+  MENTION: { icon: "@", label: "Mentioned you", tone: "accent" },
+  ANNOUNCEMENT: { icon: "📣", label: "Squadron alert", tone: "accent" }
 };
 
 const CHOICES: Array<{ key: keyof NotificationPrefs; label: string; detail: string }> = [
@@ -47,6 +48,24 @@ export function NotificationCenter({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "read" })
     }).catch(() => undefined);
+  }
+
+  async function sendTest() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test" })
+      });
+      const data = (await response.json()) as { message?: string };
+      setNote(data.message ?? (response.ok ? "Sent." : "It could not be sent."));
+    } catch {
+      setNote("It could not be sent.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function savePrefs(next: NotificationPrefs) {
@@ -150,8 +169,18 @@ export function NotificationCenter({
             <>
               <label className="nc-field">
                 <span>How often</span>
-                <select value={prefs.cadence} disabled={busy} onChange={(event) => savePrefs({ ...prefs, cadence: event.target.value as NotificationPrefs["cadence"] })}>
-                  <option value="DAILY">Once a day, in the morning</option>
+                <select
+                  value={prefs.cadence === "IMMEDIATE" ? "IMMEDIATE" : prefs.digestWhen}
+                  disabled={busy}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    savePrefs(value === "IMMEDIATE"
+                      ? { ...prefs, cadence: "IMMEDIATE" }
+                      : { ...prefs, cadence: "DAILY", digestWhen: value as NotificationPrefs["digestWhen"] });
+                  }}
+                >
+                  <option value="EVENING">Once a day, end of day (6pm)</option>
+                  <option value="MORNING">Once a day, morning (6am)</option>
                   <option value="IMMEDIATE">As things happen</option>
                 </select>
               </label>
@@ -167,6 +196,13 @@ export function NotificationCenter({
             </>
           ) : null}
         </div>
+
+        {prefs.emailEnabled ? (
+          <div className="nc-test">
+            <button type="button" className="nc-btn" disabled={busy} onClick={sendTest}>{busy ? "Sending…" : "Send me a test email"}</button>
+            <small>Proves the Hub can reach you, without waiting for real work to turn up.</small>
+          </div>
+        ) : null}
 
         {note ? <p className="nc-note" role="status">{note}</p> : null}
       </section>
@@ -216,6 +252,8 @@ const ncCss = [
   "html[data-theme=dark] .nc-sub{border-color:#33363c}",
   ".nc-field{display:flex;flex-direction:column;gap:5px;font-size:13.5px;max-width:340px}",
   ".nc-field select{font:inherit;font-size:14px;min-height:38px;border-radius:8px;padding:0 8px}",
+  ".nc-test{margin-top:4px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}",
+  ".nc-test small{font-size:12.5px;color:var(--cu-muted,#656f7d)}",
   ".nc-note{margin:12px 0 0;font-size:13px;padding:9px 12px;border-radius:8px;background:rgba(123,104,238,.12)}",
   "@media (max-width:760px){.nc-card{padding:14px}.nc-field{max-width:none}}"
 ].join("");
