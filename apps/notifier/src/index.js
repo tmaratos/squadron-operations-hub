@@ -1,8 +1,11 @@
 // Squadron Operations Hub - notifier.
-// Runs on a schedule and does two jobs:
-//   1. Raises deadline notices: anything due within a member's warning window, and anything already late.
-//   2. Delivers pending notices by email - one message per member, never one per notice.
+// Runs on a schedule and does three jobs:
+//   1. Turns the squadron's confirmed duties into real tasks before they are due.
+//   2. Raises deadline notices: anything due within a member's warning window, and anything already late.
+//   3. Delivers pending notices by email - one message per member, never one per notice.
 // Everything it sends already exists as a row in the Hub, so a member can always check what they were told.
+
+import { generateDutyWork } from "./duty-work.js";
 
 const APP_URL = "https://tn170adminhub.tristanmaratos.com";
 const BATCH = 200;
@@ -45,9 +48,11 @@ async function run(event, env) {
   // dealt with after the day job; the morning one is for members who would rather start the day with it.
   const hour = squadronHour();
   const digest = hour === 18 ? "EVENING" : hour === 6 ? "MORNING" : null;
+  // Duties become real work before anybody has to remember them.
+  const generated = digest ? await generateDutyWork(env) : 0;
   const raised = digest ? await raiseDeadlineNotices(env) : 0;
   const sent = await deliver(env, digest);
-  return { raised, sent, digest, squadronHour: hour, cron: event.cron ?? null };
+  return { generated, raised, sent, digest, squadronHour: hour, cron: event.cron ?? null };
 }
 
 // ---------------------------------------------------------------- deadlines

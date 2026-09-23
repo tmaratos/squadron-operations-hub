@@ -11,6 +11,7 @@ import {
   Folder,
   Users
 } from "lucide-react";
+import { OffersCard } from "@/components/work/offers-card";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import { loadDashboardItems, type DashboardItem } from "@/lib/work/dashboards";
 
@@ -60,6 +61,8 @@ export async function CommandDashboard({ user: _user }: { user: AuthenticatedUse
             </div>
           </div>
         </section>
+
+        <OffersCard />
 
         <DashboardCard title="Coming up" description="The next work with a date on it, soonest first." className="quick-actions-card">
           {upcoming.length ? (

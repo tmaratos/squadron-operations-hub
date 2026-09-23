@@ -52,7 +52,19 @@ export async function upsertGoogleUser(input: { email: string; fullName: string 
   // The roster name wins over whatever Google calls someone today ("Maratos, Tristan" vs "Tristan Maratos").
   const rosterMember = await rosterMemberForEmail(email);
   input = { ...input, fullName: rosterMember?.fullName ?? input.fullName };
-  const existing = await findUserByEmail(email);
+  // Some members reach the squadron Drive with a personal Google account rather than their CAP address,
+  // because that is how access was granted to them. Signing in that way is fine - but it must land them in
+  // the account they already have, not a second one, or their work is split across two people who are one
+  // person. CAPID is what ties the addresses together.
+  let existing = await findUserByEmail(email);
+  if (!existing && rosterMember?.capid) {
+    const sibling = await getDatabase()
+      .prepare("SELECT * FROM users WHERE capid = ? AND status NOT IN ('SUSPENDED','ARCHIVED') ORDER BY created_at LIMIT 1")
+      .bind(rosterMember.capid)
+      .first<UserRow>();
+    if (sibling) existing = mapUser(sibling);
+  }
+
   if (existing) {
     if (existing.status === "SUSPENDED" || existing.status === "ARCHIVED") {
       throw new Error("This Hub account is disabled.");
