@@ -19,12 +19,23 @@ type Payload = {
   descriptions?: string[];
   applied?: Applied[];
   conversationId?: string;
+  autonomy?: Autonomy;
+  autoBuilt?: boolean;
 };
 
+type Autonomy = "SUGGEST" | "CONFIRM" | "BUILD";
+
+const AUTONOMY_CHOICES: Array<{ value: Autonomy; label: string; hint: string }> = [
+  { value: "SUGGEST", label: "Show me first", hint: "Writes the plan. Nothing happens until you press Build." },
+  { value: "CONFIRM", label: "Ask once", hint: "You approve the whole plan in one click." },
+  { value: "BUILD", label: "Just build it", hint: "Ordinary additions happen straight away. Anything harder to undo still asks." }
+];
+
 const EXAMPLES = [
-  "Create a task to send the CAPF 172 to Wing by Sep 15 in Command Intake",
+  "Set up an Aerospace Education department with a Cadet Lessons list",
+  "Add a Presenter person field and a Presentation date to Cadet Lessons",
   "Add a dashboard card showing everything overdue",
-  "Make a task for the October STEM night and tag it events"
+  "When a task is marked Plan submitted, set its priority to high"
 ];
 
 export function AssistantPanel() {
@@ -39,6 +50,7 @@ export function AssistantPanel() {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [pending, setPending] = useState<{ steps: Step[]; descriptions: string[]; picked: boolean[] } | null>(null);
+  const [autonomy, setAutonomyState] = useState<Autonomy>("CONFIRM");
   const feedRef = useRef<HTMLDivElement>(null);
 
   async function load(conversation?: string | null) {
@@ -47,6 +59,7 @@ export function AssistantPanel() {
     const data = (await response.json().catch(() => ({}))) as Payload;
     setAvailable(Boolean(data.available));
     if (data.retentionDays) setRetentionDays(data.retentionDays);
+    if (data.autonomy) setAutonomyState(data.autonomy);
     setConversations(data.conversations ?? []);
     if (conversation) setMessages(data.messages ?? []);
   }
@@ -72,6 +85,9 @@ export function AssistantPanel() {
       if (!response.ok) throw new Error(data.message || "The assistant could not answer.");
       if (data.conversationId) setConversationId(data.conversationId);
       setMessages((current) => [...current, { id: "reply-" + Date.now(), role: "assistant", content: data.reply ?? "", steps: data.steps ?? null, applied: null, createdAt: new Date().toISOString() }]);
+      if (data.autoBuilt && data.applied?.length) {
+        setMessages((current) => [...current, { id: "built-" + Date.now(), role: "system", content: "Built it.", steps: null, applied: data.applied ?? [], createdAt: new Date().toISOString() }]);
+      }
       if (data.steps?.length) setPending({ steps: data.steps, descriptions: data.descriptions ?? [], picked: data.steps.map(() => true) });
       load().catch(() => undefined);
     } catch (caught) {
@@ -138,6 +154,24 @@ export function AssistantPanel() {
               <div className="ap-body">
                 <div className="ap-side">
                   <button type="button" className="ap-new" onClick={() => { setConversationId(null); setMessages([]); setPending(null); setNote(""); }}>+ New conversation</button>
+                  <label className="ap-autonomy">
+                    <span>How much it does on its own</span>
+                    <select
+                      value={autonomy}
+                      onChange={async (event) => {
+                        const level = event.target.value as Autonomy;
+                        setAutonomyState(level);
+                        await fetch("/api/ai/assistant", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "autonomy", level })
+                        }).catch(() => undefined);
+                      }}
+                    >
+                      {AUTONOMY_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+                    </select>
+                    <small>{AUTONOMY_CHOICES.find((choice) => choice.value === autonomy)?.hint}</small>
+                  </label>
                   <p className="ap-side-note">Saved for {retentionDays} days. Deleting a conversation never undoes work.</p>
                   {conversations.map((conversation) => (
                     <div key={conversation.id} className={"ap-conv" + (conversation.id === conversationId ? " is-active" : "")}>
@@ -218,6 +252,9 @@ export function AssistantPanel() {
 }
 
 const apCss = [
+  ".ap-autonomy{display:flex;flex-direction:column;gap:4px;margin:10px 0;font-size:12px}",
+  ".ap-autonomy select{font:inherit;font-size:13px;min-height:32px;border-radius:7px;padding:0 6px}",
+  ".ap-autonomy small{font-size:11px;line-height:1.4;color:var(--cu-muted,#8b93a1)}",
   ".ap-open{display:inline-flex;align-items:center;height:30px;padding:0 12px;border:1px solid rgba(123,104,238,.5);border-radius:8px;background:rgba(123,104,238,.12);color:#7b68ee;font:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}",
   ".ap-open:hover{background:rgba(123,104,238,.2)}",
   ".ap-overlay{position:fixed;inset:0;z-index:115;background:rgba(0,0,0,.4);display:flex;justify-content:flex-end}",

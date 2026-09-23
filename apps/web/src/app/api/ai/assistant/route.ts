@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { applyPlan, buildPlan, describeStep, planSchema } from "@/lib/ai/agent";
 import { addMessage, deleteConversation, ensureConversation, listConversations, purgeExpired, readConversation, RETENTION_DAYS } from "@/lib/ai/conversations";
+import { getAutonomy, needsConfirmation, setAutonomy } from "@/lib/ai/autonomy";
 import { AiUnavailableError, sourceForUser } from "@/lib/ai/provider";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
@@ -13,7 +14,8 @@ const conversationId = z.string().trim().min(1).max(80).nullable().optional();
 
 const requestSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("plan"), prompt: z.string().trim().min(3).max(1000), conversationId }),
-  z.object({ action: z.literal("apply"), steps: planSchema, conversationId })
+  z.object({ action: z.literal("apply"), steps: planSchema, conversationId, prompt: z.string().trim().max(1000).optional() }),
+  z.object({ action: z.literal("autonomy"), level: z.enum(["SUGGEST", "CONFIRM", "BUILD"]) })
 ]);
 
 export async function GET(request: Request) {
@@ -24,6 +26,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     ...(await sourceForUser(user.id)),
     retentionDays: RETENTION_DAYS,
+    autonomy: await getAutonomy(user.id),
     conversations: await listConversations(user.id),
     messages: wanted ? await readConversation(wanted, user.id) : []
   });
@@ -37,15 +40,48 @@ export async function POST(request: Request) {
     if (user.globalRole === "READ_ONLY") return NextResponse.json({ message: "Read-only accounts cannot create work." }, { status: 403 });
     const input = requestSchema.parse(await request.json());
 
+    if (input.action === "autonomy") {
+      await setAutonomy(user.id, input.level);
+      return NextResponse.json({ autonomy: input.level, message: "Saved." });
+    }
+
     if (input.action === "plan") {
       const plan = await buildPlan(input.prompt, user.id);
       const conversation = await ensureConversation(user.id, input.conversationId ?? null, input.prompt);
       await addMessage({ conversationId: conversation, role: "user", content: input.prompt });
       await addMessage({ conversationId: conversation, role: "assistant", content: plan.reply, steps: plan.steps });
-      return NextResponse.json({ conversationId: conversation, reply: plan.reply, steps: plan.steps, descriptions: plan.steps.map(describeStep) });
+
+      // On the most permissive setting, ordinary additions just happen; anything harder to undo still asks.
+      const autonomy = await getAutonomy(user.id);
+      const mustConfirm = needsConfirmation(autonomy, plan.steps.map((step) => step.type));
+      if (!mustConfirm && plan.steps.length) {
+        const built = await applyPlan(plan.steps, user.id, input.prompt);
+        await addMessage({
+          conversationId: conversation,
+          role: "system",
+          content: "Built " + built.filter((step) => step.ok).length + " of " + built.length + " actions.",
+          applied: built
+        });
+        await recordAuditEvent({
+          actorUserId: user.id,
+          action: "ASSISTANT_APPLIED",
+          entityType: "workspace",
+          summary: user.fullName + " let the assistant build " + built.filter((step) => step.ok).length + " things",
+          metadata: { autonomy, prompt: input.prompt }
+        });
+        return NextResponse.json({ conversationId: conversation, reply: plan.reply, steps: [], descriptions: [], applied: built, autoBuilt: true });
+      }
+
+      return NextResponse.json({
+        conversationId: conversation,
+        reply: plan.reply,
+        steps: plan.steps,
+        descriptions: plan.steps.map(describeStep),
+        autonomy
+      });
     }
 
-    const applied = await applyPlan(input.steps, user.id);
+    const applied = await applyPlan(input.steps, user.id, input.prompt ?? "");
     if (input.conversationId) {
       await addMessage({
         conversationId: await ensureConversation(user.id, input.conversationId, "Assistant work"),
