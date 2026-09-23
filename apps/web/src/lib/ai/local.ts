@@ -68,7 +68,9 @@ export async function localChat(messages: ChatMessage[], options: { json?: boole
       think: false,
       keep_alive: "24h",
       ...(options.json ? { format: "json" } : {}),
-      options: { temperature: 0.2, num_predict: options.maxTokens ?? 300, num_ctx: 4096 }
+      // A chunk of regulation plus the instructions is well past the default window, and Ollama silently
+      // drops what will not fit - so the careful model gets a window big enough to see what it was sent.
+      options: { temperature: 0.2, num_predict: options.maxTokens ?? 300, num_ctx: options.model ? 8192 : 4096 }
     }),
     // The careful model is slower on hardware without a GPU, so it is given longer before giving up.
     signal: AbortSignal.timeout(options.model ? 240000 : 90000)

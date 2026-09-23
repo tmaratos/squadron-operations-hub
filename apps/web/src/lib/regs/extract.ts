@@ -39,13 +39,32 @@ function quoteIsReal(quote: string, haystack: string): boolean {
   return normalise(haystack).includes(needle.slice(0, 120));
 }
 
+// Most of a regulation creates no recurring duty: definitions, scope, who may waive what. Reading all of it
+// with a 4B model on two cores costs minutes a page for nothing. These are the words an obligation is
+// actually written with, so only the parts carrying one are worth the model's time - which makes the job
+// several times faster and the result cleaner, since boilerplate cannot be misread as a requirement.
+const OBLIGATION_SIGNALS = [
+  "annual", "annually", "monthly", "quarterly", "semiannual", "semi-annual", "each year", "every year",
+  "no later than", "not later than", "will submit", "shall submit", "must submit", "will conduct",
+  "shall conduct", "will complete", "shall complete", "will report", "shall report", "will review",
+  "shall review", "deadline", "expires", "renew", "at least once", "every two years", "every three years",
+  "calendar year", "fiscal year"
+];
+
+function carriesObligation(part: string): boolean {
+  const text = part.toLowerCase();
+  return OBLIGATION_SIGNALS.some((signal) => text.includes(signal));
+}
+
 function chunk(text: string): string[] {
   const clean = text.replace(/\r/g, "").replace(/\n{3,}/g, "\n\n");
-  const chunks: string[] = [];
-  for (let index = 0; index < clean.length && chunks.length < MAX_CHUNKS; index += CHUNK) {
-    chunks.push(clean.slice(index, index + CHUNK));
+  const all: string[] = [];
+  for (let index = 0; index < clean.length; index += CHUNK) {
+    all.push(clean.slice(index, index + CHUNK));
   }
-  return chunks;
+  // Nothing matching means the document almost certainly sets no recurring duty. Reading it anyway would
+  // mostly produce invention, which the quote check would then throw away after a long wait.
+  return all.filter(carriesObligation).slice(0, MAX_CHUNKS);
 }
 
 export async function proposeDuties(input: { userId: string; documentName: string; text: string }): Promise<ProposedDuty[]> {
@@ -69,7 +88,7 @@ export async function proposeDuties(input: { userId: string; documentName: strin
       const raw = await aiChatFor(input.userId, [
         { role: "system", content: system },
         { role: "user", content: part }
-      ], { json: true, maxTokens: 1200, model: CAREFUL_MODEL });
+      ], { json: true, maxTokens: 700, model: CAREFUL_MODEL });
 
       const parsed = parseJsonReply<{ duties?: unknown }>(raw, {});
       if (!Array.isArray(parsed.duties)) continue;
