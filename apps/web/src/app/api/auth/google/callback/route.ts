@@ -6,7 +6,7 @@ import {
   isVerifiedGoogleProfile,
   storeGoogleTokens
 } from "@/lib/auth/google-oauth";
-import { upsertGoogleUser } from "@/lib/auth/repository";
+import { ensureOwnership, upsertGoogleUser } from "@/lib/auth/repository";
 import { createSession, setSessionCookie } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { getRequestIp, hashIp } from "@/lib/security/crypto";
@@ -25,6 +25,20 @@ export async function GET(request: Request) {
     if (!(await canAccessSharedDrive(tokens.access_token))) return loginRedirect(request, "drive_access");
 
     const user = await upsertGoogleUser({ email: profile.email, fullName: profile.name });
+    // Somebody has to be able to reach the admin pages, or the Hub cannot be administered at all.
+    const ownership = await ensureOwnership(user.id, user.email);
+    if (ownership) {
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "OWNER_GRANTED",
+        entityType: "user",
+        entityId: user.id,
+        summary: user.fullName + (ownership === "CONFIGURED"
+          ? " was made a system owner because their address is configured as one"
+          : " became the first system owner, because the Hub had none"),
+        metadata: { reason: ownership, email: user.email }
+      });
+    }
     await storeGoogleTokens({
       userId: user.id,
       googleSubject: profile.sub,

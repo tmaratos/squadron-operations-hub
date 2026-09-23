@@ -148,7 +148,18 @@ export async function countRecentAccessRequests(email: string, hours = 24): Prom
   return Number(count ?? 0);
 }
 
-export async function ensureBootstrapOwner(email: string): Promise<UserRecord | null> {
+/**
+ * Decides whether the person signing in owns the Hub. Two ways, checked in this order:
+ *
+ *  1. Their address is in BOOTSTRAP_OWNER_EMAILS (or the owner profiles). An account that already exists is
+ *     promoted, rather than being skipped as before - an owner set in configuration should become one.
+ *  2. Nobody owns the Hub at all. Then the first person through the door takes it, because otherwise the
+ *     admin pages are unreachable forever and there is no way back in. Sign-in already requires access to
+ *     the squadron Shared Drive, so this is not open to the public.
+ *
+ * Returns the role it granted, so the caller can record it. Ownership is never taken away here.
+ */
+export async function ensureOwnership(userId: string, email: string): Promise<"CONFIGURED" | "FIRST_IN" | null> {
   const normalizedEmail = email.trim().toLowerCase();
   const env = getCloudflareEnv();
   const profiles = parseBootstrapProfiles(env.BOOTSTRAP_OWNER_PROFILES_JSON);
@@ -158,28 +169,23 @@ export async function ensureBootstrapOwner(email: string): Promise<UserRecord | 
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
 
-  if (!profile && !ownerEmails.includes(normalizedEmail)) return findUserByEmail(normalizedEmail);
+  const configured = Boolean(profile) || ownerEmails.includes(normalizedEmail);
+  const reason: "CONFIGURED" | "FIRST_IN" | null = configured
+    ? "CONFIGURED"
+    : (await countActiveSystemOwners()) === 0
+      ? "FIRST_IN"
+      : null;
+  if (!reason) return null;
 
-  const existing = await findUserByEmail(normalizedEmail);
-  if (existing) return existing;
+  const current = await findUserById(userId);
+  if (!current || current.globalRole === "SYSTEM_OWNER") return null;
 
-  const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const inferredName = normalizedEmail
-    .split("@")[0]
-    .replace(/[._-]+/g, " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
-
   await getDatabase()
-    .prepare(
-      `INSERT INTO users (
-        id, email, full_name, duty_title, status, global_role, created_at, updated_at, approved_at
-      ) VALUES (?, ?, ?, ?, 'APPROVED', 'SYSTEM_OWNER', ?, ?, ?)`
-    )
-    .bind(id, normalizedEmail, profile?.fullName || inferredName || "System Owner", profile?.dutyTitle ?? null, now, now, now)
+    .prepare("UPDATE users SET global_role = 'SYSTEM_OWNER', status = 'APPROVED', duty_title = COALESCE(duty_title, ?), updated_at = ?, approved_at = COALESCE(approved_at, ?) WHERE id = ?")
+    .bind(profile?.dutyTitle ?? null, now, now, userId)
     .run();
-
-  return findUserById(id);
+  return reason;
 }
 
 export async function createApprovedUserFromRequest(input: {
