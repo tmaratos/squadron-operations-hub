@@ -20,7 +20,7 @@ export function aiSource(): AiSource {
   return isLocalAiConfigured() ? "squadron-server" : "none";
 }
 
-export async function aiChat(messages: ChatMessage[], options: { json?: boolean; maxTokens?: number } = {}): Promise<string> {
+export async function aiChat(messages: ChatMessage[], options: { json?: boolean; maxTokens?: number; model?: string } = {}): Promise<string> {
   if (!isLocalAiConfigured()) throw new AiUnavailableError();
   return localChat(messages, options);
 }
@@ -48,7 +48,7 @@ export async function sourceForUser(userId: string): Promise<{ available: boolea
   return { available: isLocalAiConfigured(), source: "squadron-server" };
 }
 
-export async function aiChatFor(userId: string, messages: ChatMessage[], options: { json?: boolean; maxTokens?: number } = {}): Promise<string> {
+export async function aiChatFor(userId: string, messages: ChatMessage[], options: { json?: boolean; maxTokens?: number; model?: string } = {}): Promise<string> {
   const choice = await preferredProvider(userId);
   if (choice && isVendorProvider(choice)) return vendorChat(choice, userId, messages, options);
   return aiChat(messages, options);

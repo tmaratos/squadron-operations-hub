@@ -3,8 +3,13 @@ import { getCloudflareEnv } from "@/lib/cloudflare";
 // Squadron AI: the Ollama server on the squadron's own hardware, reached through a Cloudflare Tunnel
 // that is locked behind a Cloudflare Access service token. Task data never goes to an outside AI company.
 
-// qwen3:1.7b is the largest model that answers in reasonable time on the squadron server (2 CPU cores, 5.7 GB RAM, no GPU).
+// qwen3:1.7b is the largest model that answers in reasonable time on the squadron server (2 CPU cores,
+// 5.7 GB RAM, no GPU). It is what anybody waiting for an answer gets.
 const DEFAULT_MODEL = "qwen3:1.7b";
+
+// Reading a regulation is worth more care than speed: it happens in the background, a person is not sitting
+// watching it, and a missed requirement is expensive. The bigger model is used only for work like that.
+export const CAREFUL_MODEL = "qwen3:4b";
 
 interface LocalAiEnv {
   // Preferred: a private VPC Service binding that reaches Ollama through the hp-server tunnel. No keys, never public.
@@ -41,7 +46,7 @@ function withNoThink(messages: ChatMessage[]): ChatMessage[] {
   return messages.map((message, index) => (index === messages.length - 1 && message.role === "user" ? { ...message, content: message.content + "\n/no_think" } : message));
 }
 
-export async function localChat(messages: ChatMessage[], options: { json?: boolean; maxTokens?: number } = {}): Promise<string> {
+export async function localChat(messages: ChatMessage[], options: { json?: boolean; maxTokens?: number; model?: string } = {}): Promise<string> {
   const values = env();
   const usingBinding = Boolean(values.SQUADRON_AI);
   if (!usingBinding && (!values.LOCAL_AI_URL || !values.LOCAL_AI_ACCESS_CLIENT_ID || !values.LOCAL_AI_ACCESS_CLIENT_SECRET)) throw new LocalAiNotConfiguredError();
@@ -57,7 +62,7 @@ export async function localChat(messages: ChatMessage[], options: { json?: boole
     method: "POST",
     headers,
     body: JSON.stringify({
-      model: values.LOCAL_AI_MODEL || DEFAULT_MODEL,
+      model: options.model || values.LOCAL_AI_MODEL || DEFAULT_MODEL,
       messages: withNoThink(messages),
       stream: false,
       think: false,
@@ -65,7 +70,8 @@ export async function localChat(messages: ChatMessage[], options: { json?: boole
       ...(options.json ? { format: "json" } : {}),
       options: { temperature: 0.2, num_predict: options.maxTokens ?? 300, num_ctx: 4096 }
     }),
-    signal: AbortSignal.timeout(90000)
+    // The careful model is slower on hardware without a GPU, so it is given longer before giving up.
+    signal: AbortSignal.timeout(options.model ? 240000 : 90000)
   };
 
   const response = usingBinding && values.SQUADRON_AI ? await values.SQUADRON_AI.fetch(url, request) : await fetch(url, request);

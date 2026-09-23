@@ -1,4 +1,4 @@
-import { parseJsonReply } from "@/lib/ai/local";
+import { CAREFUL_MODEL, parseJsonReply } from "@/lib/ai/local";
 import { aiChatFor } from "@/lib/ai/provider";
 import { getDatabase } from "@/lib/cloudflare";
 import type { Cadence } from "@/lib/work/duties";
@@ -69,7 +69,7 @@ export async function proposeDuties(input: { userId: string; documentName: strin
       const raw = await aiChatFor(input.userId, [
         { role: "system", content: system },
         { role: "user", content: part }
-      ], { json: true, maxTokens: 1200 });
+      ], { json: true, maxTokens: 1200, model: CAREFUL_MODEL });
 
       const parsed = parseJsonReply<{ duties?: unknown }>(raw, {});
       if (!Array.isArray(parsed.duties)) continue;
