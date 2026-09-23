@@ -1,0 +1,162 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo, useState } from "react";
+
+// What you have to do, in the order you have to do it.
+//
+// The page this replaced read a table the squadron's work was never imported into, so it told everybody
+// they had nothing to do while fifty things sat open. This reads the same work as everywhere else.
+
+export interface TaskRow {
+  id: string;
+  listId: string;
+  listName: string;
+  title: string;
+  statusName: string | null;
+  dueOn: string | null;
+  closed: boolean;
+  assignees: string[];
+  assigneeIds: string[];
+}
+
+type Tab = "mine" | "unassigned" | "everyone";
+
+const TABS: Array<{ key: Tab; label: string }> = [
+  { key: "mine", label: "Mine" },
+  { key: "unassigned", label: "Nobody's" },
+  { key: "everyone", label: "Everyone's" }
+];
+
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function dayDiff(dueOn: string): number {
+  return Math.round((new Date(dueOn + "T12:00:00").getTime() - new Date(today() + "T12:00:00").getTime()) / 86400000);
+}
+
+function whenLabel(dueOn: string | null): string {
+  if (!dueOn) return "No date";
+  const days = dayDiff(dueOn);
+  if (days < -1) return Math.abs(days) + " days late";
+  if (days === -1) return "1 day late";
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days <= 7) return "In " + days + " days";
+  return new Date(dueOn + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+export function MyTasks({ items, userId }: { items: TaskRow[]; userId: string }) {
+  const [tab, setTab] = useState<Tab>("mine");
+  const [search, setSearch] = useState("");
+
+  const open = useMemo(() => items.filter((item) => !item.closed), [items]);
+  const mineCount = useMemo(() => open.filter((item) => item.assigneeIds.includes(userId)).length, [open, userId]);
+  const nobodyCount = useMemo(() => open.filter((item) => !item.assigneeIds.length).length, [open]);
+
+  const shown = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return open
+      .filter((item) => (tab === "mine" ? item.assigneeIds.includes(userId) : tab === "unassigned" ? !item.assigneeIds.length : true))
+      .filter((item) => !needle || item.title.toLowerCase().includes(needle) || item.listName.toLowerCase().includes(needle))
+      .sort((left, right) => {
+        if (!left.dueOn) return 1;
+        if (!right.dueOn) return -1;
+        return left.dueOn.localeCompare(right.dueOn);
+      });
+  }, [open, tab, search, userId]);
+
+  const groups: Array<{ label: string; rows: TaskRow[] }> = [
+    { label: "Late", rows: shown.filter((item) => item.dueOn && dayDiff(item.dueOn) < 0) },
+    { label: "This week", rows: shown.filter((item) => item.dueOn && dayDiff(item.dueOn) >= 0 && dayDiff(item.dueOn) <= 7) },
+    { label: "Later", rows: shown.filter((item) => item.dueOn && dayDiff(item.dueOn) > 7) },
+    { label: "No date", rows: shown.filter((item) => !item.dueOn) }
+  ].filter((group) => group.rows.length);
+
+  return (
+    <section className="mt">
+      <style>{mtCss}</style>
+
+      <div className="mt-tabs" role="tablist">
+        {TABS.map((entry) => (
+          <button
+            key={entry.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === entry.key}
+            className={"mt-tab" + (tab === entry.key ? " is-on" : "")}
+            onClick={() => setTab(entry.key)}
+          >
+            {entry.label}
+            <span className="mt-n">{entry.key === "mine" ? mineCount : entry.key === "unassigned" ? nobodyCount : open.length}</span>
+          </button>
+        ))}
+        <input
+          className="mt-search"
+          value={search}
+          placeholder="Search these…"
+          aria-label="Search tasks"
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      </div>
+
+      {groups.length ? (
+        groups.map((group) => (
+          <div key={group.label} className="mt-group">
+            <h2>{group.label} <span className="mt-n">{group.rows.length}</span></h2>
+            <ul>
+              {group.rows.map((item) => (
+                <li key={item.id}>
+                  <Link href={"/lists/" + item.listId + "?item=" + item.id}>
+                    <span className="mt-title">{item.title}</span>
+                    <span className="mt-meta">
+                      <span className={"mt-when" + (item.dueOn && dayDiff(item.dueOn) < 0 ? " is-late" : "")}>{whenLabel(item.dueOn)}</span>
+                      <span className="mt-list">{item.listName}</span>
+                      <span className="mt-who">{item.assignees[0] ?? "Nobody"}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))
+      ) : (
+        <p className="mt-empty">
+          {tab === "mine"
+            ? mineCount === 0 && open.length > 0
+              ? "Nothing is assigned to you. There are " + open.length + " open items across the squadron — try Everyone's, or Nobody's to see what still needs an owner."
+              : "Nothing assigned to you."
+            : tab === "unassigned"
+              ? "Everything open has an owner."
+              : "No open work matches that."}
+        </p>
+      )}
+    </section>
+  );
+}
+
+const mtCss = [
+  ".mt{display:grid;gap:16px}",
+  ".mt-tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+  ".mt-tab{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:14px;font-weight:600;padding:8px 14px;border-radius:999px;cursor:pointer}",
+  ".mt-tab.is-on{background:#7b68ee;border-color:#7b68ee;color:#fff}",
+  ".mt-n{font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:rgba(0,0,0,.09)}",
+  ".mt-tab.is-on .mt-n{background:rgba(255,255,255,.22)}",
+  "html[data-theme=dark] .mt-n{background:rgba(255,255,255,.12)}",
+  ".mt-search{margin-left:auto;flex:1 1 220px;max-width:340px;font:inherit;font-size:14px;min-height:38px;padding:0 12px;border:1px solid var(--cu-border,#d5d8de);border-radius:9px}",
+  ".mt-group h2{margin:0 0 8px;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--cu-muted,#656f7d);display:flex;align-items:center;gap:8px}",
+  ".mt-group ul{list-style:none;margin:0;padding:0;border:1px solid var(--cu-border,#e4e6eb);border-radius:12px;overflow:hidden;background:var(--cu-bg,#fff)}",
+  "html[data-theme=dark] .mt-group ul{background:#222326;border-color:#3a3d44}",
+  ".mt-group li + li{border-top:1px solid var(--cu-border,#eef0f3)}",
+  "html[data-theme=dark] .mt-group li + li{border-color:#33363c}",
+  ".mt-group a{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 16px;text-decoration:none;color:inherit;flex-wrap:wrap}",
+  ".mt-group a:hover{background:rgba(123,104,238,.07)}",
+  ".mt-title{font-size:14.5px;line-height:1.45;min-width:0;flex:1}",
+  ".mt-meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--cu-muted,#656f7d)}",
+  ".mt-when{font-weight:600}.mt-when.is-late{color:#d03b3b}",
+  ".mt-list{opacity:.85}",
+  ".mt-who{padding:2px 9px;border-radius:999px;background:rgba(123,104,238,.13);font-weight:600}",
+  ".mt-empty{margin:0;padding:22px;border:1px solid var(--cu-border,#e4e6eb);border-radius:12px;font-size:14px;line-height:1.6;color:var(--cu-muted,#656f7d)}",
+  "@media (max-width:760px){.mt-search{margin-left:0;max-width:none}.mt-group a{align-items:flex-start;flex-direction:column;gap:6px}}"
+].join("");

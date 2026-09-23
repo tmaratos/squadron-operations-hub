@@ -16,6 +16,8 @@ export interface DashboardItem {
   dueOn: string | null;
   tags: string[];
   assignees: string[];
+  /** Who it belongs to, by account, so "mine" does not have to be worked out from names. */
+  assigneeIds: string[];
 }
 
 export type WidgetResult =
@@ -71,13 +73,17 @@ export async function loadDashboardItems(workspaceId = WORKSPACE_ID): Promise<Da
       "SELECT it.item_id, t.label FROM item_tags it JOIN task_tags t ON t.id = it.tag_id JOIN items ON items.id = it.item_id JOIN lists ON lists.id = items.list_id JOIN spaces ON spaces.id = lists.space_id WHERE spaces.workspace_id = ?"
     ).bind(workspaceId).all<{ item_id: string; label: string }>(),
     db.prepare(
-      "SELECT a.item_id, u.full_name FROM item_assignees a JOIN users u ON u.id = a.user_id JOIN items ON items.id = a.item_id JOIN lists ON lists.id = items.list_id JOIN spaces ON spaces.id = lists.space_id WHERE spaces.workspace_id = ?"
-    ).bind(workspaceId).all<{ item_id: string; full_name: string }>()
+      "SELECT a.item_id, a.user_id, u.full_name FROM item_assignees a JOIN users u ON u.id = a.user_id JOIN items ON items.id = a.item_id JOIN lists ON lists.id = items.list_id JOIN spaces ON spaces.id = lists.space_id WHERE spaces.workspace_id = ?"
+    ).bind(workspaceId).all<{ item_id: string; user_id: string; full_name: string }>()
   ]);
   const tagMap = new Map<string, string[]>();
   tags.results.forEach((tag) => tagMap.set(tag.item_id, [...(tagMap.get(tag.item_id) ?? []), tag.label]));
   const personMap = new Map<string, string[]>();
-  people.results.forEach((person) => personMap.set(person.item_id, [...(personMap.get(person.item_id) ?? []), person.full_name]));
+  const personIdMap = new Map<string, string[]>();
+  people.results.forEach((person) => {
+    personMap.set(person.item_id, [...(personMap.get(person.item_id) ?? []), person.full_name]);
+    personIdMap.set(person.item_id, [...(personIdMap.get(person.item_id) ?? []), person.user_id]);
+  });
   return rows.results.map((row) => ({
     id: row.id,
     listId: row.list_id,
@@ -89,7 +95,8 @@ export async function loadDashboardItems(workspaceId = WORKSPACE_ID): Promise<Da
     priority: row.priority,
     dueOn: row.due_on,
     tags: tagMap.get(row.id) ?? [],
-    assignees: personMap.get(row.id) ?? []
+    assignees: personMap.get(row.id) ?? [],
+    assigneeIds: personIdMap.get(row.id) ?? []
   }));
 }
 
