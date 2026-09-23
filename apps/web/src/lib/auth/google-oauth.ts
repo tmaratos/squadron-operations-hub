@@ -11,6 +11,19 @@ const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const OAUTH_COOKIE_MAX_AGE = 10 * 60;
 const SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive"];
 
+// Asked for separately, only by members who want it, and only when they press the button. Drafting is
+// deliberately the limit: the Hub writes the message into their own Gmail drafts, and a person sends it.
+export const GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
+
+export function hasGmailScope(scopes: string | null | undefined): boolean {
+  return (scopes ?? "").split(/\s+/).includes(GMAIL_SCOPE);
+}
+
+export async function storedScopesFor(userId: string): Promise<string> {
+  const row = await getDatabase().prepare("SELECT scopes FROM user_google_oauth WHERE user_id = ?").bind(userId).first<{ scopes: string }>();
+  return row?.scopes ?? "";
+}
+
 export interface GoogleProfile {
   sub: string;
   email: string;
@@ -34,7 +47,7 @@ interface OAuthRow {
   token_expires_at: string;
 }
 
-export async function createGoogleAuthorizationUrl(): Promise<string> {
+export async function createGoogleAuthorizationUrl(extraScopes: string[] = []): Promise<string> {
   const env = requiredOAuthEnv();
   const state = createRandomToken(32);
   const verifier = createRandomToken(64);
@@ -54,14 +67,15 @@ export async function createGoogleAuthorizationUrl(): Promise<string> {
     client_id: env.clientId,
     redirect_uri: env.redirectUri,
     response_type: "code",
-    scope: SCOPES.join(" "),
+    scope: [...SCOPES, ...extraScopes].join(" "),
     state,
     code_challenge: challenge,
     code_challenge_method: "S256",
     access_type: "offline",
     include_granted_scopes: "true",
-    // Always show the Google account chooser so members signed in to several Google accounts can pick the right one.
-    prompt: "select_account"
+    // Choosing an account matters at sign-in. When an existing member is just adding a permission, asking
+    // them to pick the account again is how people end up connecting the wrong one.
+    prompt: extraScopes.length ? "consent" : "select_account"
   });
   return `${AUTHORIZATION_ENDPOINT}?${params}`;
 }

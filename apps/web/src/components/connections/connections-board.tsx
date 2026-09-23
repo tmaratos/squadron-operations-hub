@@ -83,7 +83,7 @@ export function ConnectionsBoard({ providers, initialConnections }: { providers:
                   <div className="cx-status">
                     {connected ? <span className="cx-pill cx-pill--ok">✓ Connected</span>
                       : problem ? <span className="cx-pill cx-pill--bad">! Needs attention</span>
-                      : provider.method === "coming_soon" ? <span className="cx-pill">Coming soon</span>
+                      : provider.method === "not_yet" ? <span className="cx-pill">Not needed yet</span>
                       : <span className="cx-pill">Not connected</span>}
                     {connection?.accountEmail ? <span className="cx-meta">{connection.accountEmail}</span> : null}
                     {connection?.keyHint ? <span className="cx-meta">Key ending {connection.keyHint.replace(/•/g, "")}</span> : null}
@@ -96,11 +96,22 @@ export function ConnectionsBoard({ providers, initialConnections }: { providers:
                     <p className="cx-help">{connected ? "Connected through your Google sign-in. Nothing else to do." : "Sign out, then sign back in with Google and allow Drive access."}</p>
                   ) : null}
 
-                  {provider.method === "coming_soon" ? (
-                    <div className="cx-actions">
-                      <button type="button" className="cx-btn" disabled>Coming soon</button>
-                      <span className="cx-help">Your administrator is setting this up.</span>
-                    </div>
+                  {provider.method === "not_yet" ? (
+                    <p className="cx-help">Nothing to do. This turns on by itself if the squadron moves to Microsoft 365.</p>
+                  ) : null}
+
+                  {provider.method === "google_permission" ? (
+                    connected ? (
+                      <p className="cx-help">
+                        The Hub can put drafts in your Gmail. It never sends anything: you open the draft, read it, and press send.
+                        Remove this any time in your Google account under “Third-party access”.
+                      </p>
+                    ) : (
+                      <div className="cx-actions">
+                        <a className="cx-btn cx-btn--primary" href="/api/auth/google/connect?scope=gmail">Connect Gmail</a>
+                        <span className="cx-help">Google will ask you to allow drafting. The Hub can only create drafts — it cannot read your mail or send anything.</span>
+                      </div>
+                    )
                   ) : null}
 
                   {provider.method === "api_key" && isOpen ? (

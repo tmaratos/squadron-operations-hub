@@ -4,8 +4,12 @@ import Link from "next/link";
 import { useState } from "react";
 import type { NotificationPrefs, NotificationRecord } from "@/lib/notify/notifications";
 
-// What the Hub told you, and what you want to be told about. Both on one page, because the first question
-// anyone asks after seeing a notice is "how do I stop getting these" or "why didn't I get one".
+// What the Hub told you, and one switch.
+//
+// There used to be five checkboxes and two dropdowns here. Nobody in a squadron wants to design their own
+// notification policy; they want to know what is due. So the Hub decides sensibly - the work you are
+// responsible for, once a day at 6pm - and the only question left is whether you want the email at all.
+// Anything that cannot wait is sent by a person as an alert, so nothing urgent depends on a setting.
 
 const KIND_LABEL: Record<string, { icon: string; label: string; tone: string }> = {
   ASSIGNED: { icon: "◍", label: "Given to you", tone: "accent" },
@@ -16,14 +20,6 @@ const KIND_LABEL: Record<string, { icon: string; label: string; tone: string }> 
   MENTION: { icon: "@", label: "Mentioned you", tone: "accent" },
   ANNOUNCEMENT: { icon: "📣", label: "Squadron alert", tone: "accent" }
 };
-
-const CHOICES: Array<{ key: keyof NotificationPrefs; label: string; detail: string }> = [
-  { key: "onAssigned", label: "Work given to me", detail: "Someone assigns a task to you." },
-  { key: "onDueSoon", label: "Deadlines coming up", detail: "A task of yours is due soon." },
-  { key: "onOverdue", label: "Anything of mine that is late", detail: "A task of yours passed its due date." },
-  { key: "onComment", label: "Comments on my tasks", detail: "Someone writes on a task you own or raised." },
-  { key: "onStatus", label: "Status changes on my tasks", detail: "Off by default — this one is chatty." }
-];
 
 export function NotificationCenter({
   initialNotifications,
@@ -52,6 +48,28 @@ export function NotificationCenter({
     }).catch(() => undefined);
   }
 
+  async function setEmail(on: boolean) {
+    const previous = prefs;
+    const next: NotificationPrefs = { ...prefs, emailEnabled: on };
+    setPrefs(next);
+    setBusy(true);
+    setNote(null);
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "prefs", prefs: next })
+      });
+      if (!response.ok) throw new Error("That change could not be saved.");
+      setNote(on ? "Turned on. Your next summary is at 6pm." : "Turned off. Everything still appears on this page.");
+    } catch {
+      setPrefs(previous);
+      setNote("That change could not be saved.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendTest() {
     setBusy(true);
     setNote(null);
@@ -70,51 +88,32 @@ export function NotificationCenter({
     }
   }
 
-  async function savePrefs(next: NotificationPrefs) {
-    const previous = prefs;
-    setPrefs(next);
-    setBusy(true);
-    setNote(null);
-    try {
-      const response = await fetch("/api/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "prefs", prefs: next })
-      });
-      const data = (await response.json()) as { message?: string };
-      if (!response.ok) throw new Error(data.message || "That change could not be saved.");
-      setNote(data.message ?? "Saved.");
-    } catch (caught) {
-      setPrefs(previous);
-      setNote(caught instanceof Error ? caught.message : "That change could not be saved.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="nc">
       <style>{ncCss}</style>
 
-      {/* Most members never change any of this, so the page opens by saying what already happens to them. */}
-      <section className="nc-card nc-plain-english">
-        <h2>Do I need to set anything up?</h2>
-        <p className="nc-lead"><strong>No.</strong> You already get these. Here is exactly what happens:</p>
-        <ol className="nc-steps">
-          <li>
-            <span className="nc-step-n">1</span>
-            <span><strong>Someone gives you a job.</strong> It shows up on this page straight away.</span>
-          </li>
-          <li>
-            <span className="nc-step-n">2</span>
-            <span><strong>Once a day at 6pm</strong>, we email you a list of what needs you — new jobs, anything due soon, anything late. One email. Not one per job.</span>
-          </li>
-          <li>
-            <span className="nc-step-n">3</span>
-            <span><strong>That email goes to {emailAddress}.</strong>{extraAddresses ? " It also goes to your other address on file with CAP." : ""}</span>
-          </li>
-        </ol>
-        <p className="nc-lead">Want it different? Change the boxes further down. Nothing else to do.</p>
+      <section className="nc-card nc-explain">
+        <h2>How this works</h2>
+        <p>
+          When someone gives you a job, it appears on this page straight away. <strong>Once a day at 6pm</strong> we
+          email you everything that needs you — new jobs, anything due soon, anything late. One email, not one per job.
+        </p>
+        <label className="nc-switch">
+          <input type="checkbox" checked={prefs.emailEnabled} disabled={busy} onChange={(event) => setEmail(event.target.checked)} />
+          <span>
+            <strong>Email me the daily summary</strong>
+            <small>
+              Goes to {emailAddress}
+              {extraAddresses ? " and your other address on file with CAP" : ""}. Turn it off and everything still appears here.
+            </small>
+          </span>
+        </label>
+        {prefs.emailEnabled ? (
+          <button type="button" className="nc-test-link" disabled={busy} onClick={sendTest}>
+            {busy ? "Sending…" : "Send me one now to check it works"}
+          </button>
+        ) : null}
+        {note ? <p className="nc-note" role="status">{note}</p> : null}
       </section>
 
       <section className="nc-card">
@@ -154,81 +153,6 @@ export function NotificationCenter({
           <p className="nc-empty">Nothing yet. When someone gives you work, or a deadline of yours gets close, it shows up here.</p>
         )}
       </section>
-
-      <section className="nc-card">
-        <header className="nc-head">
-          <div>
-            <h2>What to tell me</h2>
-            <p>These apply to both this page and your email.</p>
-          </div>
-        </header>
-
-        <div className="nc-choices">
-          {CHOICES.map((choice) => (
-            <label key={String(choice.key)} className="nc-choice">
-              <input
-                type="checkbox"
-                checked={Boolean(prefs[choice.key])}
-                disabled={busy}
-                onChange={(event) => savePrefs({ ...prefs, [choice.key]: event.target.checked })}
-              />
-              <span><strong>{choice.label}</strong><small>{choice.detail}</small></span>
-            </label>
-          ))}
-        </div>
-
-        <div className="nc-sub">
-          <label className="nc-choice nc-choice--wide">
-            <input
-              type="checkbox"
-              checked={prefs.emailEnabled}
-              disabled={busy}
-              onChange={(event) => savePrefs({ ...prefs, emailEnabled: event.target.checked })}
-            />
-            <span><strong>Email me as well</strong><small>Sent to {emailAddress}. Turn this off and everything still appears here.</small></span>
-          </label>
-
-          {prefs.emailEnabled ? (
-            <>
-              <label className="nc-field">
-                <span>How often</span>
-                <select
-                  value={prefs.cadence === "IMMEDIATE" ? "IMMEDIATE" : prefs.digestWhen}
-                  disabled={busy}
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    savePrefs(value === "IMMEDIATE"
-                      ? { ...prefs, cadence: "IMMEDIATE" }
-                      : { ...prefs, cadence: "DAILY", digestWhen: value as NotificationPrefs["digestWhen"] });
-                  }}
-                >
-                  <option value="EVENING">Once a day, end of day (6pm)</option>
-                  <option value="MORNING">Once a day, morning (6am)</option>
-                  <option value="IMMEDIATE">As things happen</option>
-                </select>
-              </label>
-              <label className="nc-field">
-                <span>Warn me before a deadline</span>
-                <select value={prefs.leadDays} disabled={busy} onChange={(event) => savePrefs({ ...prefs, leadDays: Number(event.target.value) })}>
-                  <option value={1}>1 day before</option>
-                  <option value={3}>3 days before</option>
-                  <option value={7}>A week before</option>
-                  <option value={14}>Two weeks before</option>
-                </select>
-              </label>
-            </>
-          ) : null}
-        </div>
-
-        {prefs.emailEnabled ? (
-          <div className="nc-test">
-            <button type="button" className="nc-btn" disabled={busy} onClick={sendTest}>{busy ? "Sending…" : "Send me a test email"}</button>
-            <small>Proves the Hub can reach you, without waiting for real work to turn up.</small>
-          </div>
-        ) : null}
-
-        {note ? <p className="nc-note" role="status">{note}</p> : null}
-      </section>
     </div>
   );
 }
@@ -246,15 +170,18 @@ function timeAgo(iso: string): string {
 
 const ncCss = [
   ".nc{display:grid;gap:16px}",
-  ".nc-plain-english{background:rgba(123,104,238,.07);border-color:rgba(123,104,238,.3)}",
-  "html[data-theme=dark] .nc-plain-english{background:rgba(123,104,238,.12)}",
-  ".nc-plain-english h2{margin:0 0 6px;font-size:17px}",
-  ".nc-lead{margin:0;font-size:14.5px;line-height:1.55}",
-  ".nc-steps{list-style:none;margin:12px 0;padding:0;display:grid;gap:10px}",
-  ".nc-steps li{display:flex;gap:11px;align-items:flex-start;font-size:14.5px;line-height:1.55}",
-  ".nc-step-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:#7b68ee;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}",
   ".nc-card{border:1px solid var(--cu-border,#e4e6eb);border-radius:12px;background:var(--cu-bg,#fff);padding:16px 18px}",
   "html[data-theme=dark] .nc-card{background:#222326;border-color:#3a3d44}",
+  ".nc-explain h2{margin:0 0 6px;font-size:17px}",
+  ".nc-explain>p{margin:0;font-size:14.5px;line-height:1.6;max-width:70ch}",
+  ".nc-switch{display:flex;gap:11px;align-items:flex-start;margin-top:14px;padding:12px 13px;border:1px solid var(--cu-border,#e4e6eb);border-radius:10px;cursor:pointer}",
+  "html[data-theme=dark] .nc-switch{border-color:#3a3d44}",
+  ".nc-switch input{width:20px;height:20px;margin-top:1px;flex:0 0 auto;accent-color:#7b68ee}",
+  ".nc-switch span{display:flex;flex-direction:column;gap:3px}",
+  ".nc-switch strong{font-size:15px}",
+  ".nc-switch small{font-size:13px;color:var(--cu-muted,#656f7d);line-height:1.5}",
+  ".nc-test-link{margin-top:10px;border:0;background:none;padding:0;color:#7b68ee;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;text-decoration:underline}",
+  ".nc-test-link:disabled{opacity:.6;cursor:default}",
   ".nc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}",
   ".nc-head h2{margin:0;font-size:16px}.nc-head p{margin:4px 0 0;font-size:13.5px;color:var(--cu-muted,#656f7d)}",
   ".nc-btn{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:13.5px;font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer}",
@@ -272,18 +199,6 @@ const ncCss = [
   ".nc-text em{font-style:normal;font-size:11.5px;color:var(--cu-muted,#8b93a1)}",
   ".nc-dot{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:#7b68ee;margin-top:11px}",
   ".nc-empty{margin:14px 0 0;font-size:13.5px;line-height:1.55;color:var(--cu-muted,#656f7d)}",
-  ".nc-choices{display:grid;gap:8px;margin-top:14px}",
-  ".nc-choice{display:flex;gap:11px;align-items:flex-start;padding:10px 12px;border:1px solid var(--cu-border,#e4e6eb);border-radius:10px;cursor:pointer}",
-  "html[data-theme=dark] .nc-choice{border-color:#3a3d44}",
-  ".nc-choice input{width:18px;height:18px;margin-top:1px;flex:0 0 auto;accent-color:#7b68ee}",
-  ".nc-choice span{display:flex;flex-direction:column;gap:2px}",
-  ".nc-choice strong{font-size:14px}.nc-choice small{font-size:12.5px;color:var(--cu-muted,#656f7d);line-height:1.45}",
-  ".nc-sub{margin-top:14px;padding-top:14px;border-top:1px solid var(--cu-border,#eef0f3);display:grid;gap:10px}",
-  "html[data-theme=dark] .nc-sub{border-color:#33363c}",
-  ".nc-field{display:flex;flex-direction:column;gap:5px;font-size:13.5px;max-width:340px}",
-  ".nc-field select{font:inherit;font-size:14px;min-height:38px;border-radius:8px;padding:0 8px}",
-  ".nc-test{margin-top:4px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}",
-  ".nc-test small{font-size:12.5px;color:var(--cu-muted,#656f7d)}",
-  ".nc-note{margin:12px 0 0;font-size:13px;padding:9px 12px;border-radius:8px;background:rgba(123,104,238,.12)}",
-  "@media (max-width:760px){.nc-card{padding:14px}.nc-field{max-width:none}}"
+  ".nc-note{margin:11px 0 0;font-size:13px;padding:9px 12px;border-radius:8px;background:rgba(123,104,238,.12)}",
+  "@media (max-width:760px){.nc-card{padding:14px}}"
 ].join("");
