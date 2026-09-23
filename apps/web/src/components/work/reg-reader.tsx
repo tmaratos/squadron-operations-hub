@@ -12,6 +12,7 @@ interface DocumentRow {
   name: string;
   webViewLink: string | null;
   status: "PENDING" | "READ" | "FAILED" | "SKIPPED";
+  reading: boolean;
   dutiesFound: number;
   error: string | null;
   readAt: string | null;
@@ -24,10 +25,20 @@ export function RegReader() {
   const [readingAll, setReadingAll] = useState(false);
 
   useEffect(() => {
-    fetch("/api/regs")
-      .then((response) => response.json() as Promise<{ documents?: DocumentRow[] }>)
-      .then((data) => setDocuments(data.documents ?? []))
-      .catch(() => undefined);
+    let live = true;
+    const load = async () => {
+      try {
+        const response = await fetch("/api/regs");
+        const data = (await response.json()) as { documents?: DocumentRow[] };
+        if (live) setDocuments(data.documents ?? []);
+      } catch {
+        // a missed poll is not worth saying anything about
+      }
+    };
+    load();
+    // Reading happens on the server long after the click, so the page keeps checking while one is running.
+    const timer = setInterval(load, 8000);
+    return () => { live = false; clearInterval(timer); };
   }, []);
 
   async function send(body: Record<string, unknown>, key: string) {
@@ -52,13 +63,33 @@ export function RegReader() {
     setReadingAll(true);
     try {
       for (const document of queue) {
-        const updated = await send({ action: "read", id: document.id }, document.id);
-        const row = updated.find((entry) => entry.id === document.id);
-        if (row?.status === "FAILED") break;
+        await send({ action: "read", id: document.id }, document.id);
+        // One at a time: the squadron server reads with one model and queueing them all at once only
+        // makes every one of them slower.
+        const finished = await waitForRead(document.id);
+        if (!finished) break;
       }
     } finally {
       setReadingAll(false);
     }
+  }
+
+  /** Waits for one document to stop being read. Gives up after twenty minutes rather than hanging forever. */
+  async function waitForRead(id: string): Promise<boolean> {
+    const deadline = Date.now() + 20 * 60000;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      try {
+        const response = await fetch("/api/regs");
+        const data = (await response.json()) as { documents?: DocumentRow[] };
+        setDocuments(data.documents ?? []);
+        const row = (data.documents ?? []).find((entry) => entry.id === id);
+        if (row && !row.reading) return row.status !== "FAILED";
+      } catch {
+        // keep waiting
+      }
+    }
+    return false;
   }
 
   const pending = documents.filter((document) => document.status === "PENDING");
@@ -97,7 +128,8 @@ export function RegReader() {
               <div className="rr-doc">
                 <strong>{document.name}</strong>
                 <small>
-                  {document.status === "PENDING" ? "Not read yet"
+                  {document.reading ? "Reading it now…"
+                    : document.status === "PENDING" ? "Not read yet"
                     : document.status === "READ" ? (document.dutiesFound ? document.dutiesFound + " to check" : "Nothing required")
                     : document.status === "SKIPPED" ? "Barely any text"
                     : document.error ?? "Could not be read"}
@@ -106,8 +138,8 @@ export function RegReader() {
               <div className="rr-actions">
                 {document.webViewLink ? <a className="rr-link" href={document.webViewLink} target="_blank" rel="noreferrer noopener">Open</a> : null}
                 {document.status !== "READ" || document.dutiesFound === 0 ? (
-                  <button type="button" className="rr-btn" disabled={Boolean(busy) || readingAll} onClick={() => send({ action: "read", id: document.id }, document.id)}>
-                    {busy === document.id ? "Reading…" : document.status === "PENDING" ? "Read it" : "Read again"}
+                  <button type="button" className="rr-btn" disabled={Boolean(busy) || readingAll || document.reading} onClick={() => send({ action: "read", id: document.id }, document.id)}>
+                    {document.reading ? "Reading…" : document.status === "PENDING" ? "Read it" : "Read again"}
                   </button>
                 ) : null}
               </div>

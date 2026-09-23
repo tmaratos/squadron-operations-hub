@@ -10,6 +10,7 @@ export interface DocumentRow {
   name: string;
   webViewLink: string | null;
   status: "PENDING" | "READ" | "FAILED" | "SKIPPED";
+  reading: boolean;
   dutiesFound: number;
   error: string | null;
   readAt: string | null;
@@ -56,17 +57,19 @@ export async function listDocuments(limit = 60): Promise<DocumentRow[]> {
   try {
     const rows = await getDatabase()
       .prepare(
-        "SELECT id, drive_file_id, name, web_view_link, status, duties_found, error, read_at " +
+        "SELECT id, drive_file_id, name, web_view_link, status, duties_found, error, read_at, reading_since " +
         "FROM reg_documents ORDER BY (status = 'PENDING') DESC, created_at DESC LIMIT ?"
       )
       .bind(limit)
-      .all<{ id: string; drive_file_id: string; name: string; web_view_link: string | null; status: DocumentRow["status"]; duties_found: number; error: string | null; read_at: string | null }>();
+      .all<{ id: string; drive_file_id: string; name: string; web_view_link: string | null; status: DocumentRow["status"]; duties_found: number; error: string | null; read_at: string | null; reading_since: string | null }>();
     return rows.results.map((row) => ({
       id: row.id,
       driveFileId: row.drive_file_id,
       name: row.name,
       webViewLink: row.web_view_link,
       status: row.status,
+      // A read that started more than twenty minutes ago is not running any more; something killed it.
+      reading: Boolean(row.reading_since && Date.now() - new Date(row.reading_since).getTime() < 20 * 60000),
       dutiesFound: row.duties_found,
       error: row.error,
       readAt: row.read_at
@@ -92,10 +95,12 @@ export async function readOneDocument(userId: string, documentId: string): Promi
     modifiedTime: row.modified_time ?? ""
   };
 
+  await db.prepare("UPDATE reg_documents SET reading_since = ? WHERE id = ?").bind(new Date().toISOString(), row.id).run();
+
   try {
     const text = await readDocumentText(userId, file);
     if (text.trim().length < 400) {
-      await db.prepare("UPDATE reg_documents SET status = 'SKIPPED', characters = ?, error = ?, read_at = ? WHERE id = ?")
+      await db.prepare("UPDATE reg_documents SET status = 'SKIPPED', characters = ?, error = ?, read_at = ?, reading_since = NULL WHERE id = ?")
         .bind(text.length, "There was barely any text in it.", new Date().toISOString(), row.id).run();
       return { name: row.name, duties: 0, message: "There was barely any text in " + row.name + "." };
     }
@@ -104,7 +109,7 @@ export async function readOneDocument(userId: string, documentId: string): Promi
     const saved = await saveProposals({ proposals, documentId: row.drive_file_id, documentName: row.name, userId });
 
     await db
-      .prepare("UPDATE reg_documents SET status = 'READ', characters = ?, duties_found = ?, error = NULL, read_at = ? WHERE id = ?")
+      .prepare("UPDATE reg_documents SET status = 'READ', characters = ?, duties_found = ?, error = NULL, read_at = ?, reading_since = NULL WHERE id = ?")
       .bind(text.length, saved, new Date().toISOString(), row.id)
       .run();
 
@@ -118,7 +123,7 @@ export async function readOneDocument(userId: string, documentId: string): Promi
   } catch (error) {
     const message = error instanceof Error ? error.message : "It could not be read.";
     await db
-      .prepare("UPDATE reg_documents SET status = 'FAILED', error = ?, read_at = ? WHERE id = ?")
+      .prepare("UPDATE reg_documents SET status = 'FAILED', error = ?, read_at = ?, reading_since = NULL WHERE id = ?")
       .bind(message.slice(0, 300), new Date().toISOString(), row.id)
       .run();
     return { name: row.name, duties: 0, message: row.name + ": " + message };

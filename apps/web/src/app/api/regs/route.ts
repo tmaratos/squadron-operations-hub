@@ -1,3 +1,4 @@
+import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -6,8 +7,11 @@ import { listDocuments, readOneDocument, refreshLibrary } from "@/lib/regs/libra
 import { assertSameOrigin } from "@/lib/security/origin";
 
 // The squadron's documents, and what the Hub has made of them.
-// Reading is done one document at a time, on purpose: a request that reads forty PDFs would time out, and
-// a member watching a list tick over knows more about what is happening than a spinner does.
+//
+// Reading one regulation with a small model on squadron hardware takes minutes - far longer than a browser
+// will hold a request open, and the earlier version was cancelled halfway through by the browser giving up.
+// So a read is started and the request returns at once; the work carries on in the background and the page
+// follows along by asking for the list again.
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -38,18 +42,29 @@ export async function POST(request: Request) {
       });
     }
 
-    const result = await readOneDocument(user.id, input.id);
-    if (result.duties) {
-      await recordAuditEvent({
-        actorUserId: user.id,
-        action: "REG_DOCUMENT_READ",
-        entityType: "document",
-        entityId: input.id,
-        summary: user.fullName + " had the Hub read " + result.name + ", which proposed " + result.duties + " duties for checking",
-        metadata: { duties: result.duties }
-      });
-    }
-    return NextResponse.json({ documents: await listDocuments(), message: result.message, duties: result.duties });
+    const actor = { id: user.id, fullName: user.fullName };
+    const work = readOneDocument(actor.id, input.id)
+      .then(async (result) => {
+        if (!result.duties) return;
+        await recordAuditEvent({
+          actorUserId: actor.id,
+          action: "REG_DOCUMENT_READ",
+          entityType: "document",
+          entityId: input.id,
+          summary: actor.fullName + " had the Hub read " + result.name + ", which proposed " + result.duties + " duties for checking",
+          metadata: { duties: result.duties }
+        });
+      })
+      .catch((error) => console.error(error));
+
+    // Keeps the worker alive for the reading after the response has gone back.
+    getCloudflareContext().ctx.waitUntil(work);
+
+    return NextResponse.json({
+      documents: await listDocuments(),
+      started: true,
+      message: "Reading it now. This takes a few minutes on the squadron's own server — the list updates by itself."
+    });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ message: "That request was invalid." }, { status: 400 });
     console.error(error);
