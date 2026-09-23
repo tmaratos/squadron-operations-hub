@@ -1,4 +1,5 @@
 import { getDatabase } from "@/lib/cloudflare";
+import { openSuggestions } from "@/lib/google/mail-inbox";
 import { loadDashboardItems } from "@/lib/work/dashboards";
 
 // The Hub noticing things and offering to do them, instead of waiting to be asked.
@@ -7,7 +8,7 @@ import { loadDashboardItems } from "@/lib/work/dashboards";
 // month missing, work nobody owns - so it can say exactly why it is offering. Nothing happens until a
 // person presses yes, and "not now" is remembered so the same offer does not nag.
 
-export type OfferKind = "next_in_series" | "needs_owner";
+export type OfferKind = "next_in_series" | "needs_owner" | "from_email";
 
 export interface Offer {
   id: string;
@@ -20,6 +21,8 @@ export interface Offer {
   create?: { title: string; dueOn: string | null };
   /** For needs_owner: the items with nobody on them. */
   itemIds?: string[];
+  /** For from_email: the suggestion row to settle once it has been dealt with. */
+  suggestionId?: string;
 }
 
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
@@ -40,8 +43,28 @@ function readSeriesEntry(title: string): { key: string; year: number; month: num
 }
 
 export async function listOffers(userId: string): Promise<Offer[]> {
-  const [items, dismissed] = await Promise.all([loadDashboardItems(), dismissedOffers(userId)]);
+  const [items, dismissed, fromMail] = await Promise.all([
+    loadDashboardItems(),
+    dismissedOffers(userId),
+    openSuggestions(userId, 4)
+  ]);
   const offers: Offer[] = [];
+
+  // Anything the member's labelled email seems to be asking for, found in the background before they asked.
+  const intake = items.find((item) => item.listName.toLowerCase().includes("intake"));
+  fromMail.forEach((suggestion) => {
+    offers.push({
+      id: "mail:" + suggestion.id,
+      kind: "from_email",
+      title: suggestion.title,
+      because: "From your email" + (suggestion.from ? ", " + suggestion.from.replace(/<[^>]*>/, "").trim() : "") +
+        (suggestion.because ? ": “" + suggestion.because + "”" : "."),
+      listId: intake?.listId ?? "",
+      listName: intake?.listName ?? "Command Intake",
+      create: { title: suggestion.title, dueOn: suggestion.dueOn },
+      suggestionId: suggestion.id
+    });
+  });
 
   // 1. A monthly series with the next one missing.
   const series = new Map<string, { label: string; listId: string; listName: string; entries: Array<{ year: number; month: number }> }>();

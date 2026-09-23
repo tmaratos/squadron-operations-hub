@@ -15,6 +15,7 @@ interface Offer {
   listName: string;
   create?: { title: string; dueOn: string | null };
   itemIds?: string[];
+  suggestionId?: string;
 }
 
 export function OffersCard() {
@@ -39,7 +40,8 @@ export function OffersCard() {
         body: JSON.stringify({
           id: offer.id,
           action,
-          ...(action === "accept" && offer.create ? { listId: offer.listId, title: offer.create.title } : {})
+          ...(offer.suggestionId ? { suggestionId: offer.suggestionId } : {}),
+          ...(action === "accept" && offer.create ? { listId: offer.listId, title: offer.create.title, dueOn: offer.create.dueOn } : {})
         })
       });
       const data = (await response.json()) as { offers?: Offer[]; message?: string; created?: { id: string; listId: string } };
