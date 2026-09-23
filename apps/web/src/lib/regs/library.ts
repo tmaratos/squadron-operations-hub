@@ -1,5 +1,6 @@
 import { getDatabase } from "@/lib/cloudflare";
 import { proposeDuties, saveProposals } from "./extract";
+import { rememberDocument } from "./knowledge";
 import { listCandidateDocuments, readDocumentText, type ReadableFile } from "./reader";
 
 // Keeping track of which squadron documents have been read, and reading the ones that have not.
@@ -104,6 +105,9 @@ export async function readOneDocument(userId: string, documentId: string): Promi
         .bind(text.length, "There was barely any text in it.", new Date().toISOString(), row.id).run();
       return { name: row.name, duties: 0, message: "There was barely any text in " + row.name + "." };
     }
+
+    // Kept first, so the document is known even if extracting duties from it goes wrong.
+    await rememberDocument({ driveFileId: row.drive_file_id, documentName: row.name, text });
 
     const proposals = await proposeDuties({ userId, documentName: row.name, text });
     const saved = await saveProposals({ proposals, documentId: row.drive_file_id, documentName: row.name, userId });

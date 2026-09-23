@@ -5,6 +5,8 @@ import { createWidget, listDashboards } from "@/lib/work/dashboards";
 import { createItem, updateItem } from "@/lib/work/items";
 import { createField, createFolder, createList, createSpace, createView, getWorkspaceTree, listStatuses, saveStatuses } from "@/lib/work/structure";
 import type { FieldType, ItemPriority, StatusCategory, ViewType } from "@/lib/work/types";
+import { findPassages } from "@/lib/regs/knowledge";
+import { listDuties } from "@/lib/work/duties";
 import { logBuild, recordCapabilityRequest } from "./capability-requests";
 import { parseJsonReply } from "./local";
 import { aiChatFor } from "./provider";
@@ -118,6 +120,15 @@ async function workspaceContext() {
 
 export async function buildPlan(prompt: string, userId: string): Promise<PlanResult> {
   const context = await workspaceContext();
+
+  // What the squadron's own documents say about this, and what the squadron has confirmed it owes. The
+  // assistant answers from these rather than from its own recollection of CAP regulations, which is
+  // confidently wrong about exactly the things that matter: form numbers, deadlines, current revisions.
+  const [passages, duties] = await Promise.all([
+    findPassages(prompt, 4).catch(() => []),
+    listDuties().catch(() => [])
+  ]);
+  const confirmedDuties = duties.filter((duty) => duty.confidence === "CONFIRMED" && duty.active).slice(0, 40);
   const system = [
     "You help a Civil Air Patrol squadron run their operations hub. Turn the member's request into a short plan of actions.",
     'Reply with JSON only, shaped like: {"reply": "one short sentence", "steps": [ ... ]}.',
@@ -141,8 +152,18 @@ export async function buildPlan(prompt: string, userId: string): Promise<PlanRes
     "Today is " + today() + ".",
     "Departments: " + (context.spaces.map((space) => space.name).join(" | ") || "none yet"),
     "Lists: " + (context.lists.map((list) => list.name).join(" | ") || "none yet"),
-    "Tags: " + context.tags.slice(0, 60).join(", ")
-  ].join("\n");
+    "Tags: " + context.tags.slice(0, 60).join(", "),
+    confirmedDuties.length
+      ? "\nWhat this squadron has confirmed it owes. Use these exact words when asked:\n" +
+        confirmedDuties
+          .map((duty) => "- " + duty.role + ": " + duty.title + " (" + duty.cadence.toLowerCase().replace(/_/g, " ") + (duty.sourceCitation ? ", " + duty.sourceCitation : "") + ")")
+          .join("\n")
+      : "",
+    passages.length
+      ? "\nFrom the squadron's own documents. Answer from these and name the document. If they do not cover it, say the Hub does not have that on file - never fill the gap from memory:\n" +
+        passages.map((passage) => "[" + passage.documentName + "] " + passage.text.slice(0, 900)).join("\n\n")
+      : "\nThe squadron's documents have not been read yet, so answer only about the work in the Hub. Do not state CAP requirements from memory."
+  ].filter(Boolean).join("\n");
 
   const raw = await aiChatFor(userId, [
     { role: "system", content: system },
