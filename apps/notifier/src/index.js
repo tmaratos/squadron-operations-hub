@@ -128,7 +128,9 @@ async function deliver(env, includeDaily) {
 
   let sentCount = 0;
   for (const [userId, notices] of byUser) {
-    const to = notices[0].email;
+    // A member is one person with several addresses: their CAP address, the personal one CAP has on file,
+    // and later a Microsoft one. One email, addressed to all of them, rather than one email per address.
+    const to = await addressesFor(env, userId, notices[0].email);
     const subject = notices.length === 1
       ? notices[0].title
       : notices.length + " things need you — Squadron Operations Hub";
@@ -141,7 +143,7 @@ async function deliver(env, includeDaily) {
       ).bind(result.ok ? "SENT" : "FAILED", now, ...notices.map((notice) => notice.id)),
       env.DB.prepare(
         "INSERT INTO notification_sends (id, user_id, email, subject, notification_count, provider, status, error, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
-      ).bind(crypto.randomUUID(), userId, to, subject.slice(0, 300), notices.length, result.provider, result.ok ? "SENT" : "FAILED", result.error || null, now)
+      ).bind(crypto.randomUUID(), userId, to.join(", "), subject.slice(0, 300), notices.length, result.provider, result.ok ? "SENT" : "FAILED", result.error || null, now)
     ]);
 
     if (result.ok) sentCount += notices.length;
@@ -162,7 +164,7 @@ async function sendEmail(env, { to, subject, notices, name }) {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: "Bearer " + env.RESEND_API_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [to], subject, html, text })
+      body: JSON.stringify({ from, to, subject, html, text })
     });
     if (response.ok) return { ok: true, provider: "resend" };
     return { ok: false, provider: "resend", error: (await response.text()).slice(0, 400) };
@@ -174,7 +176,7 @@ async function sendEmail(env, { to, subject, notices, name }) {
       headers: { "api-key": env.BREVO_API_KEY, "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({
         sender: { email: addressOf(from), name: nameOf(from) },
-        to: [{ email: to, name }],
+        to: to.map((address) => ({ email: address, name })),
         subject,
         htmlContent: html,
         textContent: text
@@ -207,6 +209,23 @@ function renderEmail({ name, notices }) {
       </td></tr>
     </table>
   </td></tr></table></body></html>`;
+}
+
+
+/** Every address that reaches this member: their Hub address plus anything linked to their CAPID. */
+async function addressesFor(env, userId, fallback) {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT DISTINCT e.email AS email
+       FROM users u
+       LEFT JOIN member_email_links e ON e.capid = u.capid AND e.notify = 1
+       WHERE u.id = ? AND e.email IS NOT NULL`
+    ).bind(userId).all();
+    const extra = (rows.results || []).map((row) => String(row.email).toLowerCase());
+    return [...new Set([String(fallback).toLowerCase(), ...extra])];
+  } catch {
+    return [String(fallback).toLowerCase()];
+  }
 }
 
 // ---------------------------------------------------------------- helpers

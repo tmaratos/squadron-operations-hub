@@ -21,6 +21,8 @@ export interface DirectoryPerson {
   /** From the eServices roster, when the address can be tied to a CAPID. */
   capid: string | null;
   rank: string | null;
+  /** Every other address that reaches the same person, so one member is one row in the list. */
+  alsoKnownAs: string[];
 }
 
 interface DrivePermission {
@@ -56,9 +58,27 @@ export async function listDirectory(actorUserId: string, query = ""): Promise<Di
     person.rank = member.rank || null;
   });
 
+  // One member, one row. Somebody with a CAP address, a personal address and a Drive share is one person,
+  // and showing them three times is exactly the confusion this list exists to remove.
+  const byPerson = new Map<string, DirectoryPerson>();
+  byEmail.forEach((person) => {
+    const key = person.capid ? "capid:" + person.capid : "email:" + person.email;
+    const held = byPerson.get(key);
+    if (!held) {
+      byPerson.set(key, person);
+      return;
+    }
+    // Prefer the entry that can be assigned work right now; keep the other address against the name.
+    const keep = held.userId ? held : person.userId ? person : held;
+    const drop = keep === held ? person : held;
+    keep.alsoKnownAs = [...new Set([...keep.alsoKnownAs, ...drop.alsoKnownAs, drop.email])].filter((email) => email !== keep.email);
+    keep.dutyTitle = keep.dutyTitle ?? drop.dutyTitle;
+    byPerson.set(key, keep);
+  });
+
   const needle = query.trim().toLowerCase();
-  const people = [...byEmail.values()]
-    .filter((person) => !needle || [person.fullName, person.email, person.capid ?? ""].some((value) => value.toLowerCase().includes(needle)))
+  const people = [...byPerson.values()]
+    .filter((person) => !needle || [person.fullName, person.email, person.capid ?? "", ...person.alsoKnownAs].some((value) => value.toLowerCase().includes(needle)))
     .sort((left, right) => {
       // People who can be assigned right now come first; then alphabetical, so the list never reshuffles oddly.
       if (Boolean(left.userId) !== Boolean(right.userId)) return left.userId ? -1 : 1;
@@ -82,7 +102,8 @@ async function hubPeople(): Promise<DirectoryPerson[]> {
     source: "hub" as const,
     pending: row.status === "PENDING",
     capid: null,
-    rank: null
+    rank: null,
+    alsoKnownAs: []
   }));
 }
 
@@ -127,7 +148,8 @@ async function drivePeople(actorUserId: string): Promise<{ people: DirectoryPers
           source: "drive",
           pending: false,
           capid: null,
-          rank: null
+          rank: null,
+          alsoKnownAs: []
         });
       });
       pageToken = payload.nextPageToken;

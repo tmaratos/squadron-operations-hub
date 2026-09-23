@@ -204,3 +204,73 @@ export function suggestMember(email: string, roster: RosterMember[]): RosterMemb
   });
   return hits.length === 1 ? hits[0] : null;
 }
+
+/**
+ * The eServices page carries the addresses as one comma or semicolon separated block above the member rows,
+ * in the same order as the rows. Pairing is therefore by position - which is only safe if the counts match,
+ * so when they do not, no address is paired at all and the import is names only.
+ */
+export function parseRosterEmails(text: string, entries: RosterEntry[]): Array<{ capid: string; email: string; kind: "CAP" | "PERSONAL" }> {
+  const memberLine = /^\s*\d{5,7}\s+/;
+  const blockLines = text.split(/\r?\n/).filter((line) => !memberLine.test(line));
+  const found: string[] = [];
+  blockLines.forEach((line) => {
+    (line.match(/[\w.+-]+@[\w.-]+\.[a-z]{2,}/gi) ?? []).forEach((email) => {
+      const address = email.toLowerCase();
+      if (!found.includes(address)) found.push(address);
+    });
+  });
+  if (found.length !== entries.length) return [];
+  return entries.map((entry, index) => ({
+    capid: entry.capid,
+    email: found[index],
+    kind: found[index] === entry.capid + "@tncap.us" ? ("CAP" as const) : ("PERSONAL" as const)
+  }));
+}
+
+export async function saveMemberEmails(
+  pairs: Array<{ capid: string; email: string; kind: string }>,
+  source: "ESERVICES" | "MANUAL",
+  actorId: string
+): Promise<number> {
+  if (!pairs.length) return 0;
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  const statements = pairs.map((pair) =>
+    db.prepare(
+      "INSERT INTO member_email_links (email, capid, linked_by, created_at, kind, source, notify) VALUES (?, ?, ?, ?, ?, ?, 1) " +
+      "ON CONFLICT(email) DO UPDATE SET capid = excluded.capid, kind = excluded.kind, source = excluded.source"
+    ).bind(pair.email.trim().toLowerCase(), pair.capid, actorId, now, pair.kind, source)
+  );
+  for (let index = 0; index < statements.length; index += 50) {
+    await db.batch(statements.slice(index, index + 50));
+  }
+  await linkAccountsToRoster();
+  return pairs.length;
+}
+
+/** Every address a member should be reached on. The CAP address is implied by the CAPID, so it is always included. */
+export async function addressesForCapid(capid: string): Promise<string[]> {
+  const addresses = new Set<string>([capid + "@tncap.us"]);
+  try {
+    const rows = await getDatabase()
+      .prepare("SELECT email FROM member_email_links WHERE capid = ? AND notify = 1")
+      .bind(capid)
+      .all<{ email: string }>();
+    rows.results.forEach((row) => addresses.add(row.email.toLowerCase()));
+  } catch {
+    // The CAP address on its own still reaches them.
+  }
+  return [...addresses];
+}
+
+export async function emailsByCapid(): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
+  try {
+    const rows = await getDatabase().prepare("SELECT capid, email, kind FROM member_email_links ORDER BY kind").all<{ capid: string; email: string; kind: string }>();
+    rows.results.forEach((row) => map.set(row.capid, [...(map.get(row.capid) ?? []), row.email.toLowerCase()]));
+  } catch {
+    return map;
+  }
+  return map;
+}

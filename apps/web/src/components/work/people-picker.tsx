@@ -13,6 +13,7 @@ export interface PickablePerson {
   pending: boolean;
   capid: string | null;
   rank: string | null;
+  alsoKnownAs?: string[];
 }
 
 export function PeoplePicker({

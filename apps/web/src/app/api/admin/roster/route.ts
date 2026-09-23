@@ -4,14 +4,14 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { canApproveAccounts } from "@/lib/auth/types";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { listDirectory } from "@/lib/org/directory";
-import { importRoster, linkEmailToMember, listRoster, parseRoster, suggestMember, unlinkEmail } from "@/lib/org/roster";
+import { emailsByCapid, importRoster, linkEmailToMember, listRoster, parseRoster, parseRosterEmails, saveMemberEmails, suggestMember, unlinkEmail } from "@/lib/org/roster";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 // The roster and the "who is this address?" list. Admin only: tying an address to a person decides whose
 // name appears on work, so it is a decision somebody accountable makes.
 
 async function state(actorId: string) {
-  const [roster, directory] = await Promise.all([listRoster(), listDirectory(actorId)]);
+  const [roster, directory, addresses] = await Promise.all([listRoster(), listDirectory(actorId), emailsByCapid()]);
   const known = new Set(roster.map((member) => member.capid));
   const unmatched = directory.people
     .filter((person) => !person.capid || !known.has(person.capid))
@@ -26,7 +26,14 @@ async function state(actorId: string) {
       };
     });
   return {
-    roster: roster.map((member) => ({ capid: member.capid, fullName: member.fullName, memberType: member.memberType, hasAccount: Boolean(member.userId) })),
+    roster: roster.map((member) => ({
+      capid: member.capid,
+      fullName: member.fullName,
+      memberType: member.memberType,
+      hasAccount: Boolean(member.userId),
+      // Everywhere the Hub can reach them. The CAP address is implied by the CAPID.
+      emails: [member.capid + "@tncap.us", ...(addresses.get(member.capid) ?? []).filter((email) => email !== member.capid + "@tncap.us")]
+    })),
     unmatched,
     driveNote: directory.driveNote
   };
@@ -62,17 +69,21 @@ export async function POST(request: Request) {
         return NextResponse.json({ message: "No members were found in that text. Copy the whole list from eServices, including the CAPID column." }, { status: 400 });
       }
       const result = await importRoster(entries);
+      // eServices lists the addresses in the same order as the members; pair them only when the counts agree.
+      const pairs = parseRosterEmails(input.text, entries);
+      const savedEmails = pairs.length ? await saveMemberEmails(pairs, "ESERVICES", actor.id) : 0;
       await recordAuditEvent({
         actorUserId: actor.id,
         action: "ROSTER_IMPORTED",
         entityType: "roster",
         entityId: "tn-170",
         summary: actor.fullName + " loaded the roster from eServices (" + entries.length + " members)",
-        metadata: result
+        metadata: { ...result, addresses: savedEmails }
       });
       return NextResponse.json({
         ...(await state(actor.id)),
-        message: "Loaded " + entries.length + " members: " + result.added + " new, " + result.updated + " updated, " + result.linked + " matched to Hub accounts."
+        message: "Loaded " + entries.length + " members: " + result.added + " new, " + result.updated + " updated, " + result.linked + " matched to Hub accounts." +
+          (savedEmails ? " Saved " + savedEmails + " email addresses." : " No addresses were in that text, so names only.")
       });
     }
 
