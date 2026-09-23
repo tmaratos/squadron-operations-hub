@@ -663,8 +663,9 @@ body { background: #f8faff; font-size: 14px; }
 .hub-sidebar-close, .hub-sidebar-backdrop { display: none; }
 .hub-main { min-height: 100vh; margin-left: 246px; padding: 90px 18px 18px; }
 
-/* One column. The right rail held links that duplicated the sidebar and advice nobody needed. */
-.home-dashboard { max-width: 980px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+/* One column, using the width it has. The right rail held links that duplicated the sidebar and advice
+   nobody needed, and a narrow centre column left most of the screen empty. */
+.home-dashboard { max-width: none; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .home-primary, .home-rail { min-width: 0; display: grid; gap: 16px; }
 .welcome-hero { position: relative; min-height: 224px; overflow: hidden; border-radius: 14px; color: white; background: linear-gradient(108deg, #0e3168 0%, #14457f 58%, #1e5690 100%); box-shadow: var(--shadow); }
 .welcome-hero::after {
