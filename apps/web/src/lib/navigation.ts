@@ -1,31 +1,22 @@
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity,
-  BadgeDollarSign,
-  BookOpenCheck,
-  Building2,
+  Bell,
   CalendarDays,
   ClipboardCheck,
-  FileBarChart,
   FileText,
   Gauge,
-  GraduationCap,
   History,
+  LayoutDashboard,
   LayoutGrid,
   Link2,
-  Megaphone,
-  NotebookTabs,
-  PackageCheck,
-  Plug,
-  Radio,
   Settings,
   ShieldCheck,
-  Siren,
-  Sparkles,
   UserCog,
-  Users,
-  Workflow
+  Users
 } from "lucide-react";
+
+// Every entry here goes somewhere real. Departments are not listed: they are spaces in the sidebar, made by
+// the squadron, so this menu does not have to be edited every time the squadron organises itself differently.
 
 export interface NavigationItem {
   label: string;
@@ -43,51 +34,37 @@ export const navigationGroups: NavigationGroup[] = [
   {
     label: "Work",
     items: [
-      { label: "Spaces & Lists", href: "/spaces", icon: LayoutGrid },
-      { label: "Tasks & Assignments", href: "/tasks", icon: ClipboardCheck, badge: "18" },
+      { label: "My tasks", href: "/tasks", icon: ClipboardCheck },
+      { label: "All lists", href: "/spaces", icon: LayoutGrid },
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
-      { label: "Meetings", href: "/meetings", icon: NotebookTabs },
-      { label: "Reports", href: "/reports", icon: FileBarChart },
-      { label: "Duties by role", href: "/duties", icon: ClipboardCheck },
-      { label: "Inspections", href: "/inspections", icon: ShieldCheck },
-      { label: "Readiness", href: "/readiness", icon: Gauge }
+      { label: "Command dashboard", href: "/dashboards", icon: LayoutDashboard }
     ]
   },
   {
-    label: "People & Programs",
+    label: "The squadron",
     items: [
-      { label: "People & Roles", href: "/staff", icon: Users },
-      { label: "Aerospace Education", href: "/aerospace", icon: GraduationCap },
-      { label: "Cadet Programs", href: "/cadet-programs", icon: Sparkles },
-      { label: "Emergency Services", href: "/emergency-services", icon: Siren },
-      { label: "Safety", href: "/safety", icon: ShieldCheck },
-      { label: "Communications", href: "/communications", icon: Radio },
-      { label: "Public Affairs", href: "/public-affairs", icon: Megaphone },
-      { label: "Recruiting & Retention", href: "/recruiting", icon: Building2 }
+      { label: "People", href: "/staff", icon: Users },
+      { label: "Who does what", href: "/duties", icon: ClipboardCheck },
+      { label: "Readiness", href: "/readiness", icon: Gauge },
+      { label: "Compliance", href: "/compliance", icon: ShieldCheck },
+      { label: "Files", href: "/documents", icon: FileText }
     ]
   },
   {
-    label: "Administration",
+    label: "Yours",
     items: [
-      { label: "Finance", href: "/finance", icon: BadgeDollarSign },
-      { label: "Logistics", href: "/logistics", icon: PackageCheck },
-      { label: "Member Access", href: "/admin/users", icon: UserCog }
+      { label: "Notifications", href: "/notifications", icon: Bell },
+      { label: "My connections", href: "/connections", icon: Link2 }
     ]
   },
   {
-    label: "Knowledge",
+    label: "Running the Hub",
     items: [
-      { label: "Document Library", href: "/documents", icon: FileText },
-      { label: "Process Library", href: "/processes", icon: Workflow },
-      { label: "Forms & Templates", href: "/documents", icon: BookOpenCheck }
+      { label: "Members and access", href: "/admin/users", icon: UserCog },
+      { label: "History", href: "/audit", icon: History },
+      { label: "Settings", href: "/settings", icon: Settings }
     ]
   }
 ];
 
-export const utilityNavigation: NavigationItem[] = [
-  { label: "Action Center", href: "/notifications", icon: Activity },
-  { label: "My Connections", href: "/connections", icon: Link2 },
-  { label: "Integrations", href: "/integrations", icon: Plug },
-  { label: "History", href: "/audit", icon: History },
-  { label: "System Settings", href: "/settings", icon: Settings }
-];
+export const utilityNavigation: NavigationItem[] = [];

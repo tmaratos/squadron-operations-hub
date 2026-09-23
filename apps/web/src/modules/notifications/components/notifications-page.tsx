@@ -3,10 +3,12 @@ import { NotificationCenter } from "@/components/notifications/notification-cent
 import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { getPrefs, listNotifications } from "@/lib/notify/notifications";
+import { addressesForCapid } from "@/lib/org/roster";
 
 export async function NotificationsPage() {
   const user = await requireUser();
   const [notifications, prefs] = await Promise.all([listNotifications(user.id), getPrefs(user.id)]);
+  const addresses = user.capid ? await addressesForCapid(user.capid) : [user.email];
 
   return (
     <div className="page-stack">
@@ -16,7 +18,7 @@ export async function NotificationsPage() {
         description="What the Hub has told you, and what you want to hear about."
       />
       {user.globalRole === "READ_ONLY" ? null : <AlertComposer />}
-      <NotificationCenter initialNotifications={notifications} initialPrefs={prefs} emailAddress={user.email} />
+      <NotificationCenter initialNotifications={notifications} initialPrefs={prefs} emailAddress={user.email} extraAddresses={Math.max(0, addresses.length - 1)} />
     </div>
   );
 }

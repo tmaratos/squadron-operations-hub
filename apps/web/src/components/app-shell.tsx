@@ -50,14 +50,14 @@ const railItems: Array<{ key: RailKey; label: string; href: string; icon: typeof
   { key: "planner", label: "Planner", href: "/calendar", icon: CalendarDays },
   { key: "docs", label: "Docs", href: "/documents", icon: FileText },
   { key: "dashboards", label: "Dashboard", href: "/dashboards", icon: LayoutDashboard },
-  { key: "more", label: "More", href: "/processes", icon: NotebookTabs }
+  { key: "more", label: "More", href: "/staff", icon: NotebookTabs }
 ];
 
 function railFor(pathname: string): RailKey {
   if (pathname.startsWith("/spaces") || pathname.startsWith("/lists")) return "spaces";
-  if (pathname.startsWith("/calendar") || pathname.startsWith("/meetings")) return "planner";
+  if (pathname.startsWith("/calendar")) return "planner";
   if (pathname.startsWith("/documents")) return "docs";
-  if (pathname.startsWith("/dashboards") || pathname.startsWith("/readiness") || pathname.startsWith("/reports")) return "dashboards";
+  if (pathname.startsWith("/dashboards") || pathname.startsWith("/readiness")) return "dashboards";
   return "home";
 }
 
@@ -231,11 +231,10 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
           {rail === "home" ? (
             <>
               <section className="cu-section">
-                {navLink("/notifications", "Inbox", <Inbox size={15} />)}
-                {navLink("/tasks", "My Tasks", <ClipboardCheck size={15} />)}
-                {navLink("/meetings", "Meetings", <NotebookTabs size={15} />)}
+                {navLink("/notifications", "Notifications", <Inbox size={15} />)}
+                {navLink("/tasks", "My tasks", <ClipboardCheck size={15} />)}
                 {navLink("/calendar", "Calendar", <CalendarDays size={15} />)}
-                {navLink("/start-here", "Start Here", <HelpCircle size={15} />)}
+                {navLink("/start-here", "New here? Start here", <HelpCircle size={15} />)}
               </section>
               <section className="cu-section">
                 <div className="cu-section-head"><button type="button" onClick={() => toggle("favorites")}>Favorites</button></div>
@@ -253,17 +252,15 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
           {rail === "planner" ? (
             <section className="cu-section">
               {navLink("/calendar", "Calendar", <CalendarDays size={15} />)}
-              {navLink("/meetings", "Meetings", <NotebookTabs size={15} />)}
-              {navLink("/tasks", "My Tasks", <ClipboardCheck size={15} />)}
+              {navLink("/tasks", "My tasks", <ClipboardCheck size={15} />)}
             </section>
           ) : null}
-          {rail === "docs" ? hubSections.filter((_, index) => navigationGroups[index].label === "Knowledge") : null}
+          {rail === "docs" ? hubSections.filter((_, index) => navigationGroups[index].label === "The squadron") : null}
           {rail === "dashboards" ? (
             <section className="cu-section">
-              {navLink("/dashboards", "Command Dashboard", <LayoutDashboard size={15} />)}
-              {navLink("/", "Squadron Overview", <LayoutDashboard size={15} />)}
+              {navLink("/dashboards", "Command dashboard", <LayoutDashboard size={15} />)}
+              {navLink("/", "Squadron overview", <LayoutDashboard size={15} />)}
               {navLink("/readiness", "Readiness", <LayoutDashboard size={15} />)}
-              {navLink("/reports", "Reports", <LayoutDashboard size={15} />)}
             </section>
           ) : null}
           {rail === "more" ? hubSections : null}

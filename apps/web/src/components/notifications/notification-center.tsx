@@ -28,11 +28,13 @@ const CHOICES: Array<{ key: keyof NotificationPrefs; label: string; detail: stri
 export function NotificationCenter({
   initialNotifications,
   initialPrefs,
-  emailAddress
+  emailAddress,
+  extraAddresses = 0
 }: {
   initialNotifications: NotificationRecord[];
   initialPrefs: NotificationPrefs;
   emailAddress: string;
+  extraAddresses?: number;
 }) {
   const [notifications, setNotifications] = useState(initialNotifications);
   const [prefs, setPrefs] = useState(initialPrefs);
@@ -93,6 +95,27 @@ export function NotificationCenter({
   return (
     <div className="nc">
       <style>{ncCss}</style>
+
+      {/* Most members never change any of this, so the page opens by saying what already happens to them. */}
+      <section className="nc-card nc-plain-english">
+        <h2>Do I need to set anything up?</h2>
+        <p className="nc-lead"><strong>No.</strong> You already get these. Here is exactly what happens:</p>
+        <ol className="nc-steps">
+          <li>
+            <span className="nc-step-n">1</span>
+            <span><strong>Someone gives you a job.</strong> It shows up on this page straight away.</span>
+          </li>
+          <li>
+            <span className="nc-step-n">2</span>
+            <span><strong>Once a day at 6pm</strong>, we email you a list of what needs you — new jobs, anything due soon, anything late. One email. Not one per job.</span>
+          </li>
+          <li>
+            <span className="nc-step-n">3</span>
+            <span><strong>That email goes to {emailAddress}.</strong>{extraAddresses ? " It also goes to your other address on file with CAP." : ""}</span>
+          </li>
+        </ol>
+        <p className="nc-lead">Want it different? Change the boxes further down. Nothing else to do.</p>
+      </section>
 
       <section className="nc-card">
         <header className="nc-head">
@@ -223,6 +246,13 @@ function timeAgo(iso: string): string {
 
 const ncCss = [
   ".nc{display:grid;gap:16px}",
+  ".nc-plain-english{background:rgba(123,104,238,.07);border-color:rgba(123,104,238,.3)}",
+  "html[data-theme=dark] .nc-plain-english{background:rgba(123,104,238,.12)}",
+  ".nc-plain-english h2{margin:0 0 6px;font-size:17px}",
+  ".nc-lead{margin:0;font-size:14.5px;line-height:1.55}",
+  ".nc-steps{list-style:none;margin:12px 0;padding:0;display:grid;gap:10px}",
+  ".nc-steps li{display:flex;gap:11px;align-items:flex-start;font-size:14.5px;line-height:1.55}",
+  ".nc-step-n{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:#7b68ee;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}",
   ".nc-card{border:1px solid var(--cu-border,#e4e6eb);border-radius:12px;background:var(--cu-bg,#fff);padding:16px 18px}",
   "html[data-theme=dark] .nc-card{background:#222326;border-color:#3a3d44}",
   ".nc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}",

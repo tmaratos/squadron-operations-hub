@@ -7,14 +7,17 @@ type TaskHit = { id: string; title: string; listId: string; listName: string; du
 type Entry = { key: string; group: string; label: string; hint?: string; color?: string | null; href: string; closed?: boolean };
 
 const PAGES: Array<{ label: string; href: string; hint: string }> = [
-  { label: "Command Dashboard", href: "/dashboards", hint: "Dashboard" },
-  { label: "Spaces & Lists", href: "/spaces", hint: "Browse" },
-  { label: "My Tasks", href: "/tasks", hint: "Work" },
-  { label: "Calendar", href: "/calendar", hint: "Planner" },
-  { label: "Meetings", href: "/meetings", hint: "Planner" },
-  { label: "Document Library", href: "/documents", hint: "Docs" },
-  { label: "Integrations", href: "/integrations", hint: "Settings" },
-  { label: "History", href: "/audit", hint: "Settings" }
+  { label: "My tasks", href: "/tasks", hint: "Work" },
+  { label: "All lists", href: "/spaces", hint: "Work" },
+  { label: "Calendar", href: "/calendar", hint: "Work" },
+  { label: "Command dashboard", href: "/dashboards", hint: "Work" },
+  { label: "People", href: "/staff", hint: "Squadron" },
+  { label: "Who does what", href: "/duties", hint: "Squadron" },
+  { label: "Files", href: "/documents", hint: "Squadron" },
+  { label: "Notifications", href: "/notifications", hint: "Yours" },
+  { label: "My connections", href: "/connections", hint: "Yours" },
+  { label: "Members and access", href: "/admin/users", hint: "Running the Hub" },
+  { label: "History", href: "/audit", hint: "Running the Hub" }
 ];
 
 function relativeDue(value: string): string {
