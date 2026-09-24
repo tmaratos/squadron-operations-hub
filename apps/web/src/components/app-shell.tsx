@@ -765,6 +765,17 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         <Link href="/tasks" className={"cu-bottom-item" + (active("/tasks") ? " is-active" : "")}><ClipboardCheck size={20} /><span>My Tasks</span></Link>
         <Link href="/spaces" className={"cu-bottom-item" + (active("/spaces") || active("/lists") ? " is-active" : "")}><Grid3x3 size={20} /><span>Lists</span></Link>
         <Link href="/dashboards" className={"cu-bottom-item" + (active("/dashboards") ? " is-active" : "")}><LayoutDashboard size={20} /><span>Dashboard</span></Link>
+        {/* On a phone the avatar is pushed off the end of the topbar by the search box, so this is the
+            only way to reach the account. It opens the same menu. */}
+        <button
+          type="button"
+          className={"cu-bottom-item" + (meOpen ? " is-active" : "")}
+          onClick={() => setMeOpen((was) => !was)}
+          aria-expanded={meOpen}
+        >
+          <span className="cu-bottom-avatar" aria-hidden="true">{initials(user.fullName)}</span>
+          <span>Me</span>
+        </button>
       </nav>
     </div>
   );
@@ -856,6 +867,8 @@ const shellCss = [
   ".cu-main{min-width:0;min-height:0;overflow-y:auto;padding:20px 24px;background:var(--cu-bg)}",
   ".cu-backdrop{display:none}",
   ".cu-bottom{display:none}",
+  ".cu-bottom-item{border:0;background:none;font:inherit;cursor:pointer}",
+  ".cu-bottom-avatar{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#5f55ee;color:#fff;font-size:9px;font-weight:700}",
   "@media (max-width:900px){",
   ".cu-shell{grid-template-columns:minmax(0,1fr)}",
   ".cu-rail{display:none}",
@@ -868,10 +881,15 @@ const shellCss = [
   ".cu-main{padding:16px 16px 84px}",
   ".cu-topbar{gap:8px;padding:0 10px}",
   ".cu-brand img{width:26px;height:26px}",
-  ".cu-search{flex:1 1 auto;margin:0}",
-  ".cu-bottom{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--cu-side);border-top:1px solid var(--cu-border);padding:6px 4px calc(6px + env(safe-area-inset-bottom));}",
+  ".cu-search{flex:1 1 auto;min-width:0;margin:0}",
+  ".cu-search input::placeholder{font-size:12px}",
+  ".cu-top-actions{flex:none}",
+  ".cu-ask{padding:0 10px}",
+  ".cu-bottom{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--cu-side);border-top:1px solid var(--cu-border);padding:6px 4px calc(6px + env(safe-area-inset-bottom));}",
   ".cu-bottom-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;color:var(--cu-muted);text-decoration:none;font-size:11px;font-weight:600;min-height:52px;justify-content:center}",
   ".cu-bottom-item.is-active{color:#7b68ee;background:var(--cu-active)}",
+  ".cu-me-menu{position:fixed;top:auto;left:8px;right:8px;bottom:calc(72px + env(safe-area-inset-bottom));min-width:0;max-height:60vh;overflow-y:auto}",
+  ".cu-me-menu .cu-menu-item,.cu-me-menu button{min-height:44px}",
   "}"
 ].join("\n");
 

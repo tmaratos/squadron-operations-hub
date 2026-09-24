@@ -50,7 +50,9 @@ export function PulseWidget() {
   const router = useRouter();
 
   useEffect(() => {
-    let start: Spot = { x: window.innerWidth - SIZE - 22, y: window.innerHeight - SIZE - 22 };
+    // Clear of the bottom bar on a phone, which is 72px of it plus whatever the device reserves below.
+    const fromBottom = window.innerWidth <= 900 ? 96 : 22;
+    let start: Spot = { x: window.innerWidth - SIZE - 22, y: window.innerHeight - SIZE - fromBottom };
     try {
       const saved = localStorage.getItem("hub-pulse-spot");
       if (saved) {
@@ -206,7 +208,7 @@ const pwCss = [
   ".pw-ball .pw-spark{font-size:19px;line-height:1}",
   ".pw-count{position:absolute;top:-3px;right:-3px;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#e5484d;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid var(--cu-bg,#fff)}",
   "html[data-theme=dark] .pw-count{border-color:#1f2024}",
-  ".pw-panel{position:fixed;z-index:129;width:min(360px,calc(100vw - 24px));border-radius:12px;overflow:hidden;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);box-shadow:0 18px 48px rgba(9,20,44,.32)}",
+  ".pw-panel{position:fixed;z-index:129;width:min(360px,calc(100vw - 16px));max-width:calc(100vw - 16px);border-radius:12px;overflow:hidden;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);box-shadow:0 18px 48px rgba(9,20,44,.32)}",
   "html[data-theme=dark] .pw-panel{background:#1f2024;border-color:#34363b}",
   ".pw-head{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--cu-border,#eef0f3);font-size:13px}",
   "html[data-theme=dark] .pw-head{border-color:#2c2e33}",
