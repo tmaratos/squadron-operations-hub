@@ -18,7 +18,8 @@ const schema = z.discriminatedUnion("action", [
     emoji: z.string().trim().max(8).optional(),
     shared: z.boolean().default(false),
     scopeType: z.enum(["list", "space"]).nullable().optional(),
-    scopeId: z.string().trim().max(80).nullable().optional()
+    scopeId: z.string().trim().max(80).nullable().optional(),
+    schedule: z.enum(["DAILY"]).nullable().optional()
   }),
   z.object({
     action: z.literal("update"),
@@ -29,7 +30,8 @@ const schema = z.discriminatedUnion("action", [
     emoji: z.string().trim().max(8).optional(),
     shared: z.boolean().optional(),
     scopeType: z.enum(["list", "space"]).nullable().optional(),
-    scopeId: z.string().trim().max(80).nullable().optional()
+    scopeId: z.string().trim().max(80).nullable().optional(),
+    schedule: z.enum(["DAILY"]).nullable().optional()
   }),
   z.object({ action: z.literal("delete"), id: z.string().trim().min(1).max(80) })
 ]);

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import type { Agent } from "@/lib/ai/agents";
 
@@ -31,12 +31,24 @@ const SUGGESTIONS: Array<{ emoji: string; name: string; purpose: string; brief: 
   }
 ];
 
-export function AgentsBoard({ agents: initial, canEdit }: { agents: Agent[]; canEdit: boolean }) {
+export function AgentsBoard({ agents: initial, canEdit, lists = [] }: {
+  agents: Agent[];
+  canEdit: boolean;
+  lists?: Array<{ id: string; name: string; spaceName: string }>;
+}) {
   const [agents, setAgents] = useState(initial);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Partial<Agent> & { open?: boolean } | null>(null);
   const router = useRouter();
+  const [unread, setUnread] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    fetch("/api/ai/agents/run")
+      .then((response) => response.json() as Promise<{ unread?: Record<string, number> }>)
+      .then((data) => setUnread(data.unread ?? {}))
+      .catch(() => undefined);
+  }, [agents.length]);
 
   async function send(body: Record<string, unknown>) {
     setBusy(true);
@@ -70,7 +82,11 @@ export function AgentsBoard({ agents: initial, canEdit }: { agents: Agent[]; can
       purpose: String(form.get("purpose") ?? "").trim(),
       brief: String(form.get("brief") ?? "").trim(),
       emoji: String(form.get("emoji") ?? "").trim() || "🤖",
-      shared: form.get("shared") === "on"
+      shared: form.get("shared") === "on",
+      // What it watches, and whether it looks on its own.
+      scopeType: form.get("scopeId") ? ("list" as const) : null,
+      scopeId: (String(form.get("scopeId") ?? "") || null),
+      schedule: form.get("schedule") === "on" ? ("DAILY" as const) : null
     };
     if (!body.name) return;
     send(editing?.id ? { action: "update", id: editing.id, ...body } : { action: "create", ...body });
@@ -81,13 +97,17 @@ export function AgentsBoard({ agents: initial, canEdit }: { agents: Agent[]; can
 
   const card = (agent: Agent) => (
     <article key={agent.id} className="ag-card">
-      <span className="ag-face" aria-hidden="true">{agent.emoji}</span>
+      <span className="ag-face" aria-hidden="true">
+        {agent.emoji}
+        {unread[agent.id] ? <i className="ag-unread">{unread[agent.id]}</i> : null}
+      </span>
       <div className="ag-body">
         <h3>{agent.name}</h3>
         {agent.purpose ? <p>{agent.purpose}</p> : <p className="ag-faint">No description</p>}
         <p className="ag-meta">
           {agent.shared ? "Shared with the squadron" : "Yours only"}
-          {agent.scopeName ? " · works on " + agent.scopeName : ""}
+          {agent.scopeName ? " · watches " + agent.scopeName : " · watches everything"}
+          {agent.schedule ? " · looks every day" : " · only when asked"}
         </p>
       </div>
       <div className="ag-actions">
@@ -142,6 +162,17 @@ export function AgentsBoard({ agents: initial, canEdit }: { agents: Agent[]; can
             Standing instructions
             <textarea name="brief" defaultValue={editing.brief ?? ""} maxLength={4000} rows={6} placeholder="Tell it how to behave. This goes in front of everything it is asked." />
           </label>
+          <label>
+            What it watches
+            <select name="scopeId" defaultValue={editing.scopeId ?? ""}>
+              <option value="">Everything in the squadron</option>
+              {lists.map((list) => <option key={list.id} value={list.id}>{list.spaceName} · {list.name}</option>)}
+            </select>
+          </label>
+          <label className="ag-check">
+            <input type="checkbox" name="schedule" defaultChecked={Boolean(editing.schedule)} />
+            <span>Look once a day and tell me what it finds, without being asked. It only ever reports — it never creates, assigns or changes anything on its own.</span>
+          </label>
           <label className="ag-check">
             <input type="checkbox" name="shared" defaultChecked={editing.shared ?? false} />
             <span>Share it with the squadron — everybody can see and use it. Leave this off to keep it to yourself.</span>
@@ -178,7 +209,8 @@ const agCss = [
   ".ag-card{display:grid;grid-template-columns:38px 1fr;grid-template-areas:'face body' 'face actions';gap:6px 12px;align-items:start;padding:14px;border:1px solid var(--border,#e4e6eb);border-radius:10px;background:var(--surface,#fff)}",
   ".ag-card .ag-face{grid-area:face}.ag-body{grid-area:body}",
   "html[data-theme=dark] .ag-card{background:#222326;border-color:#34363b}",
-  ".ag-face{font-size:24px;line-height:1;flex:none;width:38px;height:38px;display:grid;place-items:center;border-radius:9px;background:rgba(123,104,238,.14)}",
+  ".ag-face{position:relative;font-size:24px;line-height:1;flex:none;width:38px;height:38px;display:grid;place-items:center;border-radius:9px;background:rgba(123,104,238,.14)}",
+  ".ag-unread{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#e5484d;color:#fff;font-size:11px;font-weight:700;font-style:normal;display:grid;place-items:center}",
   ".ag-body{flex:1;min-width:0}",
   ".ag-body h3{margin:0;font-size:14.5px}",
   ".ag-body p{margin:3px 0 0;font-size:12.5px}",
@@ -191,6 +223,7 @@ const agCss = [
   ".ag-form{display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid var(--border,#e4e6eb);border-radius:10px;background:var(--surface,#fff)}",
   "html[data-theme=dark] .ag-form{background:#222326;border-color:#34363b}",
   ".ag-form label{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:600}",
+  ".ag-form select{font:inherit;font-size:14px;padding:7px 9px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-height:34px}",
   ".ag-form input,.ag-form textarea{font:inherit;font-size:14px;padding:7px 9px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-height:34px}",
   ".ag-form-row{display:flex;gap:10px;align-items:flex-end}",
   ".ag-emoji{width:76px;flex:none}.ag-emoji input{text-align:center;font-size:20px}",

@@ -21,6 +21,9 @@ export interface Agent {
   scopeType: "list" | "space" | null;
   scopeId: string | null;
   scopeName?: string | null;
+  /** DAILY, or null when it only answers when spoken to. */
+  schedule: string | null;
+  lastRunAt: string | null;
   createdBy: string;
 }
 
@@ -39,6 +42,8 @@ interface AgentRow {
   scope_type: "list" | "space" | null;
   scope_id: string | null;
   scope_name: string | null;
+  schedule: string | null;
+  last_run_at: string | null;
   created_by: string;
 }
 
@@ -58,12 +63,14 @@ function toAgent(row: AgentRow, userId: string, isAdmin: boolean): Agent {
     scopeType: row.scope_type,
     scopeId: row.scope_id,
     scopeName: row.scope_name,
+    schedule: row.schedule,
+    lastRunAt: row.last_run_at,
     createdBy: row.created_by
   };
 }
 
 const SELECT =
-  "SELECT a.id, a.name, a.purpose, a.brief, a.emoji, a.owner_user_id, a.scope_type, a.scope_id, a.created_by, " +
+  "SELECT a.id, a.name, a.purpose, a.brief, a.emoji, a.owner_user_id, a.scope_type, a.scope_id, a.schedule, a.last_run_at, a.created_by, " +
   "u.full_name AS owner_name, " +
   "COALESCE(l.name, s.name) AS scope_name " +
   "FROM ai_agents a " +
@@ -104,14 +111,15 @@ export async function createAgent(input: {
   shared: boolean;
   scopeType?: "list" | "space" | null;
   scopeId?: string | null;
+  schedule?: string | null;
   userId: string;
 }): Promise<string> {
   const id = crypto.randomUUID();
   const now = nowIso();
   await getDatabase()
     .prepare(
-      "INSERT INTO ai_agents (id, name, purpose, brief, emoji, owner_user_id, scope_type, scope_id, created_by, created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO ai_agents (id, name, purpose, brief, emoji, owner_user_id, scope_type, scope_id, schedule, created_by, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
       id,
@@ -122,6 +130,7 @@ export async function createAgent(input: {
       input.shared ? null : input.userId,
       input.scopeType ?? null,
       input.scopeId ?? null,
+      input.schedule ?? null,
       input.userId,
       now,
       now
@@ -138,6 +147,7 @@ export async function updateAgent(id: string, input: {
   shared?: boolean;
   scopeType?: "list" | "space" | null;
   scopeId?: string | null;
+  schedule?: string | null;
   userId: string;
 }): Promise<void> {
   const sets: string[] = [];
@@ -151,6 +161,7 @@ export async function updateAgent(id: string, input: {
   if (input.shared !== undefined) set("owner_user_id", input.shared ? null : input.userId);
   if (input.scopeType !== undefined) set("scope_type", input.scopeType);
   if (input.scopeId !== undefined) set("scope_id", input.scopeId);
+  if (input.schedule !== undefined) set("schedule", input.schedule);
   if (!sets.length) return;
 
   set("updated_at", nowIso());
