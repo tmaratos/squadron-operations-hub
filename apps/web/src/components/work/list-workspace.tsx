@@ -59,6 +59,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   const [expandAll, setExpandAll] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [statusDrop, setStatusDrop] = useState<string | null>(null);
   const [addingIn, setAddingIn] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
   const [editingStatuses, setEditingStatuses] = useState(false);
@@ -338,7 +339,30 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
             const rows = topLevel.filter((item) => item.statusId === status.id && matches(item));
             const folded = collapsedGroups[status.id];
             return (
-              <section key={status.id} className="lw-group">
+              // The board could take a dragged task; the list, which is what most people actually use,
+              // could not - so moving something to In progress meant opening it first.
+              <section
+                key={status.id}
+                className={"lw-group" + (statusDrop === status.id ? " lw-group--over" : "")}
+                onDragOver={(event) => {
+                  if (!canEdit || !event.dataTransfer.types.includes("application/x-hub-item")) return;
+                  event.preventDefault();
+                  setStatusDrop(status.id);
+                }}
+                onDragLeave={(event) => {
+                  if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                  setStatusDrop((current) => (current === status.id ? null : current));
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setStatusDrop(null);
+                  const id = event.dataTransfer.getData("application/x-hub-item");
+                  if (!id || !canEdit) return;
+                  const moving = items.find((entry) => entry.id === id);
+                  if (moving && moving.statusId === status.id) return; // dropped where it already was
+                  patch(id, { statusId: status.id });
+                }}
+              >
                 <div className="lw-group-head">
                   <button className="lw-caret" aria-label={folded ? "Expand group" : "Collapse group"} onClick={() => setCollapsedGroups({ ...collapsedGroups, [status.id]: !folded })}>
                     <svg viewBox="0 0 10 10" width="9" height="9" style={{ transform: folded ? "none" : "rotate(90deg)" }} aria-hidden="true"><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
@@ -1757,6 +1781,7 @@ const lwCss = [
   ".lw-colhead,.lw-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 110px 100px;align-items:center}",
   ".lw-colhead{font-size:11px;color:var(--lw-muted);padding:4px 0 6px 44px;border-bottom:1px solid var(--lw-border)}",
   ".lw-row[draggable=true]{cursor:grab}.lw-row[draggable=true]:active{cursor:grabbing}",
+  ".lw-group--over{outline:2px dashed #7b68ee;outline-offset:2px;border-radius:8px;background:rgba(123,104,238,.06)}",
   ".lw-row{min-height:38px;border-bottom:1px solid var(--lw-border);cursor:pointer}",
   ".lw-row:hover{background:var(--lw-hover)}",
   ".lw-name{display:flex;align-items:center;gap:7px;min-width:0;padding-right:10px}",
