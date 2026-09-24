@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
-import { MentionBox, renderMentions } from "./mention-box";
+import { MentionBox, renderMentions, toStored } from "./mention-box";
 import { LinkPanel } from "./link-panel";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
@@ -376,7 +376,14 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
     );
   }
 
-  const visibleStatuses = list.statuses.filter((status) => showClosed || (status.category !== "DONE" && status.category !== "CLOSED"));
+  // Every section is shown, always.
+  //
+  // A finished section used to be hidden unless the Closed filter was on, so a list that plainly had a
+  // "complete" section looked like it did not have one - and adding it again changed nothing, because it
+  // was there the whole time. A section is structure. The filter decides which tasks are listed, not which
+  // parts of the list exist.
+  const visibleStatuses = list.statuses;
+  const isFinished = (status: ListStatus) => status.category === "DONE" || status.category === "CLOSED";
 
   // Grouping by something other than the section. The sections stay their own rendering because they are
   // the only grouping you can drag between - the rest are ways of reading, not ways of filing.
@@ -594,6 +601,10 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
         <div className="lw-groups">
           {visibleStatuses.map((status) => {
             const rows = inViewOrder(topLevel.filter((item) => item.statusId === status.id && matches(item)));
+            // What it holds, even when the filter is not listing them.
+            const hidden = !showClosed && isFinished(status)
+              ? topLevel.filter((item) => item.statusId === status.id).length - rows.length
+              : 0;
             const folded = collapsedGroups[status.id];
             return (
               // The board could take a dragged task; the list, which is what most people actually use,
@@ -625,7 +636,12 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
                     <svg viewBox="0 0 10 10" width="9" height="9" style={{ transform: folded ? "none" : "rotate(90deg)" }} aria-hidden="true"><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
                   </button>
                   <span className="lw-pill" style={{ background: status.color }}><StatusIcon status={status} />{status.name}</span>
-                  <span className="lw-n">{rows.length}</span>
+                  <span className="lw-n">{rows.length + hidden}</span>
+                  {hidden ? (
+                    <button type="button" className="lw-group-add" onClick={() => setShowClosed(true)}>
+                      {hidden === 1 ? "1 finished — show it" : hidden + " finished — show them"}
+                    </button>
+                  ) : null}
                   {canEdit ? <button className="lw-group-add" onClick={() => setAddingIn(status.id)}>+ Add Task</button> : null}
                 </div>
                 {folded ? null : (
@@ -1639,6 +1655,8 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
     return () => { live = false; };
   }, []);
   const [comment, setComment] = useState("");
+  // Who was picked from the @ list, so their names can become ids when the comment is saved.
+  const [named, setNamed] = useState<Array<{ id: string; fullName: string }>>([]);
   const [saving, setSaving] = useState(false);
 
   function adopt(next: ItemDetail) {
@@ -1719,7 +1737,10 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
     const body = comment.trim();
     if (!body) return;
     setComment("");
-    await save({ comment: body });
+    // What was typed reads as names; what is stored carries the ids, so the right person is reached.
+    const stored = toStored(body, named);
+    setNamed([]);
+    await save({ comment: stored });
   }
 
   return (
@@ -1990,6 +2011,7 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                 <MentionBox
                   value={comment}
                   onChange={setComment}
+                  onNamed={(person) => setNamed((current) => (current.some((entry) => entry.id === person.id) ? current : [...current, person]))}
                   onSend={postComment}
                 />
                 <div className="tp-compose-row"><span>Type @ to name somebody · Ctrl + Enter to send</span><button type="submit" className="lw-primary" disabled={!comment.trim()}>Comment</button></div>

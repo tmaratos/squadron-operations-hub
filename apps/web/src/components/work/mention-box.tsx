@@ -32,15 +32,34 @@ export function renderMentions(body: string): ReactNode {
   return parts.length ? parts : body;
 }
 
+/**
+ * Turns what was typed into what is stored.
+ *
+ * The box shows "@Mel W Osborne". What is saved is "@[Mel W Osborne](user id)". Showing the stored form
+ * while somebody types puts a raw identifier in the middle of their sentence, which is nobody's idea of
+ * writing a comment.
+ */
+export function toStored(display: string, named: Array<{ id: string; fullName: string }>): string {
+  let out = display;
+  // Longest names first, so "Zachary D Johnson Jr" is not half-matched by a shorter name inside it.
+  [...named].sort((left, right) => right.fullName.length - left.fullName.length).forEach((person) => {
+    out = out.split("@" + person.fullName).join("@[" + person.fullName + "](" + person.id + ")");
+  });
+  return out;
+}
+
 export function MentionBox({
   value,
   onChange,
   onSend,
+  onNamed,
   placeholder = "Write a comment… type @ to name somebody"
 }: {
   value: string;
   onChange: (value: string) => void;
   onSend: () => void;
+  /** Told who was picked, so the parent can turn the names back into ids when it saves. */
+  onNamed?: (person: { id: string; fullName: string }) => void;
   placeholder?: string;
 }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
@@ -79,12 +98,14 @@ export function MentionBox({
     if (!at) return;
     const element = ref.current;
     const caret = element?.selectionStart ?? value.length;
-    const next = value.slice(0, at.start) + "@[" + person.fullName + "](" + person.userId + ") " + value.slice(caret);
+    // The readable form goes in the box; the parent is told who it was.
+    const next = value.slice(0, at.start) + "@" + person.fullName + " " + value.slice(caret);
     onChange(next);
+    onNamed?.({ id: person.userId, fullName: person.fullName });
     setAt(null);
     window.requestAnimationFrame(() => {
       element?.focus();
-      const position = at.start + person.fullName.length + person.userId.length + 5;
+      const position = at.start + person.fullName.length + 2;
       element?.setSelectionRange(position, position);
     });
   }

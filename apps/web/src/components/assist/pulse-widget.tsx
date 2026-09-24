@@ -1,21 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 // The Hub, noticing things while somebody has it open.
 //
-// Three rules it follows, because an assistant that interrupts is worse than one that waits:
+// A small circle rather than a bar across the corner, because the corner is where the task panel and the
+// comment box already are, and a permanent horizontal strip covers them. The circle can be dragged
+// anywhere and stays where it was put, so somebody who wants it out of the way can put it out of the way
+// rather than asking me to guess where the way is.
 //
-//   It is silent when there is nothing. No empty state, no "all clear" badge, nothing to dismiss. A widget
-//   that is always visible is furniture, and furniture gets ignored along with whatever it says next.
-//
-//   It never acts on its own. Everything here is a suggestion with a button; the looking is automatic, the
-//   doing is not.
-//
-//   It stays shut once shut. Minimising is remembered, so somebody who does not want it does not fight it
-//   on every page.
+// Three rules it keeps:
+//   Silent when there is nothing. No empty badge, nothing to dismiss. A thing that is always on screen is
+//   furniture, and furniture is ignored along with whatever it says next.
+//   It never acts on its own. The looking is automatic; the doing is a button somebody presses.
+//   Where it sits, and whether it is open, are remembered.
 
 interface Noticed {
   id: string;
@@ -27,20 +27,43 @@ interface Noticed {
 }
 
 const ICON: Record<Noticed["kind"], string> = { offer: "✦", mail: "✉", agent: "🤖", drive: "📄" };
-
-// A gentle cadence: often enough to feel alive, rare enough that nobody's laptop notices.
 const QUIET_MINUTES = 6;
+const SIZE = 52;
+
+interface Spot { x: number; y: number }
+
+function within(spot: Spot): Spot {
+  if (typeof window === "undefined") return spot;
+  return {
+    x: Math.min(Math.max(spot.x, 8), Math.max(8, window.innerWidth - SIZE - 8)),
+    y: Math.min(Math.max(spot.y, 8), Math.max(8, window.innerHeight - SIZE - 8))
+  };
+}
 
 export function PulseWidget() {
   const [noticed, setNoticed] = useState<Noticed[]>([]);
   const [open, setOpen] = useState(false);
-  const [minimised, setMinimised] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [gone, setGone] = useState<string[]>([]);
+  const [spot, setSpot] = useState<Spot | null>(null);
+  const dragging = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    try { setMinimised(localStorage.getItem("hub-pulse-open") !== "1"); } catch { /* fine without it */ }
+    let start: Spot = { x: window.innerWidth - SIZE - 22, y: window.innerHeight - SIZE - 22 };
+    try {
+      const saved = localStorage.getItem("hub-pulse-spot");
+      if (saved) {
+        const parsed = JSON.parse(saved) as Spot;
+        if (Number.isFinite(parsed.x) && Number.isFinite(parsed.y)) start = parsed;
+      }
+    } catch { /* a default corner is fine */ }
+    setSpot(within(start));
+
+    // Keep it on screen when the window changes shape, rather than stranded off the edge.
+    const onResize = () => setSpot((current) => (current ? within(current) : current));
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   const look = useCallback(async (deep: boolean) => {
@@ -49,28 +72,51 @@ export function PulseWidget() {
       if (!response.ok) return;
       const data = (await response.json()) as { noticed?: Noticed[] };
       setNoticed(data.noticed ?? []);
-    } catch {
-      // A widget that cannot reach the server says nothing rather than complaining.
-    }
+    } catch { /* says nothing rather than complaining */ }
   }, []);
 
   useEffect(() => {
     look(true);
     const timer = window.setInterval(() => {
-      // Only while somebody is actually here. A background tab does not need watching.
       if (document.visibilityState === "visible") look(true);
     }, QUIET_MINUTES * 60000);
     return () => window.clearInterval(timer);
   }, [look]);
 
+  useEffect(() => {
+    if (!dragging.current) return;
+    const move = (event: PointerEvent) => {
+      if (!dragging.current) return;
+      dragging.current.moved = true;
+      setSpot(within({ x: event.clientX - dragging.current.dx, y: event.clientY - dragging.current.dy }));
+    };
+    const up = () => {
+      const moved = dragging.current?.moved;
+      dragging.current = null;
+      setSpot((current) => {
+        if (current) { try { localStorage.setItem("hub-pulse-spot", JSON.stringify(current)); } catch { /* fine */ } }
+        return current;
+      });
+      // A drag is not a click. Without this, putting it down opens it every time.
+      if (!moved) setOpen((was) => !was);
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  });
+
   async function act(item: Noticed, accept: boolean) {
-    const offerId = item.id.replace(/^offer:/, "");
     setBusy(item.id);
     try {
       await fetch("/api/offers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: accept ? "accept" : "dismiss", offerId })
+        body: JSON.stringify({ action: accept ? "accept" : "dismiss", offerId: item.id.replace(/^offer:/, "") })
       });
       setGone((current) => [...current, item.id]);
       await look(false);
@@ -81,67 +127,93 @@ export function PulseWidget() {
   }
 
   const showing = noticed.filter((item) => !gone.includes(item.id));
-  if (!showing.length) return null; // silent when there is nothing to say
+  if (!showing.length || !spot) return null;
+
+  // The panel opens towards whichever side and corner there is room in.
+  const leftHalf = spot.x < window.innerWidth / 2;
+  const topHalf = spot.y < window.innerHeight / 2;
 
   return (
-    <div className={"pw" + (open && !minimised ? " is-open" : "")}>
+    <>
       <style>{pwCss}</style>
 
       <button
         type="button"
-        className="pw-tab"
-        onClick={() => {
-          const next = !(open && !minimised);
-          setOpen(next);
-          setMinimised(!next);
-          try { localStorage.setItem("hub-pulse-open", next ? "1" : "0"); } catch { /* fine */ }
+        className="pw-ball"
+        style={{ left: spot.x, top: spot.y }}
+        title="What the Hub noticed — drag to move"
+        aria-label={showing.length + " things the Hub noticed"}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          dragging.current = { dx: event.clientX - spot.x, dy: event.clientY - spot.y, moved: false };
+          setSpot({ ...spot });
         }}
-        aria-expanded={open && !minimised}
       >
         <span className="pw-spark" aria-hidden="true">✦</span>
-        <span>{showing.length === 1 ? "The Hub noticed something" : "The Hub noticed " + showing.length + " things"}</span>
-        <span className="pw-chev" aria-hidden="true">{open && !minimised ? "▾" : "▴"}</span>
+        <span className="pw-count">{showing.length}</span>
       </button>
 
-      {open && !minimised ? (
-        <div className="pw-body">
-          {showing.slice(0, 5).map((item) => (
-            <article key={item.id} className="pw-item">
-              <span className="pw-icon" aria-hidden="true">{ICON[item.kind]}</span>
-              <div className="pw-text">
-                <strong>{item.title}</strong>
-                {item.detail ? <span>{item.detail}</span> : null}
-              </div>
-              <div className="pw-do">
-                {item.actionable ? (
-                  <>
-                    <button type="button" className="pw-yes" disabled={busy === item.id} onClick={() => act(item, true)}>
-                      {busy === item.id ? "…" : "Do it"}
-                    </button>
-                    <button type="button" className="pw-no" disabled={busy === item.id} onClick={() => act(item, false)}>Not now</button>
-                  </>
-                ) : item.href ? (
-                  <Link className="pw-yes" href={item.href}>Look</Link>
-                ) : null}
-              </div>
-            </article>
-          ))}
-          {showing.length > 5 ? <p className="pw-more">and {showing.length - 5} more</p> : null}
+      {open ? (
+        <div
+          className="pw-panel"
+          style={{
+            left: leftHalf ? spot.x : undefined,
+            right: leftHalf ? undefined : Math.max(8, window.innerWidth - spot.x - SIZE),
+            top: topHalf ? spot.y + SIZE + 8 : undefined,
+            bottom: topHalf ? undefined : Math.max(8, window.innerHeight - spot.y + 8)
+          }}
+        >
+          <div className="pw-head">
+            <strong>{showing.length === 1 ? "The Hub noticed something" : "The Hub noticed " + showing.length + " things"}</strong>
+            <button type="button" className="pw-close" onClick={() => setOpen(false)} aria-label="Close">×</button>
+          </div>
+
+          <div className="pw-body">
+            {showing.slice(0, 5).map((item) => (
+              <article key={item.id} className="pw-item">
+                <span className="pw-icon" aria-hidden="true">{ICON[item.kind]}</span>
+                <div className="pw-text">
+                  <strong>{item.title}</strong>
+                  {item.detail ? <span>{item.detail}</span> : null}
+                </div>
+                <div className="pw-do">
+                  {item.actionable ? (
+                    <>
+                      <button type="button" className="pw-yes" disabled={busy === item.id} onClick={() => act(item, true)}>
+                        {busy === item.id ? "…" : "Do it"}
+                      </button>
+                      <button type="button" className="pw-no" disabled={busy === item.id} onClick={() => act(item, false)}>Not now</button>
+                    </>
+                  ) : item.href ? (
+                    <Link className="pw-yes" href={item.href} onClick={() => setOpen(false)}>Look</Link>
+                  ) : null}
+                </div>
+              </article>
+            ))}
+            {showing.length > 5 ? <p className="pw-more">and {showing.length - 5} more</p> : null}
+          </div>
+
           <p className="pw-foot">It looks on its own. It never does anything without being told.</p>
         </div>
       ) : null}
-    </div>
+    </>
   );
 }
 
 const pwCss = [
-  ".pw{position:fixed;right:18px;bottom:18px;z-index:120;width:min(380px,calc(100vw - 36px));display:flex;flex-direction:column;align-items:stretch;border-radius:12px;overflow:hidden;box-shadow:0 16px 44px rgba(9,20,44,.3);border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff)}",
-  "html[data-theme=dark] .pw{background:#1f2024;border-color:#34363b}",
-  ".pw-tab{display:flex;align-items:center;gap:9px;width:100%;border:0;background:linear-gradient(135deg,#7b68ee,#9b6bd6);color:#fff;font:inherit;font-size:13px;font-weight:600;padding:10px 13px;cursor:pointer;text-align:left}",
-  ".pw-spark{font-size:14px}",
-  ".pw-tab span:nth-child(2){flex:1;min-width:0}",
-  ".pw-chev{opacity:.85;font-size:11px}",
-  ".pw-body{display:flex;flex-direction:column;max-height:min(58vh,460px);overflow-y:auto}",
+  ".pw-ball{position:fixed;z-index:130;width:52px;height:52px;border-radius:50%;border:0;cursor:grab;display:grid;place-items:center;background:linear-gradient(135deg,#7b68ee,#9b6bd6);color:#fff;box-shadow:0 8px 24px rgba(9,20,44,.34);touch-action:none;padding:0}",
+  ".pw-ball:active{cursor:grabbing}",
+  ".pw-ball .pw-spark{font-size:19px;line-height:1}",
+  ".pw-count{position:absolute;top:-3px;right:-3px;min-width:19px;height:19px;padding:0 5px;border-radius:999px;background:#e5484d;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;border:2px solid var(--cu-bg,#fff)}",
+  "html[data-theme=dark] .pw-count{border-color:#1f2024}",
+  ".pw-panel{position:fixed;z-index:129;width:min(360px,calc(100vw - 24px));border-radius:12px;overflow:hidden;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);box-shadow:0 18px 48px rgba(9,20,44,.32)}",
+  "html[data-theme=dark] .pw-panel{background:#1f2024;border-color:#34363b}",
+  ".pw-head{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--cu-border,#eef0f3);font-size:13px}",
+  "html[data-theme=dark] .pw-head{border-color:#2c2e33}",
+  ".pw-head strong{flex:1;min-width:0}",
+  ".pw-close{border:0;background:none;color:inherit;opacity:.5;font-size:19px;line-height:1;cursor:pointer;padding:0 2px}",
+  ".pw-close:hover{opacity:1}",
+  ".pw-body{display:flex;flex-direction:column;max-height:min(54vh,420px);overflow-y:auto}",
   ".pw-item{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-bottom:1px solid var(--cu-border,#eef0f3)}",
   "html[data-theme=dark] .pw-item{border-color:#2c2e33}",
   ".pw-icon{flex:none;width:24px;height:24px;display:grid;place-items:center;border-radius:7px;background:rgba(123,104,238,.14);font-size:12px}",
@@ -154,5 +226,5 @@ const pwCss = [
   ".pw-no:hover{color:var(--cu-text,#292d34)}",
   ".pw-more{margin:0;padding:8px 13px;font-size:11.5px;opacity:.6}",
   ".pw-foot{margin:0;padding:9px 13px;font-size:11px;opacity:.5;border-top:1px solid var(--cu-border,#eef0f3)}",
-  "@media (max-width:760px){.pw{right:10px;left:10px;bottom:76px;width:auto}}"
+  "html[data-theme=dark] .pw-foot{border-color:#2c2e33}"
 ].join("");
