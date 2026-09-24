@@ -2,8 +2,10 @@ import { z } from "zod";
 import { listTaskTags } from "@/lib/operations/tasks";
 import { createAutomation } from "@/lib/work/automations";
 import { createWidget, listDashboards } from "@/lib/work/dashboards";
-import { createItem, updateItem } from "@/lib/work/items";
+import { createItem, moveItem, updateItem } from "@/lib/work/items";
 import { createField, createFolder, createList, createSpace, createView, getWorkspaceTree, listStatuses, saveStatuses } from "@/lib/work/structure";
+import { listPersonnelPositions } from "@/lib/operations/personnel";
+import { loadDashboardItems } from "@/lib/work/dashboards";
 import type { FieldType, ItemPriority, StatusCategory, ViewType } from "@/lib/work/types";
 import { hasGmailReadScope, hasGmailScope, storedScopesFor } from "@/lib/auth/google-oauth";
 import { findPassages } from "@/lib/regs/knowledge";
@@ -95,6 +97,14 @@ export const stepSchema = z.discriminatedUnion("type", [
   }),
   // The honest answer. Nothing is built; the ask is written down for whoever maintains the Hub.
   z.object({
+    // Filing work that already exists. The squadron's lists were sorted by hand once; the assistant should
+    // be able to keep them sorted without that happening again.
+    type: z.literal("move_task"),
+    task: z.string().trim().min(3).max(300),
+    list: z.string().trim().min(1).max(80),
+    why: z.string().trim().max(300).optional()
+  }),
+  z.object({
     type: z.literal("not_possible_yet"),
     what: z.string().trim().min(3).max(500),
     why: z.string().trim().max(300).optional()
@@ -119,8 +129,54 @@ async function workspaceContext() {
   return { spaces, lists, tags: tags.map((tag) => tag.label), dashboards };
 }
 
+/**
+ * Where work goes in this squadron, described from the squadron's own filing rather than from rules
+ * written here.
+ *
+ * Telling the assistant "finance things go in Finance" would be a guess that goes stale the moment a
+ * department is renamed or added. Showing it each department, each list inside it, and a few titles
+ * already filed there lets it match a new task against real precedent - and the description is rebuilt
+ * from the database every time, so re-filing the workspace re-teaches it for free.
+ */
+async function filingGuide(): Promise<string> {
+  const [spaces, items, positions] = await Promise.all([
+    getWorkspaceTree(),
+    loadDashboardItems().catch(() => []),
+    listPersonnelPositions().catch(() => [])
+  ]);
+
+  // Who is accountable for each area, so the assistant can say whose work it is without being told.
+  const ownerFor = new Map<string, string[]>();
+  positions.forEach((position) => {
+    if (!position.incumbentName || !position.functionalAreaName) return;
+    const held = ownerFor.get(position.functionalAreaName.toLowerCase()) ?? [];
+    if (!held.includes(position.incumbentName)) held.push(position.incumbentName);
+    ownerFor.set(position.functionalAreaName.toLowerCase(), held);
+  });
+
+  const examplesFor = new Map<string, string[]>();
+  items.forEach((item) => {
+    const held = examplesFor.get(item.listId) ?? [];
+    if (held.length < 3) held.push(item.title.slice(0, 90));
+    examplesFor.set(item.listId, held);
+  });
+
+  const lines = spaces.map((space) => {
+    const owners = ownerFor.get(space.name.toLowerCase());
+    const head = "* " + space.name + (owners?.length ? " (led by " + owners.join(", ") + ")" : "");
+    const inside = [...space.lists, ...space.folders.flatMap((folder) => folder.lists)].map((list) => {
+      const examples = examplesFor.get(list.id) ?? [];
+      return "   - " + list.name + (examples.length ? " — e.g. " + examples.map((title) => '"' + title + '"').join("; ") : " — empty so far");
+    });
+    return [head, ...inside].join("\n");
+  });
+
+  return lines.join("\n");
+}
+
 export async function buildPlan(prompt: string, userId: string): Promise<PlanResult> {
   const context = await workspaceContext();
+  const filing = await filingGuide().catch(() => "");
 
   // What the squadron's own documents say about this, and what the squadron has confirmed it owes. The
   // assistant answers from these rather than from its own recollection of CAP regulations, which is
@@ -156,8 +212,17 @@ export async function buildPlan(prompt: string, userId: string): Promise<PlanRes
     "- If part of the request needs something the Hub cannot do - sending mail, editing files, anything needing new code - use not_possible_yet for that part and still do the rest.",
     "- If the request is only a question, return an empty steps array and answer in reply.",
     "Today is " + today() + ".",
-    "Departments: " + (context.spaces.map((space) => space.name).join(" | ") || "none yet"),
-    "Lists: " + (context.lists.map((list) => list.name).join(" | ") || "none yet"),
+    // A flat list of department names beside a flat list of list names said nothing about which list is in
+    // which department, or what kind of work each one holds - so the assistant had no way to file anything
+    // and had to be told every time.
+    filing
+      ? "\nWhere work goes in this squadron. Each department, the lists inside it, and work already filed there:\n" + filing
+      : "Departments: " + (context.spaces.map((space) => space.name).join(" | ") || "none yet"),
+    "\nFiling rules:",
+    "- Put every task in the list whose existing work it most resembles. Match against the examples above, not against the list's name alone.",
+    "- A task belongs to the department that owns the subject, not the person who asked for it.",
+    "- If nothing fits, say so and propose a new list in the right department. Never fall back to a general list to avoid choosing.",
+    "- Use move_task to file work that already exists in the wrong place, and say why in one short clause.",
     "Tags: " + context.tags.slice(0, 60).join(", "),
     abilities.length
       ? "\nWhat you can do for this member. Answer questions about your own abilities from this list and nothing else — never say you have no access to something listed here:\n" +
@@ -254,6 +319,8 @@ export function describeStep(step: PlanStep): string {
       ].filter(Boolean).join(", ");
       return 'Create task "' + step.title + '" in ' + step.list + (extras ? " (" + extras + ")" : "");
     }
+    case "move_task":
+      return 'File "' + step.task + '" into ' + step.list + (step.why ? " — " + step.why : "");
     case "create_department":
       return 'Create a department called "' + step.name + '"';
     case "create_list":
@@ -307,6 +374,40 @@ export async function applyPlan(steps: PlanStep[], userId: string, prompt = ""):
             tags: (step.tags ?? []).map((tag) => tag.toLowerCase()).filter((tag) => allowed.has(tag))
           });
           await record(step, { ok: true, label: 'Created "' + step.title + '" in ' + list.name, href: "/lists/" + list.id + "?item=" + encodeURIComponent(id) }, "item", id);
+          break;
+        }
+
+        case "move_task": {
+          const list = matchList(lists, step.list);
+          if (!list) {
+            await record(step, { ok: false, label: 'No list named "' + step.list + '", so nothing was moved.' });
+            break;
+          }
+          // Match the task the way a person would: the exact title first, then a clear partial match, and
+          // refuse when several could be meant rather than filing the wrong one.
+          const needle = step.task.trim().toLowerCase();
+          const all = await loadDashboardItems().catch(() => []);
+          const exact = all.filter((item) => item.title.trim().toLowerCase() === needle);
+          const partial = exact.length ? exact : all.filter((item) => item.title.toLowerCase().includes(needle));
+          if (partial.length === 0) {
+            await record(step, { ok: false, label: 'No task called "' + step.task + '" was found.' });
+            break;
+          }
+          if (partial.length > 1) {
+            await record(step, { ok: false, label: partial.length + ' tasks match "' + step.task + '", so none was moved. Name one exactly.' });
+            break;
+          }
+          const target = partial[0];
+          if (target.listId === list.id) {
+            await record(step, { ok: true, label: '"' + target.title.slice(0, 60) + '" is already in ' + list.name });
+            break;
+          }
+          await moveItem(target.id, list.id);
+          await record(step, {
+            ok: true,
+            label: 'Moved "' + target.title.slice(0, 60) + '" from ' + target.listName + " to " + list.name,
+            href: "/lists/" + list.id + "?item=" + encodeURIComponent(target.id)
+          }, "item", target.id);
           break;
         }
 
