@@ -21,11 +21,7 @@ importers:
         specifier: ^4.42.0
         version: 4.132.0(@cloudflare/workers-types@5.20260916.1)(@types/node@22.20.3)
 
-  apps/notifier:
-    devDependencies:
-      wrangler:
-        specifier: ^4.42.0
-        version: 4.132.0(@cloudflare/workers-types@5.20260916.1)(@types/node@22.20.3)
+  apps/notifier: {}
 
   apps/web:
     dependencies:
