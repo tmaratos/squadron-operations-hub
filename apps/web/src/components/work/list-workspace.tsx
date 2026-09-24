@@ -64,6 +64,17 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   // Assigning somebody, or setting a priority, without opening the task: the two things most often changed
   // in a row, and until now both of them meant a trip into the panel and back out again.
   const [inlineEdit, setInlineEdit] = useState<{ itemId: string; field: "assignee" | "priority" } | null>(null);
+  // Right-clicking a task offers the things you do to a task, rather than the things a browser does to a page.
+  const [rowMenu, setRowMenu] = useState<{ item: WorkItem; x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    if (!rowMenu) return;
+    const close = () => setRowMenu(null);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setRowMenu(null); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); };
+  }, [rowMenu]);
   const [addingIn, setAddingIn] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
   const [editingStatuses, setEditingStatuses] = useState(false);
@@ -208,6 +219,11 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
           }}
           onDragEnd={() => { delete document.body.dataset.draggingItem; }}
           onClick={() => setOpenId(item.id)}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setRowMenu({ item, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 190) });
+          }}
         >
           <div className="lw-name" style={{ paddingLeft: depth * 26 }}>
             {canEdit ? (
@@ -469,6 +485,36 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
             await quickAdd(title, null, openId);
           }}
         />
+      ) : null}
+
+      {rowMenu ? (
+        <div
+          className="lw-rowmenu"
+          style={{ left: rowMenu.x, top: rowMenu.y }}
+          role="menu"
+          onMouseDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <p className="lw-rowmenu-title">{rowMenu.item.title}</p>
+          <button type="button" role="menuitem" className="lw-rowmenu-item" onClick={() => { setOpenId(rowMenu.item.id); setRowMenu(null); }}>Open</button>
+          {canEdit ? (
+            <>
+              <button type="button" role="menuitem" className="lw-rowmenu-item" onClick={() => { toggleDone(rowMenu.item); setRowMenu(null); }}>
+                {isClosed(rowMenu.item) ? "Reopen" : "Mark done"}
+              </button>
+              <button type="button" role="menuitem" className="lw-rowmenu-item" onClick={() => { togglePick(rowMenu.item.id); setRowMenu(null); }}>
+                {picked.includes(rowMenu.item.id) ? "Deselect" : "Select"}
+              </button>
+              <ConfirmButton
+                className="lw-rowmenu-item lw-rowmenu-item--danger"
+                question="Delete this task?"
+                onConfirm={() => { const id = rowMenu.item.id; setRowMenu(null); removeItem(id); }}
+              >
+                Delete
+              </ConfirmButton>
+            </>
+          ) : null}
+        </div>
       ) : null}
 
       {toast ? (
@@ -1785,6 +1831,12 @@ const lwCss = [
   ".lw-colhead{font-size:11px;color:var(--lw-muted);padding:4px 0 6px 44px;border-bottom:1px solid var(--lw-border)}",
   ".lw-row[draggable=true]{cursor:grab}.lw-row[draggable=true]:active{cursor:grabbing}",
   inlinePickerCss,
+  ".lw-rowmenu{position:fixed;z-index:95;min-width:200px;padding:6px;border-radius:11px;border:1px solid var(--border,#e4e6eb);background:var(--surface,#fff);box-shadow:0 16px 40px rgba(9,20,44,.28)}",
+  "html[data-theme=dark] .lw-rowmenu{background:#26272b;border-color:#3a3c42}",
+  ".lw-rowmenu-title{margin:4px 8px 6px;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".lw-rowmenu-item{display:block;width:100%;text-align:left;border:0;background:none;color:inherit;font:inherit;font-size:13.5px;padding:7px 9px;border-radius:7px;cursor:pointer}",
+  ".lw-rowmenu-item:hover{background:rgba(123,104,238,.14)}",
+  ".lw-rowmenu-item--danger{color:#d03b3b}",
   ".lw-cell--pick{position:relative;overflow:visible}",
   ".lw-td-people{position:relative;overflow:visible}",
   ".lw-inline{display:inline-flex;align-items:center;gap:4px;border:0;background:none;color:inherit;font:inherit;padding:2px 6px;border-radius:6px;cursor:pointer;max-width:100%}",
