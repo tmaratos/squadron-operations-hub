@@ -5,6 +5,7 @@ import { createWidget, listDashboards } from "@/lib/work/dashboards";
 import { createItem, updateItem } from "@/lib/work/items";
 import { createField, createFolder, createList, createSpace, createView, getWorkspaceTree, listStatuses, saveStatuses } from "@/lib/work/structure";
 import type { FieldType, ItemPriority, StatusCategory, ViewType } from "@/lib/work/types";
+import { hasGmailReadScope, hasGmailScope, storedScopesFor } from "@/lib/auth/google-oauth";
 import { findPassages } from "@/lib/regs/knowledge";
 import { listDuties } from "@/lib/work/duties";
 import { logBuild, recordCapabilityRequest } from "./capability-requests";
@@ -129,6 +130,11 @@ export async function buildPlan(prompt: string, userId: string): Promise<PlanRes
     listDuties().catch(() => [])
   ]);
   const confirmedDuties = duties.filter((duty) => duty.confidence === "CONFIRMED" && duty.active).slice(0, 40);
+
+  // What this member has actually connected, and what the Hub can do with it. Without this the assistant
+  // guesses when asked what it has access to, and guesses "no" - denying, to the member's face, things the
+  // Hub is doing for them already.
+  const abilities = await describeAbilities(userId).catch(() => [] as string[]);
   const system = [
     "You help a Civil Air Patrol squadron run their operations hub. Turn the member's request into a short plan of actions.",
     'Reply with JSON only, shaped like: {"reply": "one short sentence", "steps": [ ... ]}.',
@@ -153,6 +159,10 @@ export async function buildPlan(prompt: string, userId: string): Promise<PlanRes
     "Departments: " + (context.spaces.map((space) => space.name).join(" | ") || "none yet"),
     "Lists: " + (context.lists.map((list) => list.name).join(" | ") || "none yet"),
     "Tags: " + context.tags.slice(0, 60).join(", "),
+    abilities.length
+      ? "\nWhat you can do for this member. Answer questions about your own abilities from this list and nothing else — never say you have no access to something listed here:\n" +
+        abilities.map((ability) => "- " + ability).join("\n")
+      : "",
     confirmedDuties.length
       ? "\nWhat this squadron has confirmed it owes. Use these exact words when asked:\n" +
         confirmedDuties
@@ -182,6 +192,41 @@ export async function buildPlan(prompt: string, userId: string): Promise<PlanRes
     ? parsed.reply.trim()
     : steps.length ? "Here is what I can do." : "I could not turn that into actions. Try naming what you want and where it should go.";
   return { steps, reply };
+}
+
+/**
+ * What the Hub can do for this member right now, in the words it should use when asked. Everything here is
+ * checked, not assumed: a member who has not connected Gmail is told so, rather than being promised drafts.
+ */
+async function describeAbilities(userId: string): Promise<string[]> {
+  const scopes = await storedScopesFor(userId).catch(() => "");
+  const abilities: string[] = [];
+
+  abilities.push(
+    scopes.includes("/auth/drive")
+      ? "You can see the squadron's Google Drive: this member signed in with Google and the Hub reads the Shared Drive with their access. You can read documents from it and search what has already been read."
+      : "Google Drive is not connected for this member."
+  );
+  abilities.push(
+    hasGmailScope(scopes)
+      ? "You can write an email into this member's own Gmail drafts. You cannot send: they open the draft and send it themselves."
+      : "Gmail drafting is not connected. They can connect it in My connections."
+  );
+  abilities.push(
+    hasGmailReadScope(scopes)
+      ? "You can read emails this member has labelled Hub in Gmail, and turn them into tasks. You cannot read anything else in their mailbox."
+      : "You cannot read their email. They can turn that on in My connections, or forward mail to their own Hub address instead."
+  );
+  abilities.push(
+    "Every member has a personal email address that turns forwarded mail into a task, shown in My connections."
+  );
+  abilities.push(
+    "You can build in the Hub: departments, lists, the steps work moves through, custom fields, saved views, automation rules, dashboard cards and tasks."
+  );
+  abilities.push(
+    "You cannot send email to anybody, delete a member's data, or act outside the Hub and the connections listed above. Say so plainly if asked for those."
+  );
+  return abilities;
 }
 
 function matchList(lists: Array<{ id: string; name: string }>, wanted?: string) {
