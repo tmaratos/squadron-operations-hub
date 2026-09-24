@@ -16,6 +16,7 @@ import {
   Inbox,
   LayoutDashboard,
   Bot,
+  Target,
   ListChecks,
   Menu,
   Moon,
@@ -47,12 +48,13 @@ export interface WorkspaceSummary {
 
 const defaultWorkspaces: WorkspaceSummary[] = [{ id: "tn-170", name: "TN-170 Oak Ridge", shortName: "170" }];
 
-type RailKey = "home" | "spaces" | "planner" | "ai" | "docs" | "dashboards" | "more";
+type RailKey = "home" | "spaces" | "planner" | "goals" | "ai" | "docs" | "dashboards" | "more";
 
 const railItems: Array<{ key: RailKey; label: string; href: string; icon: typeof Home }> = [
   { key: "home", label: "Home", href: "/", icon: Home },
   { key: "spaces", label: "Spaces", href: "/spaces", icon: Grid3x3 },
   { key: "planner", label: "Planner", href: "/calendar", icon: CalendarDays },
+  { key: "goals", label: "Goals", href: "/goals", icon: Target },
   { key: "ai", label: "AI", href: "/agents", icon: Bot },
   { key: "docs", label: "Docs", href: "/documents", icon: FileText },
   { key: "dashboards", label: "Dashboard", href: "/dashboards", icon: LayoutDashboard },
@@ -62,6 +64,7 @@ const railItems: Array<{ key: RailKey; label: string; href: string; icon: typeof
 function railFor(pathname: string): RailKey {
   if (pathname.startsWith("/spaces") || pathname.startsWith("/lists")) return "spaces";
   if (pathname.startsWith("/calendar")) return "planner";
+  if (pathname.startsWith("/goals")) return "goals";
   if (pathname.startsWith("/agents")) return "ai";
   if (pathname.startsWith("/documents")) return "docs";
   if (pathname.startsWith("/dashboards") || pathname.startsWith("/readiness")) return "dashboards";
@@ -691,6 +694,12 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
             </>
           ) : null}
           {rail === "spaces" ? <>{spacesSection}{agentsSection}</> : null}
+          {rail === "goals" ? (
+            <section className="cu-section">
+              {navLink("/goals", "All goals", <Target size={15} />)}
+              {navLink("/dashboards", "Squadron health", <LayoutDashboard size={15} />)}
+            </section>
+          ) : null}
           {rail === "ai" ? agentsSection ?? <p className="cu-empty">No agents yet. Make one on the Agents page.</p> : null}
           {rail === "planner" ? (
             <section className="cu-section">
