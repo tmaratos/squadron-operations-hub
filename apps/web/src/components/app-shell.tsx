@@ -20,6 +20,8 @@ import {
   Moon,
   NotebookTabs,
   Plug,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Plus,
   Settings,
   Star,
@@ -175,6 +177,19 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   const spaceTree = spaces ?? [];
 
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem("hub-collapsed");
+      if (saved) setCollapsed(JSON.parse(saved) as Record<string, boolean>);
+    } catch {
+      // A browser with site data blocked still gets a working sidebar, just not a remembered one.
+    }
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("hub-collapsed", JSON.stringify(collapsed)); } catch { /* not worth failing over */ }
+  }, [collapsed]);
+
+  useEffect(() => {
     const saved = localStorage.getItem("hub-theme");
     const nextTheme = saved === "dark" || saved === "light"
       ? saved
@@ -212,6 +227,17 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   }
 
   const toggle = (key: string) => setCollapsed((current) => ({ ...current, [key]: !current[key] }));
+
+  // With a department per functional area, everything open at once is a sidebar nobody can read. One
+  // press folds the lot; the same press opens them again if they are already folded.
+  const everyCollapsed = spaceTree.length > 0 && spaceTree.every((space) => collapsed[space.id]);
+  function toggleAllSpaces() {
+    setCollapsed((current) => {
+      const next = { ...current };
+      for (const space of spaceTree) next[space.id] = !everyCollapsed;
+      return next;
+    });
+  }
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
   const railTitle = railItems.find((item) => item.key === rail)?.label ?? "Home";
 
@@ -246,9 +272,19 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
     <section className="cu-section">
       <div className="cu-section-head">
         <button type="button" onClick={() => toggle("spaces")}>Spaces</button>
-        <button type="button" aria-label="New department" title="New department" onClick={() => setAddingSpace((open) => !open)}>
-          <Plus size={14} />
-        </button>
+        <span className="cu-head-actions">
+          <button
+            type="button"
+            aria-label={everyCollapsed ? "Expand every department" : "Collapse every department"}
+            title={everyCollapsed ? "Expand all" : "Collapse all"}
+            onClick={toggleAllSpaces}
+          >
+            {everyCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
+          </button>
+          <button type="button" aria-label="New department" title="New department" onClick={() => setAddingSpace((open) => !open)}>
+            <Plus size={14} />
+          </button>
+        </span>
       </div>
       {addingSpace ? (
         <form
@@ -703,6 +739,9 @@ const shellCss = [
   ".cu-space[draggable=true]{cursor:grab}.cu-space[draggable=true]:active{cursor:grabbing}",
   ".cu-space.is-order-before{box-shadow:inset 0 2px 0 #7b68ee}",
   ".cu-space.is-order-after{box-shadow:inset 0 -2px 0 #7b68ee}",
+  ".cu-head-actions{display:flex;align-items:center;gap:2px}",
+  ".cu-head-actions button{display:grid;place-items:center;padding:3px;border-radius:5px}",
+  ".cu-head-actions button:hover{background:rgba(123,104,238,.16);color:var(--cu-text)}",
   ".cu-side-new{display:flex;gap:6px;padding:4px 8px 8px}",
   ".cu-side-new input{flex:1;min-width:0;font:inherit;font-size:13px;min-height:30px;padding:0 8px;border-radius:7px;border:1px solid var(--cu-border);background:var(--cu-bg);color:var(--cu-text)}",
   ".cu-side-new button{border:0;background:#7b68ee;color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:0 10px;border-radius:7px;cursor:pointer}",
