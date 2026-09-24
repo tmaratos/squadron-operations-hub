@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
-import { ConfirmButton } from "@/components/confirm-button";
 
 type Person = { id: string; fullName: string; pending?: boolean };
 type Mode = "list" | "board" | "table" | "calendar";
@@ -108,6 +108,17 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
       await reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add the task.");
+    }
+  }
+
+  async function removeItem(itemId: string) {
+    setError("");
+    try {
+      await send("/api/work/items/" + itemId, "DELETE", undefined);
+      setOpenId(null);
+      await reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not delete.");
     }
   }
 
@@ -365,6 +376,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
           onClose={() => setOpenId(null)}
           onOpen={setOpenId}
           onPatch={patch}
+          onDelete={removeItem}
           onAddChild={async (title) => {
             await quickAdd(title, null, openId);
           }}
@@ -1137,7 +1149,7 @@ function AssistBox({ itemId, canEdit, onAddTag, onAddSubtasks, onComment }: {
   );
 }
 
-function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen, onPatch, onAddChild }: {
+function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen, onPatch, onDelete, onAddChild }: {
   itemId: string;
   statuses: ListStatus[];
   fields: CustomField[];
@@ -1146,6 +1158,7 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
   onClose: () => void;
   onOpen: (id: string) => void;
   onPatch: (id: string, body: Record<string, unknown>) => Promise<ItemDetail | null>;
+  onDelete: (id: string) => Promise<void>;
   onAddChild: (title: string) => Promise<void>;
 }) {
   const [item, setItem] = useState<ItemDetail | null>(null);
@@ -1277,6 +1290,16 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
             ))}
           </nav>
           <span className="tp-saving" aria-live="polite">{saving ? "Saving…" : "All changes saved"}</span>
+          {canEdit ? (
+            <ConfirmButton
+              className="tp-icon tp-icon--danger"
+              ariaLabel={"Delete " + item.title}
+              question="Delete this task?"
+              onConfirm={() => onDelete(item.id)}
+            >
+              🗑
+            </ConfirmButton>
+          ) : null}
           <button className="tp-icon" onClick={onClose} aria-label="Close">✕</button>
         </header>
 
@@ -1521,6 +1544,7 @@ const tpCss = [
   ".tp-crumb{overflow:hidden;text-overflow:ellipsis;max-width:260px}.tp-crumb--link{border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:0}.tp-crumb--link:hover{color:#7b68ee}",
   ".tp-sep{color:var(--tp-muted);opacity:.6;margin:0 4px}",
   ".tp-saving{font-size:11px;color:var(--tp-muted);white-space:nowrap}",
+  ".tp-icon--danger:hover{color:#e5484d}",
   ".tp-icon{display:grid;place-items:center;width:32px;height:32px;border:0;border-radius:6px;background:none;color:var(--tp-muted);cursor:pointer;font-size:15px}.tp-icon:hover{background:var(--tp-hover);color:inherit}",
   ".tp-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px}",
   ".tp-main{overflow-y:auto;padding:24px 36px 64px;display:flex;flex-direction:column;gap:26px}",
