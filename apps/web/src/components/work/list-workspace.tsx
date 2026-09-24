@@ -58,6 +58,19 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
+
+  useEffect(() => {
+    // A section of the Done or Closed kind only appears when Closed is on. Somebody who has just made one
+    // should see it, not wonder whether it saved.
+    try {
+      if (sessionStorage.getItem("lw-reveal-closed") === list.id) {
+        sessionStorage.removeItem("lw-reveal-closed");
+        setShowClosed(true);
+      }
+    } catch {
+      // Storage being unavailable is not a reason to fail to draw a list.
+    }
+  }, [list.id]);
   const [expandAll, setExpandAll] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -84,7 +97,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   }, [rowMenu]);
   const [addingIn, setAddingIn] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
-  const [editingStatuses, setEditingStatuses] = useState(false);
+  const [editingStatuses, setEditingStatuses] = useState<false | true | "new">(false);
   const [editingFields, setEditingFields] = useState(false);
   const [editingAutomations, setEditingAutomations] = useState(false);
   const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
@@ -350,7 +363,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
           )}
           {canEdit ? <button className="lw-ghost" onClick={() => setEditingAutomations(true)}>⚡ Automations</button> : null}
           {canEdit ? <button className="lw-ghost" onClick={() => setEditingFields(true)}>⊞ Fields{list.fields.length ? " " + list.fields.length : ""}</button> : null}
-          {canEdit ? <button className="lw-ghost" onClick={() => setEditingStatuses(true)}>⚙ Statuses</button> : null}
+          {canEdit ? <button className="lw-ghost" onClick={() => setEditingStatuses(true)}>⚙ Sections</button> : null}
           {canEdit ? <button className="lw-primary" onClick={() => { setMode("list"); setAddingIn(visibleStatuses[0]?.id ?? null); }}>+ Task</button> : null}
         </div>
       </div>
@@ -423,7 +436,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
           {/* Sections are edited from a button in the toolbar, which nobody looking at a column of sections
               thinks to press. This is where the next one would go, so the way to add it is here too. */}
           {canEdit ? (
-            <button type="button" className="lw-add-section" onClick={() => setEditingStatuses(true)}>+ Add section</button>
+            <button type="button" className="lw-add-section" onClick={() => setEditingStatuses("new")}>+ Add section</button>
           ) : null}
         </div>
       ) : mode === "table" ? (
@@ -538,7 +551,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
       ) : null}
       {editingAutomations ? <AutomationEditor listId={list.id} statuses={list.statuses} people={people} onClose={() => setEditingAutomations(false)} /> : null}
       {editingFields ? <FieldEditor listId={list.id} fields={list.fields} onClose={() => setEditingFields(false)} /> : null}
-      {editingStatuses ? <StatusEditor listId={list.id} statuses={list.statuses} onClose={() => setEditingStatuses(false)} /> : null}
+      {editingStatuses ? <StatusEditor listId={list.id} statuses={list.statuses} startBlank={editingStatuses === "new"} onClose={() => setEditingStatuses(false)} /> : null}
     </div>
   );
 }
@@ -680,8 +693,12 @@ function CalendarView({ items, statusById, onOpen }: { items: WorkItem[]; status
 
 type StatusDraft = { id: string | null; name: string; color: string; category: ListStatus["category"] };
 
-function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses: ListStatus[]; onClose: () => void }) {
-  const [rows, setRows] = useState<StatusDraft[]>(statuses.map((status) => ({ id: status.id, name: status.name, color: /^#[0-9a-fA-F]{6}$/.test(status.color) ? status.color : "#87909e", category: status.category })));
+function StatusEditor({ listId, statuses, startBlank, onClose }: { listId: string; statuses: ListStatus[]; startBlank?: boolean; onClose: () => void }) {
+  const [rows, setRows] = useState<StatusDraft[]>(() => {
+    const held: StatusDraft[] = statuses.map((status) => ({ id: status.id, name: status.name, color: /^#[0-9a-fA-F]{6}$/.test(status.color) ? status.color : "#87909e", category: status.category }));
+    // Opened by "+ Add section", so the section being added is already there waiting for a name.
+    return startBlank ? [...held, { id: null, name: "", color: "#7b68ee", category: "ACTIVE" }] : held;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   // Adding two sections to a squadron with fifteen lists should not be fifteen visits to this dialog.
@@ -717,6 +734,11 @@ function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses:
       });
       const data = (await response.json().catch(() => ({}))) as { message?: string };
       if (!response.ok) throw new Error(data.message || "Could not save.");
+      try {
+        if (rows.some((row) => !row.id && (row.category === "DONE" || row.category === "CLOSED"))) {
+          sessionStorage.setItem("lw-reveal-closed", listId);
+        }
+      } catch { /* not worth failing a save over */ }
 
       // Other lists only ever gain sections they do not already have. Nothing is renamed, recoloured or
       // removed there: replacing another list's sections would strip the status off every task in it, and
@@ -752,7 +774,11 @@ function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses:
     <div className="lw-overlay lw-overlay--center" onClick={onClose}>
       <div className="lw-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-label="Edit statuses">
         <div className="lw-panel-top"><strong>Statuses for this list</strong><button className="lw-close" onClick={onClose} aria-label="Close">✕</button></div>
-        <p className="lw-faint">Tasks in a deleted status lose their status. Done and Closed statuses count as finished.</p>
+        <p className="lw-faint">
+          Tasks in a deleted section lose their section. A section of the <strong>Done</strong> or <strong>Closed</strong> kind
+          counts as finished, and the list only shows it when the Closed filter is on — which is why one can look like it
+          was never added.
+        </p>
         <div className="lw-status-rows">
           {rows.map((row, index) => (
             <div key={(row.id ?? "new") + index} className="lw-status-row">
@@ -761,6 +787,9 @@ function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses:
               <select value={row.category} onChange={(event) => update(index, { category: event.target.value as ListStatus["category"] })} aria-label="Status type">
                 {(Object.keys(CATEGORY_LABELS) as ListStatus["category"][]).map((category) => <option key={category} value={category}>{CATEGORY_LABELS[category]}</option>)}
               </select>
+              {row.category === "DONE" || row.category === "CLOSED"
+                ? <span className="lw-hidden-note" title="Shown only when the Closed filter is on">hidden unless Closed</span>
+                : <span />}
               <button className="lw-ghost" onClick={() => moveRow(index, -1)} aria-label="Move up">↑</button>
               <button className="lw-ghost" onClick={() => moveRow(index, 1)} aria-label="Move down">↓</button>
               <button className="lw-ghost" onClick={() => setRows(rows.filter((_, position) => position !== index))} disabled={rows.length === 1} aria-label="Delete status">✕</button>
@@ -1914,6 +1943,7 @@ const lwCss = [
   ".lw-also-list label{display:flex;align-items:center;gap:7px;font-size:13px;padding:4px 6px;border-radius:6px;cursor:pointer}",
   ".lw-also-list label:hover{background:rgba(123,104,238,.1)}",
   ".lw-also-list small{opacity:.6;font-size:11px;margin-left:auto}",
+  ".lw-hidden-note{font-size:10.5px;opacity:.6;white-space:nowrap}",
   ".lw-add-section{display:block;margin:10px 0 0;border:1px dashed var(--border,#d5d8de);background:none;color:var(--muted,#656f7d);font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;cursor:pointer;width:100%;text-align:left}",
   ".lw-add-section:hover{border-color:#7b68ee;color:#7b68ee;border-style:solid}",
   ".lw-rowmenu{position:fixed;z-index:95;min-width:200px;padding:6px;border-radius:11px;border:1px solid var(--border,#e4e6eb);background:var(--surface,#fff);box-shadow:0 16px 40px rgba(9,20,44,.28)}",
