@@ -331,3 +331,20 @@ export async function moveList(listId: string, spaceId: string): Promise<void> {
     .bind(spaceId, spaceId, nowIso(), listId)
     .run();
 }
+
+/**
+ * Puts the departments in the order given.
+ *
+ * The sidebar is the squadron's table of contents and its order was whatever order things were created in,
+ * which is nobody's idea of how a squadron is arranged. The whole ordering is written at once rather than
+ * nudging one row, so the result is exactly what was dropped and never a half-applied shuffle.
+ */
+export async function reorderSpaces(ids: string[]): Promise<void> {
+  const db = getDatabase();
+  const now = nowIso();
+  await db.batch(
+    ids.map((id, index) =>
+      db.prepare("UPDATE spaces SET display_order = ?, updated_at = ? WHERE id = ?").bind((index + 1) * 10, now, id)
+    )
+  );
+}

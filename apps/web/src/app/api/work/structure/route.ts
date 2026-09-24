@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
-import { archiveNode, createFolder, createList, createSpace, getWorkspaceTree, moveList, renameNode } from "@/lib/work/structure";
+import { archiveNode, createFolder, createList, createSpace, getWorkspaceTree, moveList, renameNode, reorderSpaces } from "@/lib/work/structure";
 
 // Renaming and removing departments, folders and lists.
 //
@@ -35,6 +35,11 @@ const schema = z.discriminatedUnion("action", [
     kind: z.enum(["space", "folder", "list"]),
     id: z.string().trim().min(1).max(80),
     name: z.string().trim().min(1).max(80)
+  }),
+  z.object({
+    action: z.literal("reorder"),
+    kind: z.literal("space"),
+    ids: z.array(z.string().trim().min(1).max(80)).min(1).max(60)
   }),
   z.object({
     action: z.literal("move"),
@@ -105,6 +110,26 @@ export async function POST(request: Request) {
         id,
         message: input.name.trim() + " is ready."
       });
+    }
+
+    if (input.action === "reorder") {
+      const tree = await getWorkspaceTree();
+      const known = new Set(tree.map((space) => space.id));
+      // Only departments that exist, and every one of them, so nothing is left without a place in the order.
+      const ordered = input.ids.filter((id) => known.has(id));
+      if (ordered.length !== tree.length) {
+        return NextResponse.json({ message: "That ordering did not match the departments." }, { status: 400 });
+      }
+      await reorderSpaces(ordered);
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "STRUCTURE_REORDERED",
+        entityType: "space",
+        entityId: ordered[0],
+        summary: user.fullName + " reordered the departments",
+        metadata: { ids: ordered }
+      });
+      return NextResponse.json({ spaces: await getWorkspaceTree(), message: "Order saved." });
     }
 
     if (input.action === "move") {

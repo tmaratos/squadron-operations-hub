@@ -76,6 +76,9 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   const [menu, setMenu] = useState<{ kind: "space" | "list"; id: string; name: string; x: number; y: number } | null>(null);
   const [menuForm, setMenuForm] = useState<"rename" | "list" | null>(null);
   const [addingSpace, setAddingSpace] = useState(false);
+  // Dragging a whole department to a new place in the sidebar. `spaceDrop` is where it would land, and
+  // which side of that department the line is drawn on.
+  const [spaceDrop, setSpaceDrop] = useState<{ id: string; below: boolean } | null>(null);
   // The app's own right-click, everywhere the app has something better to offer than the browser does.
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; href: string | null; label: string } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -270,18 +273,53 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
             <div key={space.id}>
               <button
                 type="button"
-                className={"cu-link cu-space" + (dropTarget === space.id ? " is-drop" : "")}
+                className={
+                  "cu-link cu-space" +
+                  (dropTarget === space.id ? " is-drop" : "") +
+                  (spaceDrop?.id === space.id ? (spaceDrop.below ? " is-order-after" : " is-order-before") : "")
+                }
                 onClick={() => toggle(space.id)}
                 onContextMenu={(event) => openMenu(event, "space", space.id, space.name)}
+                draggable
+                onDragStart={(event) => {
+                  event.dataTransfer.setData("application/x-hub-space", space.id);
+                  event.dataTransfer.setData("text/plain", space.name);
+                  event.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => setSpaceDrop(null)}
                 onDragOver={(event) => {
-                  if (!event.dataTransfer.types.includes("application/x-hub-list")) return;
+                  const types = event.dataTransfer.types;
+                  if (types.includes("application/x-hub-space")) {
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                    // Which half of the row the pointer is over decides whether it lands above or below.
+                    const box = event.currentTarget.getBoundingClientRect();
+                    setSpaceDrop({ id: space.id, below: event.clientY > box.top + box.height / 2 });
+                    return;
+                  }
+                  if (!types.includes("application/x-hub-list")) return;
                   event.preventDefault();
                   event.dataTransfer.dropEffect = "move";
                   setDropTarget(space.id);
                 }}
-                onDragLeave={() => setDropTarget((current) => (current === space.id ? null : current))}
+                onDragLeave={() => {
+                  setDropTarget((current) => (current === space.id ? null : current));
+                  setSpaceDrop((current) => (current?.id === space.id ? null : current));
+                }}
                 onDrop={(event) => {
                   event.preventDefault();
+                  const movingSpace = event.dataTransfer.getData("application/x-hub-space");
+                  if (movingSpace) {
+                    const below = spaceDrop?.id === space.id ? spaceDrop.below : false;
+                    setSpaceDrop(null);
+                    if (movingSpace === space.id) return;
+                    const order = spaceTree.map((entry) => entry.id).filter((id) => id !== movingSpace);
+                    const at = order.indexOf(space.id);
+                    if (at < 0) return;
+                    order.splice(below ? at + 1 : at, 0, movingSpace);
+                    structure({ action: "reorder", kind: "space", ids: order }, "Order saved.");
+                    return;
+                  }
                   setDropTarget(null);
                   const listId = event.dataTransfer.getData("application/x-hub-list");
                   if (!listId) return;
@@ -662,6 +700,9 @@ const shellCss = [
   ".cu-count{font-size:11px;color:var(--cu-muted)}",
   ".cu-space-avatar{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;background:#7b68ee;color:#fff;font-size:10px;font-weight:800;flex:none}",
   ".cu-tree{padding-left:14px}",
+  ".cu-space[draggable=true]{cursor:grab}.cu-space[draggable=true]:active{cursor:grabbing}",
+  ".cu-space.is-order-before{box-shadow:inset 0 2px 0 #7b68ee}",
+  ".cu-space.is-order-after{box-shadow:inset 0 -2px 0 #7b68ee}",
   ".cu-side-new{display:flex;gap:6px;padding:4px 8px 8px}",
   ".cu-side-new input{flex:1;min-width:0;font:inherit;font-size:13px;min-height:30px;padding:0 8px;border-radius:7px;border:1px solid var(--cu-border);background:var(--cu-bg);color:var(--cu-text)}",
   ".cu-side-new button{border:0;background:#7b68ee;color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:0 10px;border-radius:7px;cursor:pointer}",
