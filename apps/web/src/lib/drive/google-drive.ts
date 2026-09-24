@@ -18,9 +18,18 @@ export async function listDriveFiles(input: {
   if (!env.GOOGLE_SHARED_DRIVE_ID) throw new Error("Google Shared Drive ID is not configured.");
   const parentId = input?.parentId || env.GOOGLE_ROOT_FOLDER_ID || env.GOOGLE_SHARED_DRIVE_ID;
   const token = await getGoogleAccessToken(input.userId);
-  const queryParts = [`'${escapeDriveQuery(parentId)}' in parents`, "trashed = false"];
-  if (input?.search?.trim()) {
-    queryParts.push(`name contains '${escapeDriveQuery(input.search.trim())}'`);
+  // A search looks through the whole shared drive; only browsing is confined to one folder.
+  //
+  // Both were confined before, so searching from the top asked "which of the root folder's own children is
+  // called September" - and every real document is three or four folders down. Searching for a file that
+  // plainly exists returned nothing at all.
+  const searching = Boolean(input?.search?.trim());
+  const queryParts = ["trashed = false"];
+  if (searching) {
+    queryParts.push(`name contains '${escapeDriveQuery(input.search!.trim())}'`);
+    if (input?.parentId) queryParts.push(`'${escapeDriveQuery(input.parentId)}' in parents`);
+  } else {
+    queryParts.push(`'${escapeDriveQuery(parentId)}' in parents`);
   }
 
   const params = new URLSearchParams({
