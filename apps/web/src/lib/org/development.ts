@@ -37,7 +37,11 @@ export async function listDevelopment(): Promise<MemberDevelopment[]> {
   try {
     const rows = await getDatabase()
       .prepare(
-        "SELECT p.capid, p.full_name, p.user_id, d.duty_position, d.pd_level, d.specialty_track, d.track_rating " +
+        // The squadron already records who holds which position on the staff page. Asking for it a second
+        // time would be the Hub making somebody type what it already knows, so that is the default and
+        // anything set here only overrides it.
+        "SELECT p.capid, p.full_name, p.user_id, d.pd_level, d.specialty_track, d.track_rating, " +
+        "COALESCE(d.duty_position, (SELECT pos.title FROM personnel_positions pos WHERE pos.incumbent_id = p.id ORDER BY pos.display_order LIMIT 1)) AS duty_position " +
         "FROM personnel_members p LEFT JOIN member_development d ON d.capid = p.capid " +
         "WHERE p.capid IS NOT NULL AND p.status = 'ACTIVE' ORDER BY p.full_name COLLATE NOCASE"
       )
