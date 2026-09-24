@@ -76,12 +76,48 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   const [menu, setMenu] = useState<{ kind: "space" | "list"; id: string; name: string; x: number; y: number } | null>(null);
   const [menuForm, setMenuForm] = useState<"rename" | "list" | null>(null);
   const [addingSpace, setAddingSpace] = useState(false);
+  // The app's own right-click, everywhere the app has something better to offer than the browser does.
+  const [pageMenu, setPageMenu] = useState<{ x: number; y: number; href: string | null; label: string } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [moveNote, setMoveNote] = useState<string | null>(null);
 
+  // Chrome's menu is for a web page: back, forward, view source, cast, translate. None of it is any use
+  // here. It is kept for the two things it does that this app cannot do for itself - editing text in a
+  // field, and copying a selection - and replaced everywhere else.
+  useEffect(() => {
+    const onContextMenu = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest("input, textarea, select, [contenteditable=true], [contenteditable='']")) return;
+      if (window.getSelection()?.toString().trim()) return;
+
+      event.preventDefault();
+      const link = target.closest("a[href]") as HTMLAnchorElement | null;
+      setMenu(null);
+      setPageMenu({
+        x: Math.min(event.clientX, window.innerWidth - 230),
+        y: Math.min(event.clientY, window.innerHeight - 210),
+        href: link?.getAttribute("href") ?? null,
+        label: (link?.textContent || document.title || "This page").trim().slice(0, 60)
+      });
+    };
+    document.addEventListener("contextmenu", onContextMenu);
+    return () => document.removeEventListener("contextmenu", onContextMenu);
+  }, []);
+
+  useEffect(() => {
+    if (!pageMenu) return;
+    const close = () => setPageMenu(null);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setPageMenu(null); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", onKey); };
+  }, [pageMenu]);
+
   function openMenu(event: React.MouseEvent, kind: "space" | "list", id: string, name: string) {
     event.preventDefault();
-    event.stopPropagation();
+    event.stopPropagation(); // a department or a list has its own menu; the general one must not also open
+    setPageMenu(null);
     setMenuForm(null);
     // Kept inside the window, so a right-click near the bottom does not open a menu nobody can reach.
     setMenu({ kind, id, name, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 190) });
@@ -364,6 +400,53 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
       </header>
 
       {moveNote ? <div className="cu-move-note" role="status">{moveNote}</div> : null}
+
+      {pageMenu ? (
+        <div
+          className="cu-ctx"
+          style={{ left: pageMenu.x, top: pageMenu.y }}
+          role="menu"
+          onMouseDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <p className="cu-ctx-title">{pageMenu.label}</p>
+          {pageMenu.href ? (
+            <>
+              <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => { router.push(pageMenu.href as string); setPageMenu(null); }}>Open</button>
+              <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => { window.open(pageMenu.href as string, "_blank", "noopener"); setPageMenu(null); }}>Open in a new tab</button>
+              <button
+                type="button"
+                role="menuitem"
+                className="cu-ctx-item"
+                onClick={() => {
+                  navigator.clipboard?.writeText(new URL(pageMenu.href as string, window.location.origin).toString()).catch(() => undefined);
+                  setPageMenu(null);
+                  setMoveNote("Link copied.");
+                  window.setTimeout(() => setMoveNote(null), 3000);
+                }}
+              >
+                Copy link
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              role="menuitem"
+              className="cu-ctx-item"
+              onClick={() => {
+                navigator.clipboard?.writeText(window.location.href).catch(() => undefined);
+                setPageMenu(null);
+                setMoveNote("Link copied.");
+                window.setTimeout(() => setMoveNote(null), 3000);
+              }}
+            >
+              Copy link to this page
+            </button>
+          )}
+          <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => { setPageMenu(null); setAddingSpace(true); }}>New department</button>
+          <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => { setPageMenu(null); router.refresh(); }}>Refresh</button>
+        </div>
+      ) : null}
 
       {menu ? (
         <div
