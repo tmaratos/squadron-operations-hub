@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
-import { archiveNode, createFolder, createList, createSpace, getWorkspaceTree, renameNode } from "@/lib/work/structure";
+import { archiveNode, createFolder, createList, createSpace, getWorkspaceTree, moveList, renameNode } from "@/lib/work/structure";
 
 // Renaming and removing departments, folders and lists.
 //
@@ -35,6 +35,12 @@ const schema = z.discriminatedUnion("action", [
     kind: z.enum(["space", "folder", "list"]),
     id: z.string().trim().min(1).max(80),
     name: z.string().trim().min(1).max(80)
+  }),
+  z.object({
+    action: z.literal("move"),
+    kind: z.literal("list"),
+    id: z.string().trim().min(1).max(80),
+    spaceId: z.string().trim().min(1).max(80)
   }),
   z.object({
     action: z.literal("archive"),
@@ -99,6 +105,27 @@ export async function POST(request: Request) {
         id,
         message: input.name.trim() + " is ready."
       });
+    }
+
+    if (input.action === "move") {
+      const tree = await getWorkspaceTree();
+      const target = tree.find((space) => space.id === input.spaceId);
+      if (!target) return NextResponse.json({ message: "That department is not there." }, { status: 404 });
+      const from = tree.find((space) => space.lists.some((list) => list.id === input.id));
+      if (from?.id === input.spaceId) {
+        return NextResponse.json({ spaces: tree, message: "It is already there." });
+      }
+
+      await moveList(input.id, input.spaceId);
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "STRUCTURE_MOVED",
+        entityType: "list",
+        entityId: input.id,
+        summary: user.fullName + " moved a list into " + target.name,
+        metadata: { spaceId: input.spaceId, from: from?.id ?? null }
+      });
+      return NextResponse.json({ spaces: await getWorkspaceTree(), message: "Moved into " + target.name + "." });
     }
 
     if (input.action === "rename") {

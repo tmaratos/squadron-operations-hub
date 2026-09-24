@@ -313,3 +313,21 @@ export async function updateView(id: string, input: { name?: string; type?: View
 export async function deleteView(id: string): Promise<void> {
   await getDatabase().prepare("DELETE FROM views WHERE id = ?").bind(id).run();
 }
+
+/**
+ * Files a list under a different department.
+ *
+ * The folder is cleared: a folder belongs to the department the list is leaving, so keeping it would
+ * leave the list pointing at somewhere it no longer is. The work inside comes with it - tasks belong to
+ * the list, not to the department.
+ */
+export async function moveList(listId: string, spaceId: string): Promise<void> {
+  await getDatabase()
+    .prepare(
+      "UPDATE lists SET space_id = ?, folder_id = NULL, " +
+      "display_order = (SELECT COALESCE(MAX(display_order), 0) + 1 FROM lists WHERE space_id = ?), updated_at = ? " +
+      "WHERE id = ?"
+    )
+    .bind(spaceId, spaceId, nowIso(), listId)
+    .run();
+}

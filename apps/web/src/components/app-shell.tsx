@@ -182,6 +182,12 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
       href={href}
       className={"cu-link" + (active(href) ? " is-active" : "") + (dropTarget === listId ? " is-drop" : "")}
       onContextMenu={listId ? (event) => openMenu(event, "list", listId, label) : undefined}
+      draggable={Boolean(listId)}
+      onDragStart={listId ? (event) => {
+        event.dataTransfer.setData("application/x-hub-list", listId);
+        event.dataTransfer.setData("text/plain", label);
+        event.dataTransfer.effectAllowed = "move";
+      } : undefined}
       onDragOver={listId ? (event) => {
         if (!event.dataTransfer.types.includes("application/x-hub-item")) return;
         event.preventDefault();
@@ -228,9 +234,24 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
             <div key={space.id}>
               <button
                 type="button"
-                className="cu-link cu-space"
+                className={"cu-link cu-space" + (dropTarget === space.id ? " is-drop" : "")}
                 onClick={() => toggle(space.id)}
                 onContextMenu={(event) => openMenu(event, "space", space.id, space.name)}
+                onDragOver={(event) => {
+                  if (!event.dataTransfer.types.includes("application/x-hub-list")) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "move";
+                  setDropTarget(space.id);
+                }}
+                onDragLeave={() => setDropTarget((current) => (current === space.id ? null : current))}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDropTarget(null);
+                  const listId = event.dataTransfer.getData("application/x-hub-list");
+                  if (!listId) return;
+                  if (space.lists.some((list) => list.id === listId)) return; // already filed here
+                  structure({ action: "move", kind: "list", id: listId, spaceId: space.id }, "Moved.");
+                }}
               >
                 <span className="cu-space-avatar">{space.name.slice(0, 1).toUpperCase()}</span>
                 <span className="cu-link-label">{space.name}</span>

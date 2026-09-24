@@ -138,6 +138,24 @@ export function SpaceManager({ spaces: initialSpaces, canEdit }: { spaces: Space
                     </Link>
                     {canEdit ? (
                       <span className="sm-actions">
+                        {/* The sidebar takes a dragged list; this is the same move for anybody on a
+                            touchscreen, where there is nothing to drag with. */}
+                        {spaces.length > 1 ? (
+                          <select
+                            className="sm-btn sm-move"
+                            value=""
+                            aria-label={"Move " + list.name + " to another department"}
+                            disabled={busy === list.id}
+                            onChange={(event) => {
+                              if (event.target.value) send({ action: "move", kind: "list", id: list.id, spaceId: event.target.value }, list.id);
+                            }}
+                          >
+                            <option value="">Move to…</option>
+                            {spaces.filter((entry) => entry.id !== space.id).map((entry) => (
+                              <option key={entry.id} value={entry.id}>{entry.name}</option>
+                            ))}
+                          </select>
+                        ) : null}
                         <button type="button" className="sm-btn" onClick={() => setRenaming(list.id)}>Rename</button>
                         <ConfirmButton
                           className="sm-btn sm-btn--danger"
@@ -200,5 +218,6 @@ const smCss = [
   ".sm-note{margin:0 0 14px;font-size:13px;padding:10px 13px;border-radius:9px;background:rgba(123,104,238,.12)}",
   ".sm-empty{font-size:14px;color:var(--muted,#656f7d)}",
   ".sm-new{margin:0 0 16px}",
+  ".sm-move{cursor:pointer;max-width:130px}",
   ".sm-add{margin-top:8px;align-self:flex-start}"
 ].join("");
