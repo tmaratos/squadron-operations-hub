@@ -8,6 +8,9 @@ interface Member {
   capid: string;
   fullName: string;
   dutyPosition: string | null;
+  positionSource: "SET" | "CHART" | null;
+  chartPosition: string | null;
+  ignoreSource: boolean;
   pdLevel: string | null;
   specialtyTrack: string | null;
   trackRating: string | null;
@@ -30,6 +33,7 @@ export function DevelopmentBoard() {
   const [members, setMembers] = useState<Member[]>([]);
   const [steps, setSteps] = useState<Step[]>([]);
   const [canEdit, setCanEdit] = useState(false);
+  const [useChart, setUseChart] = useState(true);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
@@ -38,8 +42,8 @@ export function DevelopmentBoard() {
 
   useEffect(() => {
     fetch("/api/development")
-      .then((response) => response.json() as Promise<{ members?: Member[]; steps?: Step[]; canEdit?: boolean }>)
-      .then((data) => { setMembers(data.members ?? []); setSteps(data.steps ?? []); setCanEdit(Boolean(data.canEdit)); })
+      .then((response) => response.json() as Promise<{ members?: Member[]; steps?: Step[]; canEdit?: boolean; useChart?: boolean }>)
+      .then((data) => { setMembers(data.members ?? []); setSteps(data.steps ?? []); setCanEdit(Boolean(data.canEdit)); setUseChart(data.useChart !== false); })
       .catch(() => undefined);
   }, []);
 
@@ -48,9 +52,10 @@ export function DevelopmentBoard() {
     setNote(null);
     try {
       const response = await fetch("/api/development", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = (await response.json()) as { members?: Member[]; steps?: Step[]; message?: string };
+      const data = (await response.json()) as { members?: Member[]; steps?: Step[]; message?: string; useChart?: boolean };
       if (data.members) setMembers(data.members);
       if (data.steps) setSteps(data.steps);
+      if (typeof data.useChart === "boolean") setUseChart(data.useChart);
       setNote(data.message ?? "Saved.");
     } catch {
       setNote("That could not be saved.");
@@ -76,6 +81,10 @@ export function DevelopmentBoard() {
         {canEdit ? (
           <div className="dv-actions">
             <button type="button" className="dv-btn" onClick={() => setShowPaste(!showPaste)}>{showPaste ? "Close" : "Paste duty positions"}</button>
+            <label className="dv-switch">
+              <input type="checkbox" checked={useChart} disabled={busy === "chart"} onChange={(event) => send({ action: "chart", use: event.target.checked }, "chart")} />
+              <span>Use the staff records where nothing is set here</span>
+            </label>
           </div>
         ) : null}
         {showPaste ? (
@@ -148,16 +157,38 @@ export function DevelopmentBoard() {
                   <strong>{member.fullName}</strong>
                   <small>{member.capid}{member.hasAccount ? "" : " · no Hub account yet"}</small>
                 </div>
-                <input
-                  className="dv-input"
-                  defaultValue={member.dutyPosition ?? ""}
-                  placeholder="Duty position"
-                  disabled={!canEdit}
-                  onBlur={(event) => {
-                    const value = event.target.value.trim();
-                    if (value !== (member.dutyPosition ?? "")) send({ action: "member", capid: member.capid, dutyPosition: value || null }, member.capid);
-                  }}
-                />
+                <div className="dv-pos">
+                  <input
+                    className="dv-input"
+                    key={member.capid + ":" + (member.dutyPosition ?? "")}
+                    defaultValue={member.dutyPosition ?? ""}
+                    placeholder="Duty position"
+                    disabled={!canEdit}
+                    onBlur={(event) => {
+                      const value = event.target.value.trim();
+                      if (value !== (member.dutyPosition ?? "")) {
+                        send({ action: "member", capid: member.capid, dutyPosition: value || null, clearPosition: !value }, member.capid);
+                      }
+                    }}
+                  />
+                  {member.positionSource === "CHART" ? (
+                    <small className="dv-from">
+                      From the staff records.
+                      {canEdit ? (
+                        <button type="button" className="dv-link" onClick={() => send({ action: "member", capid: member.capid, ignoreSource: true, clearPosition: true }, member.capid)}>Ignore it</button>
+                      ) : null}
+                    </small>
+                  ) : member.ignoreSource && member.chartPosition ? (
+                    <small className="dv-from">
+                      Staff records say &ldquo;{member.chartPosition}&rdquo;, ignored.
+                      {canEdit ? (
+                        <button type="button" className="dv-link" onClick={() => send({ action: "member", capid: member.capid, ignoreSource: false }, member.capid)}>Use it again</button>
+                      ) : null}
+                    </small>
+                  ) : member.positionSource === "SET" && member.chartPosition && member.chartPosition !== member.dutyPosition ? (
+                    <small className="dv-from">Set here. Staff records say &ldquo;{member.chartPosition}&rdquo;.</small>
+                  ) : null}
+                </div>
                 <select
                   className="dv-input dv-input--small"
                   defaultValue={member.pdLevel ?? ""}
@@ -214,6 +245,11 @@ const dvCss = [
   "html[data-theme=dark] .dv-table article{border-color:#3a3d44}",
   ".dv-who{display:flex;flex-direction:column;min-width:0}",
   ".dv-who strong{font-size:13.5px}.dv-who small{font-size:11.5px;color:var(--cu-muted,#656f7d)}",
+  ".dv-switch{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer}",
+  ".dv-switch input{width:16px;height:16px;accent-color:#7b68ee}",
+  ".dv-pos{display:flex;flex-direction:column;gap:3px;min-width:0}",
+  ".dv-from{font-size:11.5px;color:var(--cu-muted,#8b93a1);line-height:1.4}",
+  ".dv-link{border:0;background:none;padding:0 0 0 5px;color:#7b68ee;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;text-decoration:underline}",
   ".dv-input{font:inherit;font-size:13px;min-height:34px;padding:0 9px;border:1px solid var(--cu-border,#d5d8de);border-radius:8px;width:100%;box-sizing:border-box}",
   ".dv-next{font-size:12.5px;color:var(--cu-muted,#656f7d);line-height:1.4}",
   ".dv-empty{margin:12px 0 0;font-size:13.5px;color:var(--cu-muted,#656f7d)}",

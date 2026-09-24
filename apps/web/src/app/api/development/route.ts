@@ -6,6 +6,8 @@ import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
 import {
   deleteStep,
+  getSetting,
+  setSetting,
   listDevelopment,
   listSteps,
   nextStepsFor,
@@ -22,8 +24,7 @@ import { getWorkspaceTree } from "@/lib/work/structure";
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
-  const [members, steps] = await Promise.all([listDevelopment(), listSteps()]);
-  return NextResponse.json({ members, steps, canEdit: canApproveAccounts(user.globalRole) });
+  return NextResponse.json({ ...(await state()), canEdit: canApproveAccounts(user.globalRole) });
 }
 
 const schema = z.discriminatedUnion("action", [
@@ -31,6 +32,8 @@ const schema = z.discriminatedUnion("action", [
     action: z.literal("member"),
     capid: z.string().regex(/^\d{5,7}$/),
     dutyPosition: z.string().trim().max(120).nullable().optional(),
+    clearPosition: z.boolean().optional(),
+    ignoreSource: z.boolean().optional(),
     pdLevel: z.enum(["I", "II", "III", "IV", "V"]).nullable().optional(),
     specialtyTrack: z.string().trim().max(120).nullable().optional(),
     trackRating: z.enum(["TECHNICIAN", "SENIOR", "MASTER"]).nullable().optional()
@@ -45,7 +48,9 @@ const schema = z.discriminatedUnion("action", [
     sourceCitation: z.string().trim().max(200).optional()
   }),
   z.object({ action: z.literal("removeStep"), stepId: z.string().trim().min(1).max(80) }),
-  z.object({ action: z.literal("prompt"), capid: z.string().regex(/^\d{5,7}$/) })
+  z.object({ action: z.literal("prompt"), capid: z.string().regex(/^\d{5,7}$/) }),
+  // Turning the whole staff chart off, for when it is old enough to be misleading rather than helpful.
+  z.object({ action: z.literal("chart"), use: z.boolean() })
 ]);
 
 export async function POST(request: Request) {
@@ -55,6 +60,16 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
     if (!canApproveAccounts(user.globalRole)) return NextResponse.json({ message: "Administrators only." }, { status: 403 });
     const input = schema.parse(await request.json());
+
+    if (input.action === "chart") {
+      await setSetting("ignore_position_chart", input.use ? "0" : "1", user.id);
+      return NextResponse.json({
+        ...(await state()),
+        message: input.use
+          ? "Using the staff records again where nothing has been set here."
+          : "Ignoring the staff records. Only positions set here are used."
+      });
+    }
 
     if (input.action === "member") {
       await saveDevelopment({ ...input, updatedBy: user.id });
@@ -149,6 +164,6 @@ export async function POST(request: Request) {
 }
 
 async function state() {
-  const [members, steps] = await Promise.all([listDevelopment(), listSteps()]);
-  return { members, steps };
+  const [members, steps, ignore] = await Promise.all([listDevelopment(), listSteps(), getSetting("ignore_position_chart")]);
+  return { members, steps, useChart: ignore !== "1" };
 }

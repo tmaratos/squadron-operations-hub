@@ -15,6 +15,11 @@ export interface MemberDevelopment {
   capid: string;
   fullName: string;
   dutyPosition: string | null;
+  /** Where the position came from: set here, or read from the squadron's staff records. */
+  positionSource: "SET" | "CHART" | null;
+  /** The staff record's version, kept visible even when it is being ignored. */
+  chartPosition: string | null;
+  ignoreSource: boolean;
   pdLevel: string | null;
   specialtyTrack: string | null;
   trackRating: string | null;
@@ -41,29 +46,63 @@ export async function listDevelopment(): Promise<MemberDevelopment[]> {
         // time would be the Hub making somebody type what it already knows, so that is the default and
         // anything set here only overrides it.
         "SELECT p.capid, p.full_name, p.user_id, d.pd_level, d.specialty_track, d.track_rating, " +
-        "COALESCE(d.duty_position, (SELECT pos.title FROM personnel_positions pos WHERE pos.incumbent_id = p.id ORDER BY pos.display_order LIMIT 1)) AS duty_position " +
+        "d.duty_position AS set_position, COALESCE(d.ignore_source, 0) AS ignore_source, " +
+        "(SELECT pos.title FROM personnel_positions pos WHERE pos.incumbent_id = p.id ORDER BY pos.display_order LIMIT 1) AS chart_position " +
         "FROM personnel_members p LEFT JOIN member_development d ON d.capid = p.capid " +
         "WHERE p.capid IS NOT NULL AND p.status = 'ACTIVE' ORDER BY p.full_name COLLATE NOCASE"
       )
-      .all<{ capid: string; full_name: string; user_id: string | null; duty_position: string | null; pd_level: string | null; specialty_track: string | null; track_rating: string | null }>();
-    return rows.results.map((row) => ({
+      .all<{ capid: string; full_name: string; user_id: string | null; set_position: string | null; chart_position: string | null; ignore_source: number; pd_level: string | null; specialty_track: string | null; track_rating: string | null }>();
+
+    // The chart is a starting point, not the truth. What was set here wins, and either the whole chart or
+    // one person's entry can be told to stay out of it.
+    const ignoreChart = (await getSetting("ignore_position_chart")) === "1";
+    return rows.results.map((row) => {
+      const ignoreSource = Boolean(row.ignore_source) || ignoreChart;
+      const fromChart = ignoreSource ? null : row.chart_position;
+      return {
       capid: row.capid,
       fullName: row.full_name,
       userId: row.user_id,
       hasAccount: Boolean(row.user_id),
-      dutyPosition: row.duty_position,
+      dutyPosition: row.set_position ?? fromChart,
+      positionSource: row.set_position ? ("SET" as const) : fromChart ? ("CHART" as const) : null,
+      chartPosition: row.chart_position,
+      ignoreSource,
       pdLevel: row.pd_level,
       specialtyTrack: row.specialty_track,
       trackRating: row.track_rating
-    }));
+      };
+    });
   } catch {
     return [];
   }
 }
 
+export async function getSetting(key: string): Promise<string | null> {
+  try {
+    const row = await getDatabase().prepare("SELECT value FROM hub_settings WHERE key = ?").bind(key).first<{ value: string }>();
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setSetting(key: string, value: string, userId: string): Promise<void> {
+  await getDatabase()
+    .prepare(
+      "INSERT INTO hub_settings (key, value, updated_by, updated_at) VALUES (?, ?, ?, ?) " +
+      "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = excluded.updated_at"
+    )
+    .bind(key, value, userId, new Date().toISOString())
+    .run();
+}
+
 export async function saveDevelopment(input: {
   capid: string;
   dutyPosition?: string | null;
+  /** True clears what was set here, so the staff record shows through again. */
+  clearPosition?: boolean;
+  ignoreSource?: boolean;
   pdLevel?: string | null;
   specialtyTrack?: string | null;
   trackRating?: string | null;
@@ -73,9 +112,10 @@ export async function saveDevelopment(input: {
   const now = new Date().toISOString();
   await getDatabase()
     .prepare(
-      "INSERT INTO member_development (capid, duty_position, pd_level, specialty_track, track_rating, source, updated_by, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(capid) DO UPDATE SET " +
-      "duty_position = COALESCE(excluded.duty_position, member_development.duty_position), " +
+      "INSERT INTO member_development (capid, duty_position, pd_level, specialty_track, track_rating, ignore_source, source, updated_by, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(capid) DO UPDATE SET " +
+      (input.clearPosition ? "duty_position = NULL, " : "duty_position = COALESCE(excluded.duty_position, member_development.duty_position), ") +
+      (input.ignoreSource === undefined ? "" : "ignore_source = excluded.ignore_source, ") +
       "pd_level = COALESCE(excluded.pd_level, member_development.pd_level), " +
       "specialty_track = COALESCE(excluded.specialty_track, member_development.specialty_track), " +
       "track_rating = COALESCE(excluded.track_rating, member_development.track_rating), " +
@@ -87,6 +127,7 @@ export async function saveDevelopment(input: {
       input.pdLevel ?? null,
       input.specialtyTrack ?? null,
       input.trackRating ?? null,
+      input.ignoreSource ? 1 : 0,
       input.source ?? "MANUAL",
       input.updatedBy,
       now
