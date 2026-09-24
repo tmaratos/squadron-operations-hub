@@ -50,7 +50,7 @@ function whenLabel(dueOn: string | null): string {
   return new Date(dueOn + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function MyTasks({ items: initialItems, userId }: { items: TaskRow[]; userId: string }) {
+export function MyTasks({ items: initialItems, userId, filterLabel }: { items: TaskRow[]; userId: string; filterLabel?: string }) {
   const [items, setItems] = useState(initialItems);
   const [tab, setTab] = useState<Tab>("mine");
   const [search, setSearch] = useState("");
@@ -161,6 +161,13 @@ export function MyTasks({ items: initialItems, userId }: { items: TaskRow[]; use
         </div>
       ) : null}
 
+      {filterLabel ? (
+        // Arriving from a dashboard number, on everybody's work rather than only your own - so say so,
+        // and make going back to your own list one press.
+        <p className="mt-filter">
+          Showing everything <strong>{filterLabel}</strong>. <Link href="/tasks">Back to my tasks</Link>
+        </p>
+      ) : null}
       {note ? <p className="mt-note" role="status">{note}</p> : null}
 
       {groups.length ? (
@@ -224,6 +231,8 @@ export function MyTasks({ items: initialItems, userId }: { items: TaskRow[]; use
 }
 
 const mtCss = [
+  ".mt-filter{margin:0 0 14px;font-size:13.5px;padding:10px 13px;border-radius:9px;background:rgba(123,104,238,.12)}",
+  ".mt-filter a{color:inherit;font-weight:600}",
   inlinePickerCss,
   ".mt-controls{display:flex;align-items:center;gap:6px;flex:none}",
   ".mt{display:grid;gap:16px}",

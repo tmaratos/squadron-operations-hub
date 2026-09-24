@@ -41,6 +41,23 @@ function relativeDue(dueOn: string | null): { text: string; tone: "late" | "soon
 
 const PRIORITY_COLOR: Record<string, string> = { URGENT: "#d03b3b", HIGH: "#e59a00", NORMAL: "#2a78d6", LOW: "#898781" };
 
+/**
+ * Where a widget's numbers go when somebody presses them.
+ *
+ * A dashboard that reports a problem and cannot show you the problem is a poster. The count is built from
+ * a widget's own filters, so the link carries those same filters to the task list rather than guessing.
+ */
+function widgetLink(config: { filters?: { due?: string; tags?: string[]; statusName?: string; priorities?: string[] } }): string {
+  const filters = config.filters ?? {};
+  const query = new URLSearchParams();
+  if (filters.due) query.set("due", filters.due);
+  if (filters.statusName) query.set("status", filters.statusName);
+  if (filters.tags?.length) query.set("tag", filters.tags[0]);
+  if (filters.priorities?.length) query.set("priority", filters.priorities[0]);
+  const text = query.toString();
+  return "/tasks" + (text ? "?" + text : "");
+}
+
 function ItemRows({ items, total, empty }: { items: DashboardItem[]; total: number; empty: string }) {
   if (items.length === 0) {
     return <div className="cd-empty"><span className="cd-empty-icon">✓</span>{empty}</div>;
@@ -190,9 +207,15 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
               <strong>{weekCount}</strong> due this week.
             </p>
             <p className="cd-summary cd-summary--health">
-              <strong className={unowned ? "cd-text-late" : ""}>{unowned}</strong> dated {unowned === 1 ? "task has" : "tasks have"} no owner ·{" "}
-              <strong>{vacancies}</strong> {vacancies === 1 ? "position" : "positions"} vacant ·{" "}
-              <strong>{onLeave}</strong> on leave
+              <Link className="cd-stat-link" href="/tasks?owner=none">
+                <strong className={unowned ? "cd-text-late" : ""}>{unowned}</strong> dated {unowned === 1 ? "task has" : "tasks have"} no owner
+              </Link> ·{" "}
+              <Link className="cd-stat-link" href="/staff">
+                <strong>{vacancies}</strong> {vacancies === 1 ? "position" : "positions"} vacant
+              </Link> ·{" "}
+              <Link className="cd-stat-link" href="/staff">
+                <strong>{onLeave}</strong> on leave
+              </Link>
             </p>
           </div>
         </div>
@@ -217,7 +240,13 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
                 const tone = TONES[widget.config.tone ?? "accent"] ?? TONES.accent;
                 const value = result.kind === "count" ? result.value : 0;
                 return (
-                  <article key={widget.id} className="cd-kpi" style={{ "--tone": tone.color } as CSSProperties} title={tone.label}>
+                  <Link
+                    key={widget.id}
+                    href={widgetLink(widget.config)}
+                    className="cd-kpi"
+                    style={{ "--tone": tone.color } as CSSProperties}
+                    title={"See the " + value + " " + widget.title.toLowerCase()}
+                  >
                     <div className="cd-kpi-top">
                       <span className="cd-kpi-icon" aria-hidden="true">{tone.icon}</span>
                       <span className="cd-kpi-label">{widget.title}</span>
@@ -227,7 +256,7 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
                       <span className="cd-kpi-bar"><span style={{ width: Math.min(100, open.length ? (value / open.length) * 100 : 0) + "%" }} /></span>
                       <span>{open.length ? Math.round((value / open.length) * 100) : 0}% of open</span>
                     </div>
-                  </article>
+                  </Link>
                 );
               })}
             </section>
@@ -242,12 +271,17 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
               {strip.map((entry, index) => {
                 const date = new Date(entry.day + "T12:00:00");
                 return (
-                  <div key={entry.day} className={"cd-strip-day" + (index === 0 ? " is-today" : "") + (date.getDay() === 0 || date.getDay() === 6 ? " is-weekend" : "")} title={entry.count ? entry.titles.join("\n") : "Nothing due"}>
+                  <Link
+                    key={entry.day}
+                    href={"/tasks?date=" + entry.day}
+                    className={"cd-strip-day" + (index === 0 ? " is-today" : "") + (date.getDay() === 0 || date.getDay() === 6 ? " is-weekend" : "")}
+                    title={entry.count ? entry.titles.join("\n") : "Nothing due"}
+                  >
                     <span className="cd-strip-count">{entry.count || ""}</span>
                     <span className="cd-strip-col"><span className="cd-strip-fill" style={{ height: (entry.count / stripMax) * 100 + "%" }} /></span>
                     <span className="cd-strip-dow">{date.toLocaleDateString("en-US", { weekday: "narrow" })}</span>
                     <span className="cd-strip-num">{date.getDate()}</span>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
@@ -347,6 +381,12 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
 }
 
 const cdCss = [
+  "a.cd-kpi{text-decoration:none;color:inherit;transition:transform .12s ease,box-shadow .12s ease}",
+  "a.cd-kpi:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(9,20,44,.16)}",
+  "a.cd-strip-day{text-decoration:none;color:inherit;border-radius:8px}",
+  "a.cd-strip-day:hover{background:rgba(123,104,238,.12)}",
+  ".cd-stat-link{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}",
+  ".cd-stat-link:hover{border-bottom-style:solid}",
   ".cd{--cd-surface:var(--cu-bg,#fcfcfb);--cd-card:#ffffff;--cd-border:var(--cu-border,#e4e6eb);--cd-muted:var(--cu-muted,#656f7d);--cd-track:rgba(15,23,42,.06);--cd-accent:#7b68ee;--cd-late:#d03b3b;display:flex;flex-direction:column;gap:16px;max-width:1440px;margin:0 auto}",
   "html[data-theme=dark] .cd{--cd-card:#222326;--cd-track:rgba(255,255,255,.07);--cd-late:#e66767}",
   ".cd-hero{position:relative;overflow:hidden;display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding:22px 24px;border-radius:16px;color:#fff;background:linear-gradient(120deg,#16213f 0%,#1f3a78 55%,#5b4bd6 100%);box-shadow:0 10px 30px rgba(22,33,63,.25)}",
