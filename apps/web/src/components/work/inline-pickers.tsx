@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { PeoplePicker } from "./people-picker";
 import type { ItemPriority } from "@/lib/work/types";
 
@@ -37,26 +38,73 @@ async function patchItem(itemId: string, body: Record<string, unknown>): Promise
   }
 }
 
-/** Closes the popover on a press outside it, or on Escape, and never on a press inside it. */
-function useDismiss(open: boolean, close: () => void) {
-  const ref = useRef<HTMLSpanElement | null>(null);
+/**
+ * Opens the popover above the page rather than inside the row.
+ *
+ * A row is a narrow box with its own scrolling and clipping, so a menu rendered inside one gets cut off at
+ * the edge - which is what a picker looked like on a task row. This puts the menu on the body, positioned
+ * over the button, so nothing can crop it, and flips it above the button when there is no room below.
+ */
+function usePopover(open: boolean, close: () => void) {
+  const anchorRef = useRef<HTMLSpanElement | null>(null);
+  const popRef = useRef<HTMLDivElement | null>(null);
+  const [at, setAt] = useState<{ left: number; top: number; placeAbove: boolean } | null>(null);
+
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setAt(null); return; }
+
+    const place = () => {
+      const anchor = anchorRef.current?.getBoundingClientRect();
+      if (!anchor) return;
+      const width = 220;
+      const height = popRef.current?.offsetHeight ?? 240;
+      const room = window.innerHeight - anchor.bottom;
+      const placeAbove = room < height + 12 && anchor.top > height + 12;
+      setAt({
+        left: Math.max(8, Math.min(anchor.right - width, window.innerWidth - width - 8)),
+        top: placeAbove ? anchor.top - height - 6 : anchor.bottom + 6,
+        placeAbove
+      });
+    };
+
+    place();
     const onDown = (event: MouseEvent) => {
-      if (ref.current?.contains(event.target as Node)) return;
+      const target = event.target as Node;
+      if (anchorRef.current?.contains(target) || popRef.current?.contains(target)) return;
       close();
     };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-    };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
+    // A row can scroll away underneath an open menu, so the menu follows it rather than being left behind.
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
     };
   }, [open, close]);
-  return ref;
+
+  return { anchorRef, popRef, at };
+}
+
+/** Puts the menu on the body, over everything, at the coordinates worked out above. */
+function Popover({ at, popRef, className, children }: { at: { left: number; top: number } | null; popRef: React.RefObject<HTMLDivElement | null>; className?: string; children: React.ReactNode }) {
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      ref={popRef}
+      className={"ip-pop" + (className ? " " + className : "")}
+      style={{ left: at?.left ?? -9999, top: at?.top ?? -9999, visibility: at ? "visible" : "hidden" }}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {children}
+    </div>,
+    document.body
+  );
 }
 
 export function initialsOf(name: string): string {
@@ -80,7 +128,7 @@ export function InlineAssignee({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [current, setCurrent] = useState(assignees);
-  const ref = useDismiss(open, () => setOpen(false));
+  const { anchorRef, popRef, at } = usePopover(open, () => setOpen(false));
 
   useEffect(() => { setCurrent(assignees); }, [assignees]);
 
@@ -96,7 +144,7 @@ export function InlineAssignee({
   }
 
   return (
-    <span className="ip" ref={ref} onClick={(event) => event.stopPropagation()}>
+    <span className="ip" ref={anchorRef} onClick={(event) => event.stopPropagation()}>
       <button
         type="button"
         className="ip-button"
@@ -123,7 +171,7 @@ export function InlineAssignee({
       </button>
 
       {open ? (
-        <span className="ip-pop">
+        <Popover at={at} popRef={popRef}>
           {current.length ? (
             <span className="ip-current">
               {current.map((person) => (
@@ -144,7 +192,7 @@ export function InlineAssignee({
             onClose={() => setOpen(false)}
             onPick={(person) => save([...current, { id: person.userId, fullName: person.fullName }])}
           />
-        </span>
+        </Popover>
       ) : null}
     </span>
   );
@@ -166,7 +214,7 @@ export function InlinePriority({
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [current, setCurrent] = useState(priority);
-  const ref = useDismiss(open, () => setOpen(false));
+  const { anchorRef, popRef, at } = usePopover(open, () => setOpen(false));
 
   useEffect(() => { setCurrent(priority); }, [priority]);
 
@@ -182,7 +230,7 @@ export function InlinePriority({
   }
 
   return (
-    <span className="ip" ref={ref} onClick={(event) => event.stopPropagation()}>
+    <span className="ip" ref={anchorRef} onClick={(event) => event.stopPropagation()}>
       <button
         type="button"
         className="ip-button"
@@ -199,14 +247,14 @@ export function InlinePriority({
       </button>
 
       {open ? (
-        <span className="ip-pop ip-pop--narrow">
+        <Popover at={at} popRef={popRef} className="ip-pop--narrow">
           {LEVELS.map((level) => (
             <button key={level} type="button" className="ip-item" style={{ color: PRIORITY_COLOR[level] }} onClick={() => save(level)}>
               ⚑ {level[0] + level.slice(1).toLowerCase()}
             </button>
           ))}
           <button type="button" className="ip-item ip-item--clear" onClick={() => save(null)}>No priority</button>
-        </span>
+        </Popover>
       ) : null}
     </span>
   );
@@ -223,7 +271,7 @@ export const inlinePickerCss = [
   ".ip-more{margin-left:10px;font-size:11px;opacity:.7}",
   ".ip-nobody{display:inline-flex;opacity:.45}",
   ".ip-faint{opacity:.45}",
-  ".ip-pop{position:absolute;top:calc(100% + 4px);right:0;z-index:70;min-width:200px;display:flex;flex-direction:column;gap:2px;padding:6px;border-radius:10px;border:1px solid var(--border,#e4e6eb);background:var(--surface,#fff);box-shadow:0 16px 40px rgba(9,20,44,.24);text-align:left}",
+  ".ip-pop{position:fixed;z-index:200;width:220px;display:flex;flex-direction:column;gap:2px;padding:6px;border-radius:10px;border:1px solid var(--border,#e4e6eb);background:var(--surface,#fff);box-shadow:0 16px 40px rgba(9,20,44,.24);text-align:left}",
   ".ip-pop--narrow{min-width:150px}",
   "html[data-theme=dark] .ip-pop{background:#26272b;border-color:#3a3c42}",
   "html[data-theme=dark] .ip-avatar{border-color:#26272b}",

@@ -39,6 +39,7 @@ export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
 
   return (
     <div className="home-dashboard">
+      <style>{inlinePickerCss}</style>
       <div className="home-primary">
         <section className="welcome-hero command-brief-hero">
           <div className="welcome-hero__shade" />
