@@ -66,6 +66,12 @@ export async function uploadDriveFile(input: {
   mimeType: string;
   bytes: ArrayBuffer;
   parentId?: string;
+  /**
+   * Ask Drive to convert on the way in - plain text becoming a Google Doc, say. Without it a draft
+   * arrives as a text attachment that nobody can edit where it sits, which for something written to be
+   * reviewed and corrected is the whole point missed.
+   */
+  convertTo?: string;
 }): Promise<DriveFile> {
   const env = getCloudflareEnv();
   const token = await getGoogleAccessToken(input.userId);
@@ -73,7 +79,11 @@ export async function uploadDriveFile(input: {
   if (!parent) throw new Error("Google Drive root folder is not configured.");
 
   const boundary = `squadron_ops_${crypto.randomUUID()}`;
-  const metadata = JSON.stringify({ name: input.name, parents: [parent] });
+  const metadata = JSON.stringify({
+    name: input.name,
+    parents: [parent],
+    ...(input.convertTo ? { mimeType: input.convertTo } : {})
+  });
   const prefix = new TextEncoder().encode(
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${input.mimeType || "application/octet-stream"}\r\n\r\n`
   );
