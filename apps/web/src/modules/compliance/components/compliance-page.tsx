@@ -9,6 +9,7 @@ import { StatusPill } from "@/components/status-pill";
 import type { ComplianceRequirementRecord, ComplianceStatus } from "@/lib/operations/compliance";
 import type { FunctionalAreaRecord } from "@/lib/operations/types";
 import type { Tone } from "@/lib/types";
+import { ConfirmButton } from "@/components/confirm-button";
 
 interface UserOption {
   id: string;
@@ -105,7 +106,6 @@ export function CompliancePage({
 
   async function removeRequirement(requirement: ComplianceRequirementRecord) {
     if (!canDelete || busyId) return;
-    if (!window.confirm(`Permanently delete “${requirement.name}”? Retiring it is usually safer because deletion removes its configuration.`)) return;
     setBusyId(requirement.id);
     setNotice(null);
     try {
@@ -174,7 +174,7 @@ export function CompliancePage({
                     {canEdit && requirement.status === "ACTIVE" ? <button title="Pause automation" disabled={busyId === requirement.id} onClick={() => setStatus(requirement, "PAUSED")}><Pause size={15} /></button> : null}
                     {canEdit && requirement.status !== "ACTIVE" ? <button title="Activate automation" disabled={busyId === requirement.id} onClick={() => setStatus(requirement, "ACTIVE")}><Play size={15} /></button> : null}
                     {canEdit && requirement.status !== "RETIRED" ? <button title="Retire requirement" disabled={busyId === requirement.id} onClick={() => setStatus(requirement, "RETIRED")}>Retire</button> : null}
-                    {canDelete ? <button className="danger-action" title="Delete requirement" disabled={busyId === requirement.id} onClick={() => removeRequirement(requirement)}><Trash2 size={15} /></button> : null}
+                    {canDelete ? <ConfirmButton className="danger-action" title="Delete requirement" disabled={busyId === requirement.id} question="Delete it? Retiring keeps its configuration." onConfirm={() => removeRequirement(requirement)}><Trash2 size={15} /></ConfirmButton> : null}
                   </div>
                 </article>
               );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ConfirmButton } from "@/components/confirm-button";
 
 // Forward an email to your own address and it becomes a task. No copying, no learning curve.
 export function EmailIntakeCard({ address }: { address: string }) {
@@ -18,7 +19,6 @@ export function EmailIntakeCard({ address }: { address: string }) {
   }
 
   async function issueNew() {
-    if (!window.confirm("Issue a new address? The one you have now stops working straight away.")) return;
     setBusy(true);
     setNote(null);
     try {
@@ -47,7 +47,7 @@ export function EmailIntakeCard({ address }: { address: string }) {
       <p className="ei-address"><code>{current}</code></p>
       <div className="ei-actions">
         <button type="button" className="ei-btn ei-btn--primary" onClick={copy}>Copy address</button>
-        <button type="button" className="ei-btn" disabled={busy} onClick={issueNew}>{busy ? "Issuing…" : "Issue a new one"}</button>
+        <ConfirmButton className="ei-btn" disabled={busy} question="The address you have now stops working. Sure?" onConfirm={issueNew}>{busy ? "Issuing…" : "Issue a new one"}</ConfirmButton>
       </div>
       {note ? <p className="ei-note" role="status">{note}</p> : null}
       <p className="ei-fine">Keep it to yourself: anyone who has it can create tasks in your name. Issuing a new address stops the old one working immediately.</p>

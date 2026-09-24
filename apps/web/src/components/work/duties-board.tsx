@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Cadence, DutyOccurrence, RoleDuty } from "@/lib/work/duties";
+import { ConfirmButton } from "@/components/confirm-button";
 
 const CADENCE_LABELS: Record<Cadence, string> = {
   MONTHLY: "Every month",
@@ -152,7 +153,7 @@ export function DutiesBoard({ duties, outlook, canEdit }: { duties: RoleDuty[]; 
                 </div>
                 {canEdit ? (
                   <div className="dt-duty-actions">
-                    <button type="button" className="dt-btn" disabled={busy} onClick={() => { if (window.confirm("Delete “" + duty.title + "”?")) call({ action: "delete", dutyId: duty.id }); }}>Delete</button>
+                    <ConfirmButton className="dt-btn" disabled={busy} onConfirm={() => call({ action: "delete", dutyId: duty.id })}>Delete</ConfirmButton>
                   </div>
                 ) : null}
               </article>

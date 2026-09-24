@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { PeoplePicker } from "./people-picker";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
+import { ConfirmButton } from "@/components/confirm-button";
 
 type Person = { id: string; fullName: string; pending?: boolean };
 type Mode = "list" | "board" | "table" | "calendar";
@@ -667,7 +668,7 @@ function FieldEditor({ listId, fields, onClose }: { listId: string; fields: Cust
               <input defaultValue={field.name} maxLength={60} aria-label="Field name" disabled={busy}
                 onBlur={(event) => { const next = event.target.value.trim(); if (next && next !== field.name) call({ action: "update", fieldId: field.id, name: next }); }} />
               <span className="lw-faint">{FIELD_TYPE_LABELS[field.type]}{field.options.length ? " · " + field.options.map((option) => option.name).join(", ") : ""}</span>
-              <button className="lw-ghost" disabled={busy} onClick={() => { if (window.confirm("Delete the field " + field.name + " and all its values?")) call({ action: "delete", fieldId: field.id }); }} aria-label="Delete field">✕</button>
+              <ConfirmButton className="lw-ghost" disabled={busy} ariaLabel="Delete field" question="Delete it and its values?" onConfirm={() => call({ action: "delete", fieldId: field.id })}>✕</ConfirmButton>
             </div>
           ))}
         </div>
@@ -919,8 +920,8 @@ function AutomationEditor({ listId, statuses, people, onClose }: { listId: strin
                 </span>
                 <small>{automation.lastRunAt ? "Last ran " + new Date(automation.lastRunAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Has not run yet"}</small>
               </div>
-              <button type="button" className="lw-ghost" disabled={busy} aria-label={"Delete " + automation.name}
-                onClick={() => { if (window.confirm("Delete the rule " + automation.name + "?")) call({ action: "delete", automationId: automation.id }); }}>✕</button>
+              <ConfirmButton className="lw-ghost" disabled={busy} ariaLabel={"Delete " + automation.name} question="Delete?"
+                onConfirm={() => call({ action: "delete", automationId: automation.id })}>✕</ConfirmButton>
             </div>
           ))}
         </section>

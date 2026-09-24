@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { ConfirmButton } from "@/components/confirm-button";
 
 type Step = Record<string, unknown>;
 type Applied = { ok: boolean; label: string; href?: string };
@@ -124,8 +125,7 @@ export function AssistantPanel() {
     await load(id);
   }
 
-  async function removeConversation(id: string, title: string) {
-    if (!window.confirm("Delete the conversation “" + title + "”? Anything it already created stays in the Hub.")) return;
+  async function removeConversation(id: string) {
     const response = await fetch("/api/ai/assistant?conversation=" + encodeURIComponent(id), { method: "DELETE" });
     const data = (await response.json().catch(() => ({}))) as Payload;
     setConversations(data.conversations ?? []);
@@ -179,7 +179,7 @@ export function AssistantPanel() {
                         <span>{conversation.title}</span>
                         <small>{new Date(conversation.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</small>
                       </button>
-                      <button type="button" className="ap-icon" onClick={() => removeConversation(conversation.id, conversation.title)} aria-label={"Delete " + conversation.title}>✕</button>
+                      <ConfirmButton className="ap-icon" ariaLabel={"Delete " + conversation.title} question="Delete?" onConfirm={() => removeConversation(conversation.id)}>✕</ConfirmButton>
                     </div>
                   ))}
                 </div>

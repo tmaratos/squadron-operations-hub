@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ConnectionSummary, ProviderDefinition } from "@/lib/connections";
+import { ConfirmButton } from "@/components/confirm-button";
 
 const SECTIONS: Array<{ id: ProviderDefinition["category"]; title: string; blurb: string }> = [
   { id: "files", title: "Files", blurb: "Open and attach documents from your own storage." },
@@ -176,7 +177,7 @@ export function ConnectionsBoard({ providers, initialConnections }: { providers:
                         <>
                           <button type="button" className="cx-btn" disabled={isBusy} onClick={() => call(provider.id, { action: "test" })}>{isBusy ? "Testing…" : "Test again"}</button>
                           <button type="button" className="cx-btn" disabled={isBusy} onClick={() => startConnect(provider.id)}>Replace key</button>
-                          <button type="button" className="cx-btn cx-btn--danger" disabled={isBusy} onClick={() => { if (window.confirm("Disconnect " + provider.name + "? Your saved key will be deleted.")) call(provider.id, { action: "disconnect" }); }}>Disconnect</button>
+                          <ConfirmButton className="cx-btn cx-btn--danger" disabled={isBusy} question="Disconnect and delete the key?" onConfirm={() => call(provider.id, { action: "disconnect" })}>Disconnect</ConfirmButton>
                         </>
                       ) : (
                         <button type="button" className="cx-btn cx-btn--primary" onClick={() => startConnect(provider.id)}>Connect {shortName}</button>

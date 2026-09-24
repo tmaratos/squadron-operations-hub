@@ -9,6 +9,7 @@ import type { GlobalRole } from "@/lib/auth/types";
 import type { DutyAssignmentRecord } from "@/lib/operations/staff";
 import type { PersonnelCommitteeRecord, PersonnelMemberRecord, PersonnelPositionRecord } from "@/lib/operations/personnel";
 import type { FunctionalAreaRecord } from "@/lib/operations/types";
+import { ConfirmButton } from "@/components/confirm-button";
 
 interface UserOption {
   id: string;
@@ -110,7 +111,6 @@ export function StaffPage({
 
   async function removeAssignment(assignment: DutyAssignmentRecord) {
     if (!canDelete || busyId) return;
-    if (!window.confirm(`Permanently delete ${assignment.userName}'s ${assignment.dutyTitle} assignment? Ending it preserves continuity history.`)) return;
     setBusyId(assignment.id);
     setNotice(null);
     try {
@@ -219,7 +219,7 @@ export function StaffPage({
                         <b>{assignment.userName}</b>
                         <small>{assignment.dutyTitle}</small>
                         {canManage ? <button disabled={busyId === assignment.id} onClick={() => endAssignment(assignment)}>End</button> : null}
-                        {canDelete ? <button className="staff-chip__delete" disabled={busyId === assignment.id} onClick={() => removeAssignment(assignment)} aria-label={`Delete ${assignment.dutyTitle}`}><Trash2 size={12} /></button> : null}
+                        {canDelete ? <ConfirmButton className="staff-chip__delete" disabled={busyId === assignment.id} ariaLabel={`Delete ${assignment.dutyTitle}`} question="Delete it? Ending it keeps the history." onConfirm={() => removeAssignment(assignment)}><Trash2 size={12} /></ConfirmButton> : null}
                       </span>
                     )) : <em>Unassigned</em>}
                   </div>

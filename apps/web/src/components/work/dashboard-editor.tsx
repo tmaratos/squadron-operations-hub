@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { DashboardWidget, WidgetType } from "@/lib/work/types";
+import { ConfirmButton } from "@/components/confirm-button";
 
 type Filters = NonNullable<DashboardWidget["config"]["filters"]>;
 
@@ -143,7 +144,7 @@ export function DashboardEditor({ dashboardId, widgets, lists, tags, statusNames
                       <button type="button" className="de-icon" disabled={busy || index === 0} onClick={() => move(index, -1)} aria-label="Move up">↑</button>
                       <button type="button" className="de-icon" disabled={busy || index === widgets.length - 1} onClick={() => move(index, 1)} aria-label="Move down">↓</button>
                       <button type="button" className="de-icon" disabled={busy} onClick={() => setDraft(toDraft(widget))} aria-label="Edit card">✎</button>
-                      <button type="button" className="de-icon de-danger" disabled={busy} onClick={() => { if (window.confirm("Remove the card " + widget.title + "?")) send({ action: "delete", widgetId: widget.id }); }} aria-label="Remove card">✕</button>
+                      <ConfirmButton className="de-icon de-danger" disabled={busy} ariaLabel="Remove card" question="Remove?" onConfirm={() => send({ action: "delete", widgetId: widget.id })}>✕</ConfirmButton>
                     </li>
                   ))}
                 </ul>
