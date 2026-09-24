@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
+import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
 
 type Person = { id: string; fullName: string; pending?: boolean };
@@ -60,6 +61,9 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [statusDrop, setStatusDrop] = useState<string | null>(null);
+  // Assigning somebody, or setting a priority, without opening the task: the two things most often changed
+  // in a row, and until now both of them meant a trip into the panel and back out again.
+  const [inlineEdit, setInlineEdit] = useState<{ itemId: string; field: "assignee" | "priority" } | null>(null);
   const [addingIn, setAddingIn] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(initialOpenId ?? null);
   const [editingStatuses, setEditingStatuses] = useState(false);
@@ -246,18 +250,14 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
             {item.tags.slice(0, 2).map((tag) => <span key={tag.id} className={"lw-tag work-tag work-tag--" + tag.color}>{tag.label}</span>)}
             {item.tags.length > 2 ? <span className="lw-mini">+{item.tags.length - 2}</span> : null}
           </div>
-          <div className="lw-cell">
-            {item.assignees.length ? (
-              <span className="lw-avatars">{item.assignees.slice(0, 3).map((person) => <span key={person.id} className="lw-avatar" title={person.fullName}>{initials(person.fullName)}</span>)}</span>
-            ) : <span className="lw-empty-person" aria-label="Unassigned">
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="5.5" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.3" /><path d="M3 13.5c.8-2.4 2.7-3.6 5-3.6s4.2 1.2 5 3.6" fill="none" stroke="currentColor" strokeWidth="1.3" /></svg>
-            </span>}
+          <div className="lw-cell lw-cell--pick">
+            <InlineAssignee itemId={item.id} title={item.title} assignees={item.assignees} canEdit={canEdit} onSaved={() => reload()} />
           </div>
           <div className={"lw-cell" + (due.late && !isClosed(item) ? " lw-late" : due.today ? " lw-today" : "")}>
             {due.text || <span className="lw-faint">—</span>}
           </div>
-          <div className="lw-cell">
-            {item.priority ? <span style={{ color: PRIORITY_COLOR[item.priority] }}>⚑ <span className="lw-priority-text">{item.priority[0] + item.priority.slice(1).toLowerCase()}</span></span> : <span className="lw-faint">—</span>}
+          <div className="lw-cell lw-cell--pick">
+            <InlinePriority itemId={item.id} title={item.title} priority={item.priority} canEdit={canEdit} onSaved={() => reload()} />
           </div>
         </div>
         {open ? kids.map((kid) => renderRow(kid, depth + 1)) : null}
@@ -440,7 +440,8 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
                         {item.assignees.length ? <span className="lw-avatar">{initials(item.assignees[0].fullName)}</span> : null}
                         <span className={due.late && !isClosed(item) ? "lw-late" : ""}>{due.text}</span>
                         {item.childCount ? <span>⑂ {item.childCount}</span> : null}
-                        {item.priority ? <span style={{ color: PRIORITY_COLOR[item.priority] }}>⚑</span> : null}
+                        <InlinePriority itemId={item.id} title={item.title} priority={item.priority} canEdit={canEdit} onSaved={() => reload()} />
+                        <InlineAssignee itemId={item.id} title={item.title} assignees={item.assignees} canEdit={canEdit} onSaved={() => reload()} />
                       </div>
                     </article>
                   );
@@ -539,7 +540,9 @@ function TableView({ items, statuses, canEdit, onOpen, onPatch }: {
                     {statuses.map((entry) => <option key={entry.id} value={entry.id}>{entry.name.toUpperCase()}</option>)}
                   </select>
                 </td>
-                <td>{item.assignees.map((person) => person.fullName).join(", ") || <span className="lw-faint">—</span>}</td>
+                <td className="lw-td-people">
+                  <InlineAssignee itemId={item.id} title={item.title} assignees={item.assignees} canEdit={canEdit} onSaved={() => onPatch(item.id, {})} />
+                </td>
                 <td>
                   <input type="date" className="lw-cell-input" value={item.startOn ?? ""} disabled={!canEdit} onChange={(event) => onPatch(item.id, { startOn: event.target.value || null })} />
                 </td>
@@ -1781,6 +1784,20 @@ const lwCss = [
   ".lw-colhead,.lw-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 110px 100px;align-items:center}",
   ".lw-colhead{font-size:11px;color:var(--lw-muted);padding:4px 0 6px 44px;border-bottom:1px solid var(--lw-border)}",
   ".lw-row[draggable=true]{cursor:grab}.lw-row[draggable=true]:active{cursor:grabbing}",
+  inlinePickerCss,
+  ".lw-cell--pick{position:relative;overflow:visible}",
+  ".lw-td-people{position:relative;overflow:visible}",
+  ".lw-inline{display:inline-flex;align-items:center;gap:4px;border:0;background:none;color:inherit;font:inherit;padding:2px 6px;border-radius:6px;cursor:pointer;max-width:100%}",
+  ".lw-inline:hover:not(:disabled){background:rgba(123,104,238,.14)}",
+  ".lw-inline:disabled{cursor:default}",
+  ".lw-pop{position:absolute;top:calc(100% + 4px);right:0;z-index:60;min-width:190px;display:flex;flex-direction:column;gap:2px;padding:6px;border-radius:10px;border:1px solid var(--border,#e4e6eb);background:var(--surface,#fff);box-shadow:0 16px 40px rgba(9,20,44,.24)}",
+  "html[data-theme=dark] .lw-pop{background:#26272b;border-color:#3a3c42}",
+  ".lw-pop-item{border:0;background:none;font:inherit;font-size:13px;text-align:left;padding:7px 9px;border-radius:7px;cursor:pointer}",
+  ".lw-pop-item:hover{background:rgba(123,104,238,.14)}",
+  ".lw-pop-item--clear{color:var(--muted,#656f7d)}",
+  ".lw-pop-current{display:flex;flex-wrap:wrap;gap:4px;padding-bottom:6px;margin-bottom:4px;border-bottom:1px solid var(--border,#eef0f3)}",
+  ".lw-pop-remove{border:1px solid var(--border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12px;padding:3px 7px;border-radius:99px;cursor:pointer}",
+  ".lw-pop-remove:hover{border-color:#d03b3b;color:#d03b3b}",
   ".lw-group--over{outline:2px dashed #7b68ee;outline-offset:2px;border-radius:8px;background:rgba(123,104,238,.06)}",
   ".lw-row{min-height:38px;border-bottom:1px solid var(--lw-border);cursor:pointer}",
   ".lw-row:hover{background:var(--lw-hover)}",

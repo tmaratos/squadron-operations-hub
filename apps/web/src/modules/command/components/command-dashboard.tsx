@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, Users } from "lucide-react";
 import { OffersCard } from "@/components/work/offers-card";
+import { InlineAssignee, InlinePriority, inlinePickerCss } from "@/components/work/inline-pickers";
+import type { ItemPriority } from "@/lib/work/types";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import { loadDashboardItems, type DashboardItem } from "@/lib/work/dashboards";
 
@@ -93,14 +95,26 @@ function HeroMetric({ icon: Icon, label, value, tone }: { icon: LucideIcon; labe
 
 function TaskRow({ item }: { item: DashboardItem }) {
   return (
-    <Link className="home-task-row" href={"/lists/" + item.listId + "?item=" + item.id}>
-      <span className="task-checkbox" aria-hidden="true" />
-      <strong>{item.title}</strong>
-      <span className="task-due">{dueLabel(item.dueOn)}</span>
-      <span className="task-priority">{item.statusName || "No status"}</span>
-      <span className="task-area">{item.assignees[0] || "Unassigned"}</span>
-      <ArrowRight size={16} aria-hidden="true" />
-    </Link>
+    <div className="home-task-row home-task-row--wrap">
+      <Link className="home-task-link" href={"/lists/" + item.listId + "?item=" + item.id}>
+        <span className="task-checkbox" aria-hidden="true" />
+        <strong>{item.title}</strong>
+        <span className="task-due">{dueLabel(item.dueOn)}</span>
+        <span className="task-priority">{item.statusName || "No status"}</span>
+        <ArrowRight size={16} aria-hidden="true" />
+      </Link>
+      {/* Assigning something you have just been shown should not mean going to find it first. */}
+      <span className="home-task-controls">
+        <InlinePriority itemId={item.id} title={item.title} priority={(item.priority as ItemPriority | null) ?? null} canEdit />
+        <InlineAssignee
+          itemId={item.id}
+          title={item.title}
+          assignees={item.assigneeIds.map((id, index) => ({ id, fullName: item.assignees[index] ?? "Member" }))}
+          canEdit
+         
+        />
+      </span>
+    </div>
   );
 }
 

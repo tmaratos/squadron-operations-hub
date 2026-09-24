@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
+import type { ItemPriority } from "@/lib/work/types";
 
 // What you have to do, in the order you have to do it.
 //
@@ -18,6 +20,7 @@ export interface TaskRow {
   closed: boolean;
   assignees: string[];
   assigneeIds: string[];
+  priority?: string | null;
 }
 
 type Tab = "mine" | "unassigned" | "everyone";
@@ -179,9 +182,27 @@ export function MyTasks({ items: initialItems, userId }: { items: TaskRow[]; use
                     <span className="mt-meta">
                       <span className={"mt-when" + (item.dueOn && dayDiff(item.dueOn) < 0 ? " is-late" : "")}>{whenLabel(item.dueOn)}</span>
                       <span className="mt-list">{item.listName}</span>
-                      <span className="mt-who">{item.assignees[0] ?? "Nobody"}</span>
                     </span>
                   </Link>
+                  {/* Who it belongs to and how urgent it is, changed here rather than by opening it. */}
+                  <span className="mt-controls">
+                    <InlinePriority
+                      itemId={item.id}
+                      title={item.title}
+                      priority={(item.priority as ItemPriority | null) ?? null}
+                      canEdit
+                      onSaved={(priority) => setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, priority } : entry)))}
+                    />
+                    <InlineAssignee
+                      itemId={item.id}
+                      title={item.title}
+                      assignees={item.assigneeIds.map((id, index) => ({ id, fullName: item.assignees[index] ?? "Member" }))}
+                      canEdit
+                      onSaved={(assignees) => setItems((current) => current.map((entry) => (entry.id === item.id
+                        ? { ...entry, assigneeIds: assignees.map((person) => person.id), assignees: assignees.map((person) => person.fullName) }
+                        : entry)))}
+                    />
+                  </span>
                 </li>
               ))}
             </ul>
@@ -203,6 +224,8 @@ export function MyTasks({ items: initialItems, userId }: { items: TaskRow[]; use
 }
 
 const mtCss = [
+  inlinePickerCss,
+  ".mt-controls{display:flex;align-items:center;gap:6px;flex:none}",
   ".mt{display:grid;gap:16px}",
   ".mt-tabs{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
   ".mt-tab{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:14px;font-weight:600;padding:8px 14px;border-radius:999px;cursor:pointer}",
@@ -214,7 +237,7 @@ const mtCss = [
   ".mt-group h2{margin:0 0 8px;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--cu-muted,#656f7d);display:flex;align-items:center;gap:8px}",
   ".mt-group ul{list-style:none;margin:0;padding:0;border:1px solid var(--cu-border,#e4e6eb);border-radius:12px;overflow:hidden;background:var(--cu-bg,#fff)}",
   "html[data-theme=dark] .mt-group ul{background:#222326;border-color:#3a3d44}",
-  ".mt-group li{display:flex;align-items:center;gap:0}",
+  ".mt-group li{display:flex;align-items:center;gap:0;position:relative;overflow:visible;padding-right:8px}",
   ".mt-group li + li{border-top:1px solid var(--cu-border,#eef0f3)}",
   ".mt-group li.is-picked{background:rgba(123,104,238,.1)}",
   ".mt-pick{flex:0 0 auto;width:17px;height:17px;margin:0 0 0 14px;accent-color:#7b68ee}",
