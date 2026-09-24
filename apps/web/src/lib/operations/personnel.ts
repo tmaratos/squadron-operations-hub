@@ -167,3 +167,70 @@ export async function linkPersonnelMemberToUser(userId: string, fullName: string
     .bind(userId, new Date().toISOString(), fullName)
     .run();
 }
+
+/**
+ * Changes who holds a position, or empties it.
+ *
+ * The organisation chart arrived as seeded records dated April 2026 and there was no way to change it in
+ * the app at all - which is untenable for the one thing that goes out of date every time somebody swaps
+ * jobs. A position also decides who the Hub chases about that job's recurring work, so a stale chart is
+ * not a cosmetic problem.
+ */
+export async function setPositionHolder(input: {
+  positionId: string;
+  incumbentId: string | null;
+  assignmentStatus: "FILLED" | "ACTING" | "VACANT";
+  notes?: string | null;
+}): Promise<void> {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  // Emptying a position means it is vacant, whatever was asked for.
+  const status = input.incumbentId ? input.assignmentStatus : "VACANT";
+
+  await db
+    .prepare(
+      "UPDATE personnel_positions SET incumbent_id = ?, assignment_status = ?, notes = ?, source_date = ?, updated_at = ? WHERE id = ?"
+    )
+    .bind(input.incumbentId, status, input.notes?.trim() || null, now.slice(0, 10), now, input.positionId)
+    .run();
+
+  // The member's Hub account carries the duty title, because that is what tells the duty generator whose
+  // recurring work this is. Cleared from whoever held it, set on whoever holds it now.
+  const position = await db.prepare("SELECT title FROM personnel_positions WHERE id = ?").bind(input.positionId).first<{ title: string }>();
+  if (!position) return;
+
+  await db
+    .prepare("UPDATE users SET duty_title = NULL, updated_at = ? WHERE duty_title = ?")
+    .bind(now, position.title)
+    .run();
+
+  if (input.incumbentId) {
+    const member = await db.prepare("SELECT user_id FROM personnel_members WHERE id = ?").bind(input.incumbentId).first<{ user_id: string | null }>();
+    if (member?.user_id) {
+      await db.prepare("UPDATE users SET duty_title = ?, updated_at = ? WHERE id = ?").bind(position.title, now, member.user_id).run();
+    }
+  }
+}
+
+export async function createPosition(input: {
+  title: string;
+  functionalAreaKey: string;
+  reportsToPositionId?: string | null;
+}): Promise<string> {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const order = await db.prepare("SELECT COALESCE(MAX(display_order), 0) + 1 AS next FROM personnel_positions").first<{ next: number }>();
+  await db
+    .prepare(
+      "INSERT INTO personnel_positions (id, title, functional_area_key, incumbent_id, reports_to_position_id, assignment_status, notes, source_date, display_order, created_at, updated_at) " +
+      "VALUES (?, ?, ?, NULL, ?, 'VACANT', NULL, ?, ?, ?, ?)"
+    )
+    .bind(id, input.title.trim(), input.functionalAreaKey, input.reportsToPositionId ?? null, now.slice(0, 10), order?.next ?? 100, now, now)
+    .run();
+  return id;
+}
+
+export async function removePosition(positionId: string): Promise<void> {
+  await getDatabase().prepare("DELETE FROM personnel_positions WHERE id = ?").bind(positionId).run();
+}

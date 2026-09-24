@@ -39,14 +39,17 @@ export function StaffPage({
   canDelete: boolean;
 }) {
   const [assignments, setAssignments] = useState(initialAssignments);
+  // The chart is editable now, so it has to be state rather than a prop read once.
+  const [positions, setPositions] = useState(personnelPositions);
+  const [editingPosition, setEditingPosition] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: "success" | "danger"; message: string } | null>(null);
 
-  const filledPositions = personnelPositions.filter((position) => position.assignmentStatus !== "VACANT");
-  const vacantPositions = personnelPositions.filter((position) => position.assignmentStatus === "VACANT");
-  const actingPositions = personnelPositions.filter((position) => position.assignmentStatus === "ACTING");
+  const filledPositions = positions.filter((position) => position.assignmentStatus !== "VACANT");
+  const vacantPositions = positions.filter((position) => position.assignmentStatus === "VACANT");
+  const actingPositions = positions.filter((position) => position.assignmentStatus === "ACTING");
   const membersOnLeave = personnelMembers.filter((member) => member.status === "LEAVE");
   const workload = useMemo(() => {
     return users
@@ -126,6 +129,27 @@ export function StaffPage({
     }
   }
 
+  async function savePosition(positionId: string, incumbentId: string | null, assignmentStatus: "FILLED" | "ACTING" | "VACANT") {
+    setBusyId(positionId);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/staff/positions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "assign", positionId, incumbentId, assignmentStatus })
+      });
+      const data = (await response.json()) as { positions?: PersonnelPositionRecord[]; message?: string };
+      if (!response.ok) throw new Error(data.message || "That change could not be saved.");
+      if (data.positions) setPositions(data.positions);
+      setEditingPosition(null);
+      setNotice({ tone: "success", message: data.message ?? "Saved." });
+    } catch (caught) {
+      setNotice({ tone: "danger", message: caught instanceof Error ? caught.message : "That change could not be saved." });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <div className="page-stack">
       <PageHeader
@@ -145,17 +169,47 @@ export function StaffPage({
       {notice ? <div className={`inline-notice inline-notice--${notice.tone}`} role="status"><AlertCircle size={17} /><span>{notice.message}</span></div> : null}
 
       <div className="content-grid content-grid--wide personnel-directory-grid">
-        <SectionCard title="Current organization chart" description="Source: Staff Positions, April 2026, with current leave coverage noted by squadron leadership.">
+        <SectionCard title="Current organization chart" description={canManage ? "Press Change on any position to say who holds it now. Whoever holds it gets that job's recurring work." : "Who holds which position in the squadron."}>
           <div className="org-position-list">
-            {personnelPositions.map((position) => (
+            {positions.map((position) => (
               <article className={`org-position org-position--${position.assignmentStatus.toLowerCase()}`} key={position.id}>
                 <div className="org-position__icon"><BriefcaseBusiness size={16} /></div>
                 <div className="org-position__body">
                   <strong>{position.title}</strong>
-                  <span>{position.incumbentName ? `${position.incumbentRank} ${position.incumbentName}` : "Vacant"}</span>
+                  {editingPosition === position.id ? (
+                    <div className="org-edit">
+                      <select
+                        defaultValue={position.incumbentId ?? ""}
+                        disabled={busyId === position.id}
+                        aria-label={"Who holds " + position.title}
+                        onChange={(event) => savePosition(position.id, event.target.value || null, event.target.value ? "FILLED" : "VACANT")}
+                      >
+                        <option value="">Nobody — leave it vacant</option>
+                        {personnelMembers.map((member) => (
+                          <option key={member.id} value={member.id}>{member.rank} {member.fullName}</option>
+                        ))}
+                      </select>
+                      {position.incumbentId ? (
+                        <button
+                          type="button"
+                          className="org-edit__acting"
+                          disabled={busyId === position.id}
+                          onClick={() => savePosition(position.id, position.incumbentId, position.assignmentStatus === "ACTING" ? "FILLED" : "ACTING")}
+                        >
+                          {position.assignmentStatus === "ACTING" ? "Not acting" : "Mark acting"}
+                        </button>
+                      ) : null}
+                      <button type="button" className="org-edit__cancel" onClick={() => setEditingPosition(null)}>Close</button>
+                    </div>
+                  ) : (
+                    <span>{position.incumbentName ? `${position.incumbentRank} ${position.incumbentName}` : "Vacant"}</span>
+                  )}
                   <small>{position.reportsToTitle ? `Reports to ${position.reportsToTitle}` : "Unit command"}</small>
                   {position.notes ? <em>{position.notes}</em> : null}
                 </div>
+                {canManage && editingPosition !== position.id ? (
+                  <button type="button" className="org-change" onClick={() => setEditingPosition(position.id)}>Change</button>
+                ) : null}
                 <span className={`org-status org-status--${position.assignmentStatus.toLowerCase()}`}>{position.assignmentStatus.toLowerCase()}</span>
               </article>
             ))}
