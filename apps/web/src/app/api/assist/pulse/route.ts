@@ -62,14 +62,23 @@ export async function GET(request: Request) {
     actionable: true
   }));
 
-  mail.forEach((suggestion) => noticed.push({
-    id: "mail:" + suggestion.id,
-    kind: "mail",
-    title: suggestion.title,
-    detail: suggestion.because ?? "From your mail.",
-    href: "/connections",
-    actionable: false
-  }));
+  // Say where it came from and when. "I found this in your mail" is only useful if it says which mail.
+  mail.forEach((suggestion) => {
+    const who = (suggestion.from ?? "").replace(/<[^>]*>/g, "").replace(/"/g, "").trim();
+    const said = suggestion.because ? "“" + suggestion.because.slice(0, 140) + "”" : null;
+    noticed.push({
+      id: "mail:" + suggestion.id,
+      kind: "mail",
+      title: suggestion.title,
+      detail: [
+        who ? "From " + who : "From your mail",
+        suggestion.subject ? "about “" + suggestion.subject.slice(0, 60) + "”" : null,
+        suggestion.dueOn ? "· due " + suggestion.dueOn : null
+      ].filter(Boolean).join(" ") + (said ? " — it says " + said : ""),
+      href: "/connections",
+      actionable: false
+    });
+  });
 
   const unreadTotal = Object.values(unread).reduce((sum, count) => sum + count, 0);
   if (unreadTotal) {

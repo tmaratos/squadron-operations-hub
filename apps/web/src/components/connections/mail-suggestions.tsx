@@ -69,13 +69,11 @@ export function MailSuggestions() {
         <div>
           <h2>Turn email into tasks</h2>
           <p>
-            Put the label <strong>{label}</strong> on any email in Gmail, then press the button. The Hub reads
-            only those messages and tells you what it thinks needs doing. Nothing is created until you say so.
+            Put the label <strong>{label}</strong> on any email in Gmail. The Hub reads only those messages, on its
+            own, while you have it open, and brings anything worth doing to you in the corner. Nothing is created
+            until you say so.
           </p>
         </div>
-        <button type="button" className="ms-btn ms-btn--primary" disabled={state === "loading"} onClick={check}>
-          {state === "loading" ? "Reading…" : "Check my email"}
-        </button>
       </div>
 
       {!connected ? (
