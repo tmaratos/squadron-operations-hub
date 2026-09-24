@@ -311,6 +311,13 @@ export async function applyPlan(steps: PlanStep[], userId: string, prompt = ""):
         }
 
         case "create_department": {
+          // A department that already exists is not created again. The assistant asked for "Aerospace
+          // Education" twice and got two of them, which nothing in the app could then tidy up.
+          const existing = spaces.find((entry) => entry.name.toLowerCase() === step.name.trim().toLowerCase());
+          if (existing) {
+            await record(step, { ok: true, label: step.name + " already exists, so it was used rather than made again.", href: "/spaces" }, "space", existing.id);
+            break;
+          }
           const id = await createSpace({ name: step.name, description: step.description ?? null, color: step.color, userId });
           spaces.push({ id, name: step.name });
           await record(step, { ok: true, label: 'Created the department "' + step.name + '"', href: "/spaces" }, "space", id);
@@ -325,6 +332,12 @@ export async function applyPlan(steps: PlanStep[], userId: string, prompt = ""):
             : spaces[0];
           if (!space) {
             await record(step, { ok: false, label: 'There is no department called "' + step.department + '" to put "' + step.name + '" in.' });
+            break;
+          }
+          // Same for a list: one of that name in that department is enough.
+          const duplicate = lists.find((entry) => entry.name.toLowerCase() === step.name.trim().toLowerCase());
+          if (duplicate) {
+            await record(step, { ok: true, label: step.name + " already exists, so it was used rather than made again.", href: "/lists/" + duplicate.id }, "list", duplicate.id);
             break;
           }
           const folderId = step.folder ? await createFolder({ spaceId: space.id, name: step.folder }) : null;

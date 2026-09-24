@@ -1,54 +1,23 @@
-import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
+import { SpaceManager } from "@/components/work/space-manager";
 import { requireUser } from "@/lib/auth/session";
 import { getWorkspaceTree } from "@/lib/work/structure";
-import type { ListNode } from "@/lib/work/types";
 
 export const dynamic = "force-dynamic";
 
-function ListLink({ list }: { list: ListNode }) {
-  return (
-    <Link className="spaces-list" href={"/lists/" + list.id}>
-      <span className="spaces-dot" />
-      <span className="spaces-name">{list.name}</span>
-      <span className="spaces-count">{list.openItems}</span>
-    </Link>
-  );
-}
-
 export default async function SpacesPage() {
-  await requireUser();
+  const user = await requireUser();
   const spaces = await getWorkspaceTree();
 
   return (
     <div className="page-stack">
       <PageHeader
         eyebrow="Workspace"
-        title="Spaces"
-        description="Every space, folder and list in the workspace. Open a list to work its items in list or board view."
+        title="Departments and lists"
+        description="Everything the squadron works in. Rename anything that is wrong, and remove what should not be there — removing hides it and keeps the work, rather than destroying it."
       />
       <style>{spacesCss}</style>
-      {spaces.length === 0 ? <p className="spaces-empty">No spaces yet.</p> : null}
-      <div className="spaces-grid">
-        {spaces.map((space) => (
-          <section className="spaces-card" key={space.id}>
-            <header>
-              <span className="spaces-avatar">{space.name.slice(0, 1).toUpperCase()}</span>
-              <div>
-                <h2>{space.name}</h2>
-                {space.description ? <p>{space.description}</p> : null}
-              </div>
-            </header>
-            {space.lists.map((list) => <ListLink key={list.id} list={list} />)}
-            {space.folders.map((folder) => (
-              <div className="spaces-folder" key={folder.id}>
-                <h3>{folder.name}</h3>
-                {folder.lists.map((list) => <ListLink key={list.id} list={list} />)}
-              </div>
-            ))}
-          </section>
-        ))}
-      </div>
+      <SpaceManager spaces={spaces} canEdit={user.globalRole !== "READ_ONLY"} />
     </div>
   );
 }
