@@ -15,6 +15,7 @@ import {
   Home,
   Inbox,
   LayoutDashboard,
+  Bot,
   ListChecks,
   Menu,
   Moon,
@@ -45,12 +46,13 @@ export interface WorkspaceSummary {
 
 const defaultWorkspaces: WorkspaceSummary[] = [{ id: "tn-170", name: "TN-170 Oak Ridge", shortName: "170" }];
 
-type RailKey = "home" | "spaces" | "planner" | "docs" | "dashboards" | "more";
+type RailKey = "home" | "spaces" | "planner" | "ai" | "docs" | "dashboards" | "more";
 
 const railItems: Array<{ key: RailKey; label: string; href: string; icon: typeof Home }> = [
   { key: "home", label: "Home", href: "/", icon: Home },
   { key: "spaces", label: "Spaces", href: "/spaces", icon: Grid3x3 },
   { key: "planner", label: "Planner", href: "/calendar", icon: CalendarDays },
+  { key: "ai", label: "AI", href: "/agents", icon: Bot },
   { key: "docs", label: "Docs", href: "/documents", icon: FileText },
   { key: "dashboards", label: "Dashboard", href: "/dashboards", icon: LayoutDashboard },
   { key: "more", label: "More", href: "/staff", icon: NotebookTabs }
@@ -59,6 +61,7 @@ const railItems: Array<{ key: RailKey; label: string; href: string; icon: typeof
 function railFor(pathname: string): RailKey {
   if (pathname.startsWith("/spaces") || pathname.startsWith("/lists")) return "spaces";
   if (pathname.startsWith("/calendar")) return "planner";
+  if (pathname.startsWith("/agents")) return "ai";
   if (pathname.startsWith("/documents")) return "docs";
   if (pathname.startsWith("/dashboards") || pathname.startsWith("/readiness")) return "dashboards";
   return "home";
@@ -423,12 +426,15 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
             <Link
               key={agent.id}
               href={"/?agent=" + agent.id}
-              className="cu-link"
+              className="cu-link cu-agent"
               title={agent.purpose ?? agent.name}
             >
-              <span className="cu-link-icon" aria-hidden="true">{agent.emoji}</span>
-              <span className="cu-link-label">{agent.name}</span>
-              {agent.shared ? null : <span className="cu-count" title="Yours only">you</span>}
+              <span className="cu-agent-face" aria-hidden="true">
+                {agent.emoji}
+                <i className="cu-agent-dot" />
+              </span>
+              <span className="cu-link-label cu-agent-name">{agent.name}</span>
+              {agent.shared ? null : <span className="cu-agent-tag" title="Yours only">you</span>}
             </Link>
           ))}
           <Link href="/agents" className="cu-link cu-link--quiet"><span className="cu-link-icon">⚙</span><span className="cu-link-label">Manage agents</span></Link>
@@ -676,6 +682,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
             </>
           ) : null}
           {rail === "spaces" ? <>{spacesSection}{agentsSection}</> : null}
+          {rail === "ai" ? agentsSection ?? <p className="cu-empty">No agents yet. Make one on the Agents page.</p> : null}
           {rail === "planner" ? (
             <section className="cu-section">
               {navLink("/calendar", "Calendar", <CalendarDays size={15} />)}
@@ -788,6 +795,11 @@ const shellCss = [
   ".cu-head-actions button{display:grid;place-items:center;padding:3px;border-radius:5px}",
   ".cu-head-actions button:hover{background:rgba(123,104,238,.16);color:var(--cu-text)}",
   ".cu-link--quiet{opacity:.65;font-size:12.5px}",
+  ".cu-agent{gap:10px;min-height:34px}",
+  ".cu-agent-face{position:relative;flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;background:linear-gradient(135deg,#7b68ee,#b06ab3);box-shadow:0 1px 3px rgba(9,20,44,.3)}",
+  ".cu-agent-dot{position:absolute;right:-1px;bottom:-1px;width:8px;height:8px;border-radius:50%;background:#2ecc71;border:2px solid var(--cu-side)}",
+  ".cu-agent-name{font-weight:600}",
+  ".cu-agent-tag{flex:none;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:2px 6px;border-radius:999px;background:rgba(123,104,238,.2);color:var(--cu-text)}",
   ".cu-side-new{display:flex;gap:6px;padding:4px 8px 8px}",
   ".cu-side-new input{flex:1;min-width:0;font:inherit;font-size:13px;min-height:30px;padding:0 8px;border-radius:7px;border:1px solid var(--cu-border);background:var(--cu-bg);color:var(--cu-text)}",
   ".cu-side-new button{border:0;background:#7b68ee;color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:0 10px;border-radius:7px;cursor:pointer}",
