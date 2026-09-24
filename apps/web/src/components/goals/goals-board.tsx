@@ -245,7 +245,7 @@ const glCss = [
   ".gl-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:12px}",
   ".gl-section h2{font-size:16px;margin:0 0 3px;display:flex;align-items:center;gap:8px}",
   ".gl-n{font-size:12px;font-weight:600;opacity:.55}",
-  ".gl-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(360px,1fr))}",
+  ".gl-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(360px,100%),1fr))}",
   ".gl-card{border:1px solid var(--border,#e4e6eb);border-radius:10px;padding:14px;background:var(--surface,#fff);display:flex;flex-direction:column;gap:8px}",
   "html[data-theme=dark] .gl-card{background:#222326;border-color:#34363b}",
   ".gl-card--closed{opacity:.6}",

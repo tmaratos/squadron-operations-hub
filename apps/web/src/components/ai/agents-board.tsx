@@ -205,7 +205,7 @@ const agCss = [
   ".ag{display:flex;flex-direction:column;gap:22px}",
   ".ag h2{font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:8px}",
   ".ag-n{font-size:12px;font-weight:600;opacity:.6}",
-  ".ag-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}",
+  ".ag-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))}",
   ".ag-card{display:grid;grid-template-columns:38px 1fr;grid-template-areas:'face body' 'face actions';gap:6px 12px;align-items:start;padding:14px;border:1px solid var(--border,#e4e6eb);border-radius:10px;background:var(--surface,#fff)}",
   ".ag-card .ag-face{grid-area:face}.ag-body{grid-area:body}",
   "html[data-theme=dark] .ag-card{background:#222326;border-color:#34363b}",

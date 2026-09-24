@@ -219,8 +219,15 @@ kbd { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; bac
   .topbar__quick span, .profile-button, .topbar__context small { display: none; }
   .topbar__actions { gap: 2px; }.topbar__quick { min-width: 38px; padding: 0; }
   .main-content { padding: 17px 13px 82px; }
-  .page-stack { gap: 16px; }
-  .page-header { align-items: flex-start; }.page-header h1 { font-size: 25px; }.page-header > div > p:last-child { font-size: 12px; }
+  .page-stack { gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  /* A grid child and a flex child both refuse to shrink below their content unless told they may. Every
+     page with a header was ten pixels too wide for the screen because of it, and the overflow guard was
+     hiding the edge rather than fixing it. */
+  .page-stack > * { min-width: 0; }
+  .page-header { flex-direction: column; align-items: stretch; gap: 12px; min-width: 0; }
+  .page-header > * { min-width: 0; }
+  .page-header h1 { font-size: 25px; overflow-wrap: anywhere; }
+  .page-header > div > p:last-child { font-size: 13px; }
   .metric-grid--dashboard, .metric-grid--four { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 9px; }
   .metric-card { min-height: 116px; padding: 14px; }.metric-card__value { font-size: 25px; }.metric-card__label { font-size: 11px; }.metric-card__detail { font-size: 9px; }
   .dashboard-grid { grid-template-columns: 1fr; }.dashboard-grid > * { grid-column: 1 !important; grid-row: auto !important; }

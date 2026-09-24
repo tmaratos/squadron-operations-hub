@@ -23,7 +23,7 @@ export default async function SpacesPage() {
 }
 
 const spacesCss = [
-  ".spaces-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}",
+  ".spaces-grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(min(320px,100%),1fr))}",
   ".spaces-card{background:var(--surface,#fff);border:1px solid var(--border,#e4e6eb);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:4px}",
   "html[data-theme=dark] .spaces-card{background:#222326;border-color:#34363b}",
   ".spaces-card header{display:flex;gap:12px;align-items:center;margin-bottom:8px}",
