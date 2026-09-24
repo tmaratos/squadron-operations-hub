@@ -127,9 +127,29 @@ async function raiseDeadlineNotices(env) {
   return statements.length;
 }
 
+/** Puts back anything that was marked failed when there was no way to send it in the first place. */
+async function revivePendingSends(env) {
+  try {
+    await env.DB.prepare(
+      "UPDATE notifications SET email_state = 'PENDING', emailed_at = NULL " +
+      "WHERE email_state = 'FAILED' AND id IN (" +
+      "  SELECT n.id FROM notifications n JOIN notification_sends s ON s.user_id = n.user_id " +
+      "  WHERE s.provider IS NULL AND s.status = 'FAILED' AND s.created_at >= n.created_at" +
+      ")"
+    ).run();
+  } catch {
+    // nothing to put back
+  }
+}
+
 // ---------------------------------------------------------------- delivery
 
 async function deliver(env, digestWindow) {
+  // A notice that could not be sent because nothing was configured to send it has not failed - it has not
+  // been tried. Marking those FAILED burned them permanently: the key was added later and the member never
+  // heard about the work anyway. They are put back in the queue instead.
+  await revivePendingSends(env);
+
   const rows = await env.DB.prepare(
     `SELECT n.id, n.user_id, n.kind, n.title, n.body, n.url, n.created_at,
             u.email AS email, u.full_name AS full_name,
@@ -162,6 +182,14 @@ async function deliver(env, digestWindow) {
       : notices.length + " things need you — Squadron Operations Hub";
     const result = await sendEmail(env, { to, subject, notices, name: notices[0].full_name });
     const now = new Date().toISOString();
+
+    // Nothing configured to send with: leave them pending so they go out when there is.
+    if (!result.ok && !result.provider) {
+      await env.DB.prepare(
+        "INSERT INTO notification_sends (id, user_id, email, subject, notification_count, provider, status, error, created_at) VALUES (?, ?, ?, ?, ?, NULL, 'FAILED', ?, ?)"
+      ).bind(crypto.randomUUID(), userId, to.join(", "), subject.slice(0, 300), notices.length, result.error || "Nothing is configured to send email.", now).run();
+      continue;
+    }
 
     await env.DB.batch([
       env.DB.prepare(
