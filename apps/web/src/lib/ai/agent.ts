@@ -5,6 +5,7 @@ import { createWidget, listDashboards } from "@/lib/work/dashboards";
 import { createItem, moveItem, updateItem } from "@/lib/work/items";
 import { createField, createFolder, createList, createSpace, createView, getWorkspaceTree, listStatuses, saveStatuses } from "@/lib/work/structure";
 import { listPersonnelPositions } from "@/lib/operations/personnel";
+import { briefFor } from "./agents";
 import { loadDashboardItems } from "@/lib/work/dashboards";
 import type { FieldType, ItemPriority, StatusCategory, ViewType } from "@/lib/work/types";
 import { hasGmailReadScope, hasGmailScope, storedScopesFor } from "@/lib/auth/google-oauth";
@@ -174,9 +175,12 @@ async function filingGuide(): Promise<string> {
   return lines.join("\n");
 }
 
-export async function buildPlan(prompt: string, userId: string): Promise<PlanResult> {
+export async function buildPlan(prompt: string, userId: string, agentId: string | null = null): Promise<PlanResult> {
   const context = await workspaceContext();
   const filing = await filingGuide().catch(() => "");
+  // An agent is this same assistant with a job description in front of it - nothing more, and nothing
+  // that lets it skip a confirmation.
+  const agentBrief = await briefFor(agentId).catch(() => "");
 
   // What the squadron's own documents say about this, and what the squadron has confirmed it owes. The
   // assistant answers from these rather than from its own recollection of CAP regulations, which is
@@ -241,7 +245,7 @@ export async function buildPlan(prompt: string, userId: string): Promise<PlanRes
   ].filter(Boolean).join("\n");
 
   const raw = await aiChatFor(userId, [
-    { role: "system", content: system },
+    { role: "system", content: agentBrief ? agentBrief + "\n\n" + system : system },
     { role: "user", content: prompt }
   ], { json: true, maxTokens: 1100 });
 

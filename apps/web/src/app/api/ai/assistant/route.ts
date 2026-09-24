@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { applyPlan, buildPlan, describeStep, planSchema } from "@/lib/ai/agent";
 import { addMessage, deleteConversation, ensureConversation, listConversations, purgeExpired, readConversation, RETENTION_DAYS } from "@/lib/ai/conversations";
+import { getAgent } from "@/lib/ai/agents";
 import { getAutonomy, needsConfirmation, setAutonomy } from "@/lib/ai/autonomy";
 import { AiUnavailableError, sourceForUser } from "@/lib/ai/provider";
 import { getCurrentUser } from "@/lib/auth/session";
@@ -13,7 +14,7 @@ import { assertSameOrigin } from "@/lib/security/origin";
 const conversationId = z.string().trim().min(1).max(80).nullable().optional();
 
 const requestSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("plan"), prompt: z.string().trim().min(3).max(1000), conversationId }),
+  z.object({ action: z.literal("plan"), prompt: z.string().trim().min(3).max(1000), conversationId, agentId: z.string().trim().max(80).nullable().optional() }),
   z.object({ action: z.literal("apply"), steps: planSchema, conversationId, prompt: z.string().trim().max(1000).optional() }),
   z.object({ action: z.literal("autonomy"), level: z.enum(["SUGGEST", "CONFIRM", "BUILD"]) })
 ]);
@@ -22,12 +23,16 @@ export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
   await purgeExpired(user.id);
-  const wanted = new URL(request.url).searchParams.get("conversation");
+  const params = new URL(request.url).searchParams;
+  const wanted = params.get("conversation");
+  // History is per agent. Chatting to an agent shows what was said to that agent, not the Hub's own thread.
+  const agentId = params.get("agent");
   return NextResponse.json({
     ...(await sourceForUser(user.id)),
     retentionDays: RETENTION_DAYS,
     autonomy: await getAutonomy(user.id),
-    conversations: await listConversations(user.id),
+    agent: agentId ? await getAgent(agentId, user.id) : null,
+    conversations: await listConversations(user.id, 20, agentId),
     messages: wanted ? await readConversation(wanted, user.id) : []
   });
 }
@@ -46,8 +51,8 @@ export async function POST(request: Request) {
     }
 
     if (input.action === "plan") {
-      const plan = await buildPlan(input.prompt, user.id);
-      const conversation = await ensureConversation(user.id, input.conversationId ?? null, input.prompt);
+      const plan = await buildPlan(input.prompt, user.id, input.agentId ?? null);
+      const conversation = await ensureConversation(user.id, input.conversationId ?? null, input.prompt, input.agentId ?? null);
       await addMessage({ conversationId: conversation, role: "user", content: input.prompt });
       await addMessage({ conversationId: conversation, role: "assistant", content: plan.reply, steps: plan.steps });
 

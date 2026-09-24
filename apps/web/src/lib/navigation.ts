@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  Bot,
   Bell,
   CalendarDays,
   ClipboardCheck,
@@ -44,6 +45,7 @@ export const navigationGroups: NavigationGroup[] = [
     label: "The squadron",
     items: [
       { label: "People and positions", href: "/staff", icon: Users },
+      { label: "Agents", href: "/agents", icon: Bot },
       { label: "Who does what", href: "/duties", icon: ClipboardCheck },
       { label: "Professional development", href: "/development", icon: Gauge },
       { label: "Readiness", href: "/readiness", icon: Gauge },

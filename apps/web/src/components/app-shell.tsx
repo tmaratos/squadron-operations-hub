@@ -64,7 +64,13 @@ function railFor(pathname: string): RailKey {
   return "home";
 }
 
-export function AppShell({ children, user, workspaces, spaces }: { children: ReactNode; user: AuthenticatedUser; workspaces?: WorkspaceSummary[]; spaces?: SpaceNode[] }) {
+export function AppShell({ children, user, workspaces, spaces, agents }: {
+  children: ReactNode;
+  user: AuthenticatedUser;
+  workspaces?: WorkspaceSummary[];
+  spaces?: SpaceNode[];
+  agents?: Array<{ id: string; name: string; emoji: string; purpose: string | null; shared: boolean }>;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -177,7 +183,8 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
     }
   }
   const [rail, setRail] = useState<RailKey>(railFor(pathname));
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  // Folded unless somebody opens it: a dozen agents must not push the squadron's lists off the screen.
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ agents: true });
   const [theme, setTheme] = useState<"light" | "dark">("light");
   const workspaceList = workspaces?.length ? workspaces : defaultWorkspaces;
   const currentWorkspace = workspaceList[0];
@@ -399,6 +406,36 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
       )}
     </section>
   );
+
+  // Agents live in the sidebar the way people do, but folded away by default: a squadron with a dozen of
+  // them should not lose its lists behind a wall of faces.
+  const agentsSection = agents && agents.length ? (
+    <section className="cu-section">
+      <div className="cu-section-head">
+        <button type="button" onClick={() => toggle("agents")}>Agents</button>
+        <span className="cu-head-actions">
+          <Link href="/agents" aria-label="Manage agents" title="Manage agents"><Plus size={14} /></Link>
+        </span>
+      </div>
+      {collapsed.agents === false ? (
+        <>
+          {agents.map((agent) => (
+            <Link
+              key={agent.id}
+              href={"/?agent=" + agent.id}
+              className="cu-link"
+              title={agent.purpose ?? agent.name}
+            >
+              <span className="cu-link-icon" aria-hidden="true">{agent.emoji}</span>
+              <span className="cu-link-label">{agent.name}</span>
+              {agent.shared ? null : <span className="cu-count" title="Yours only">you</span>}
+            </Link>
+          ))}
+          <Link href="/agents" className="cu-link cu-link--quiet"><span className="cu-link-icon">⚙</span><span className="cu-link-label">Manage agents</span></Link>
+        </>
+      ) : null}
+    </section>
+  ) : null;
 
   const hubSections = navigationGroups.map((group) => (
     <section className="cu-section" key={group.label}>
@@ -635,9 +672,10 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
                 )}
               </section>
               {spacesSection}
+              {agentsSection}
             </>
           ) : null}
-          {rail === "spaces" ? spacesSection : null}
+          {rail === "spaces" ? <>{spacesSection}{agentsSection}</> : null}
           {rail === "planner" ? (
             <section className="cu-section">
               {navLink("/calendar", "Calendar", <CalendarDays size={15} />)}
@@ -749,6 +787,7 @@ const shellCss = [
   ".cu-head-actions{display:flex;align-items:center;gap:2px}",
   ".cu-head-actions button{display:grid;place-items:center;padding:3px;border-radius:5px}",
   ".cu-head-actions button:hover{background:rgba(123,104,238,.16);color:var(--cu-text)}",
+  ".cu-link--quiet{opacity:.65;font-size:12.5px}",
   ".cu-side-new{display:flex;gap:6px;padding:4px 8px 8px}",
   ".cu-side-new input{flex:1;min-width:0;font:inherit;font-size:13px;min-height:30px;padding:0 8px;border-radius:7px;border:1px solid var(--cu-border);background:var(--cu-bg);color:var(--cu-text)}",
   ".cu-side-new button{border:0;background:#7b68ee;color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:0 10px;border-radius:7px;cursor:pointer}",

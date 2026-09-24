@@ -44,11 +44,21 @@ export async function purgeExpired(userId: string): Promise<void> {
   }
 }
 
-export async function listConversations(userId: string, limit = 20): Promise<ConversationSummary[]> {
+/**
+ * A member's conversations, with one agent or with the Hub assistant itself.
+ *
+ * Kept apart on purpose. Asking Compliance Casey about a deadline and asking the Hub to build a list are
+ * different jobs, and one run of history mixing them is how somebody loses the thread of both.
+ */
+export async function listConversations(userId: string, limit = 20, agentId: string | null = null): Promise<ConversationSummary[]> {
   try {
     const result = await getDatabase()
-      .prepare("SELECT id, title, updated_at, expires_at FROM ai_conversations WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?")
-      .bind(userId, limit)
+      .prepare(
+        "SELECT id, title, updated_at, expires_at FROM ai_conversations WHERE user_id = ? " +
+        (agentId ? "AND agent_id = ? " : "AND agent_id IS NULL ") +
+        "ORDER BY updated_at DESC LIMIT ?"
+      )
+      .bind(...(agentId ? [userId, agentId, limit] : [userId, limit]))
       .all<{ id: string; title: string; updated_at: string; expires_at: string }>();
     return result.results.map((row) => ({ id: row.id, title: row.title, updatedAt: row.updated_at, expiresAt: row.expires_at }));
   } catch (error) {
@@ -79,7 +89,7 @@ export async function readConversation(conversationId: string, userId: string): 
   }
 }
 
-export async function ensureConversation(userId: string, conversationId: string | null, title: string): Promise<string> {
+export async function ensureConversation(userId: string, conversationId: string | null, title: string, agentId: string | null = null): Promise<string> {
   const db = getDatabase();
   const now = new Date();
   const nowIso = now.toISOString();
@@ -94,8 +104,8 @@ export async function ensureConversation(userId: string, conversationId: string 
   }
 
   const id = crypto.randomUUID();
-  await db.prepare("INSERT INTO ai_conversations (id, user_id, title, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)")
-    .bind(id, userId, title.slice(0, 100) || "New conversation", nowIso, nowIso, expires)
+  await db.prepare("INSERT INTO ai_conversations (id, user_id, title, agent_id, created_at, updated_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, userId, title.slice(0, 100) || "New conversation", agentId, nowIso, nowIso, expires)
     .run();
   return id;
 }
