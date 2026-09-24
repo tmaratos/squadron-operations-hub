@@ -81,7 +81,7 @@ export function DutiesBoard({ duties, outlook, canEdit }: { duties: RoleDuty[]; 
       <style>{dtCss}</style>
 
       <div className="dt-intro">
-        <p><strong>What each role has to do, and when.</strong> Every duty shows where the requirement comes from. A duty only counts once a person confirms it, so nothing here is taken on trust.</p>
+        <p><strong>What each role has to do, and when.</strong> Every duty shows where the requirement comes from. A duty only counts once a person confirms it, so nothing here is taken on trust — one you add yourself counts immediately, because adding it is confirming it.</p>
         {canEdit ? <button type="button" className="dt-btn dt-btn--primary" onClick={() => setShowForm(!showForm)}>{showForm ? "Close" : "+ Add a duty"}</button> : null}
       </div>
 
@@ -140,7 +140,15 @@ export function DutiesBoard({ duties, outlook, canEdit }: { duties: RoleDuty[]; 
 
       <section className="dt-section">
         <h2>Confirmed duties <span className="dt-count">{confirmed.length}</span></h2>
-        {confirmed.length === 0 ? <p className="dt-muted">Nothing confirmed yet.</p> : null}
+        {confirmed.length === 0 ? (
+          // An empty catalogue is the reason nothing is being routed, so say so here rather than leaving
+          // somebody to work out why the page is quiet.
+          <p className="dt-muted">
+            Nothing confirmed yet, so no duty is putting work on anybody&rsquo;s list. Add one above — what the role
+            has to do, how often, and the regulation or squadron document it comes from — and it starts counting
+            straight away. Reading a regulation below proposes duties instead, for someone to confirm.
+          </p>
+        ) : null}
         {roles.map((role) => (
           <div key={role} className="dt-role">
             <h3>{role}</h3>

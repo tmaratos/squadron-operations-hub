@@ -112,20 +112,31 @@ export async function listDuties(options: { includeRejected?: boolean } = {}): P
   }
 }
 
-export async function createDuty(input: DutyInput, userId: string): Promise<string> {
+/**
+ * Adds a duty.
+ *
+ * `confidence` is the difference between a duty a person entered and one a machine proposed. A proposal
+ * read out of a regulation starts UNVERIFIED and does nothing until somebody confirms it, because the
+ * reader can misread. A duty typed in by a member is already confirmed: the typing was the confirming,
+ * and asking them to agree with themselves a second time left the catalogue at zero confirmed duties -
+ * so nothing was ever routed, however much had been entered.
+ */
+export async function createDuty(input: DutyInput, userId: string, confidence: Confidence = "UNVERIFIED"): Promise<string> {
   const id = crypto.randomUUID();
   const now = nowIso();
   await getDatabase()
     .prepare(
       "INSERT INTO role_duties (id, workspace_id, role, title, detail, cadence, interval_years, due_month, due_day, anchor_date, lead_days, " +
-      "source_citation, source_url, source_item_id, source_document_id, source_quote, confidence, created_by, created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNVERIFIED', ?, ?, ?)"
+      "source_citation, source_url, source_item_id, source_document_id, source_quote, confidence, confirmed_by, confirmed_at, created_by, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
       id, WORKSPACE_ID, input.role.trim(), input.title.trim(), input.detail?.trim() || null, input.cadence,
       input.intervalYears ?? null, input.dueMonth ?? null, input.dueDay ?? null, input.anchorDate ?? null, input.leadDays ?? 30,
       input.sourceCitation?.trim() || null, input.sourceUrl?.trim() || null, input.sourceItemId ?? null,
-      input.sourceDocumentId ?? null, input.sourceQuote?.trim()?.slice(0, 600) || null, userId, now, now
+      input.sourceDocumentId ?? null, input.sourceQuote?.trim()?.slice(0, 600) || null,
+      confidence, confidence === "CONFIRMED" ? userId : null, confidence === "CONFIRMED" ? now : null,
+      userId, now, now
     )
     .run();
   return id;

@@ -7,7 +7,8 @@ import { createDuty, deleteDuty, listDuties, outlook, setDutyConfidence, updateD
 
 // The duty catalog API. The "import" action is the format an AI (or a person) writes into:
 // every duty must say which role owes it, how often it comes round, and where the requirement comes from.
-// Imported duties always arrive UNVERIFIED and do nothing until a member confirms them.
+// Imported duties always arrive UNVERIFIED and do nothing until a member confirms them. A duty a member
+// types in themselves is confirmed on the spot: they are the one who would otherwise be confirming it.
 
 const dutySchema = z.object({
   role: z.string().trim().min(2).max(80),
@@ -57,7 +58,7 @@ export async function POST(request: Request) {
 
     let summary = "";
     if (input.action === "create") {
-      await createDuty(input.duty, user.id);
+      await createDuty(input.duty, user.id, "CONFIRMED");
       summary = "added the duty " + input.duty.title + " for " + input.duty.role;
     } else if (input.action === "import") {
       for (const duty of input.duties) await createDuty(duty, user.id);
