@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
 import { MentionBox, renderMentions } from "./mention-box";
+import { LinkPanel } from "./link-panel";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
 
@@ -1926,6 +1927,11 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                 }} /> : null}
                 {!canEdit && !item.children.length ? <p className="tp-empty tp-pad">No subtasks.</p> : null}
               </div>
+            </section>
+
+            <section className="tp-section">
+              <h3 className="tp-h">What this depends on</h3>
+              <LinkPanel itemId={itemId} title={item.title} canEdit={canEdit} onOpen={onOpen} />
             </section>
 
             <section className="tp-section">

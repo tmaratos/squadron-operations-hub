@@ -865,8 +865,8 @@ html[data-theme="dark"] .home-task-list .home-task-row:hover { background: rgba(
 
 /* A home-page task row carries its own assignee and priority controls, so the grid that used to be the
    whole row is now the link inside it, with the controls beside it. */
-.home-task-row--wrap { display: flex; align-items: center; gap: 8px; position: relative; overflow: visible; border-bottom: 1px solid #e7ebf2; }
-.home-task-row--wrap:last-child { border-bottom: 0; }
+.home-task-list .home-task-row--wrap { display: flex; align-items: center; gap: 8px; position: relative; overflow: visible; border-bottom: 1px solid #e7ebf2; }
+.home-task-list .home-task-row--wrap:last-child { border-bottom: 0; }
 .home-task-list .home-task-row--wrap .home-task-link { flex: 1; min-width: 0; display: grid; grid-template-columns: 16px minmax(0,2.2fr) .7fr .6fr 18px; align-items: center; gap: 12px; padding: 7px 0; color: inherit; text-decoration: none; }
 .home-task-controls { display: flex; align-items: center; gap: 4px; flex: none; }
 @media (max-width: 760px) {
