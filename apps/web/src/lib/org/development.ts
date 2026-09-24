@@ -47,7 +47,11 @@ export async function listDevelopment(): Promise<MemberDevelopment[]> {
         // anything set here only overrides it.
         "SELECT p.capid, p.full_name, p.user_id, d.pd_level, d.specialty_track, d.track_rating, " +
         "d.duty_position AS set_position, COALESCE(d.ignore_source, 0) AS ignore_source, " +
-        "(SELECT pos.title FROM personnel_positions pos WHERE pos.incumbent_id = p.id ORDER BY pos.display_order LIMIT 1) AS chart_position " +
+        // Every position they hold, not the first one. Taking one meant the Logistics Officer read as
+        // Deputy Commander for Seniors and the Administration Officer as Finance Officer, so work
+        // belonging to a real, filled role looked like it belonged to nobody.
+        "(SELECT GROUP_CONCAT(pos.title, '; ') FROM (SELECT title, incumbent_id FROM personnel_positions ORDER BY display_order) pos " +
+        "WHERE pos.incumbent_id = p.id) AS chart_position " +
         "FROM personnel_members p LEFT JOIN member_development d ON d.capid = p.capid " +
         "WHERE p.capid IS NOT NULL AND p.status = 'ACTIVE' ORDER BY p.full_name COLLATE NOCASE"
       )
