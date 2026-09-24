@@ -4,6 +4,7 @@ import Link from "next/link";
 import { DashboardEditor } from "@/components/work/dashboard-editor";
 import { requireUser } from "@/lib/auth/session";
 import { getDashboard, listDashboards, loadDashboardItems, renderWidget, type DashboardItem, type WidgetResult } from "@/lib/work/dashboards";
+import { listGoals } from "@/lib/goals/goals";
 import { listPersonnelMembers, listPersonnelPositions } from "@/lib/operations/personnel";
 import { listDuties, outlook } from "@/lib/work/duties";
 import type { DashboardWidget } from "@/lib/work/types";
@@ -121,12 +122,15 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
   const { id } = await searchParams;
   const dashboards = await listDashboards();
   const selectedId = id ?? dashboards[0]?.id;
-  const [dashboard, items, positions, personnel] = await Promise.all([
+  const [dashboard, items, positions, personnel, allGoals] = await Promise.all([
     selectedId ? getDashboard(selectedId) : Promise.resolve(null),
     loadDashboardItems(),
     listPersonnelPositions().catch(() => []),
-    listPersonnelMembers().catch(() => [])
+    listPersonnelMembers().catch(() => []),
+    listGoals().catch(() => [])
   ]);
+  // Only the ones still being worked towards. A met goal is history, and history belongs on its own page.
+  const goals = allGoals.filter((goal) => goal.status === "OPEN");
 
   const today = isoDay(0);
   const open = items.filter((item) => !item.closed);
@@ -259,6 +263,30 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
                   </Link>
                 );
               })}
+            </section>
+          ) : null}
+
+          {goals.length ? (
+            <section className="cd-card cd-goals">
+              <div className="cd-card-head">
+                <h2>What we are trying to achieve</h2>
+                <Link className="cd-link" href="/goals">All goals</Link>
+              </div>
+              <div className="cd-goal-row">
+                {goals.slice(0, 4).map((goal) => (
+                  <Link key={goal.id} href="/goals" className="cd-goal">
+                    <span className="cd-goal-top">
+                      <strong>{goal.name}</strong>
+                      <em>{Math.round(goal.progress * 100)}%</em>
+                    </span>
+                    <span className="cd-goal-bar"><span style={{ width: Math.round(goal.progress * 100) + "%" }} /></span>
+                    <span className="cd-goal-meta">
+                      {goal.horizon === "LONG" ? "Beyond this year" : "This year"}
+                      {goal.daysLeft !== null ? (goal.daysLeft < 0 ? " · " + Math.abs(goal.daysLeft) + " days past" : " · " + goal.daysLeft + " days left") : ""}
+                    </span>
+                  </Link>
+                ))}
+              </div>
             </section>
           ) : null}
 
@@ -424,6 +452,17 @@ const cdCss = [
   ".cd-card-head h2{margin:0;font-size:14px;font-weight:650}",
   ".cd-muted{font-size:12px;color:var(--cd-muted)}",
   ".cd-count-pill{min-width:26px;text-align:center;font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--cd-track)}",
+  ".cd-goals{padding-bottom:14px}",
+  ".cd-goal-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;padding:0 20px}",
+  ".cd-goal{display:flex;flex-direction:column;gap:5px;padding:11px 13px;border:1px solid #e7ebf2;border-radius:9px;text-decoration:none;color:inherit}",
+  "html[data-theme=dark] .cd-goal{border-color:#34363b}",
+  ".cd-goal:hover{border-color:#7b68ee}",
+  ".cd-goal-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}",
+  ".cd-goal-top strong{font-size:12.5px;line-height:1.35}",
+  ".cd-goal-top em{font-style:normal;font-size:15px;font-weight:700;flex:none}",
+  ".cd-goal-bar{height:5px;border-radius:999px;background:rgba(123,104,238,.16);overflow:hidden}",
+  ".cd-goal-bar span{display:block;height:100%;background:#7b68ee;border-radius:999px}",
+  ".cd-goal-meta{font-size:11px;opacity:.6}",
   ".cd-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}",
   ".cd-three{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}",
   ".cd-rows{list-style:none;margin:0;padding:0}",

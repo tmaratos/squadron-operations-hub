@@ -91,6 +91,37 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
   const [menu, setMenu] = useState<{ kind: "space" | "list"; id: string; name: string; x: number; y: number } | null>(null);
   const [menuForm, setMenuForm] = useState<"rename" | "list" | null>(null);
   const [addingSpace, setAddingSpace] = useState(false);
+
+  // Come back to where you were.
+  //
+  // The app scrolls inside its main column rather than the window, so the browser's own scroll memory does
+  // nothing for it. Clicking the last thing on a long dashboard and pressing back put somebody at the top
+  // again, with the thing they were reading a screen and a half below.
+  useEffect(() => {
+    const main = document.querySelector(".cu-main");
+    if (!main) return;
+    const key = "hub-scroll:" + pathname;
+
+    try {
+      const saved = sessionStorage.getItem(key);
+      // After the page has drawn, or it is scrolled before there is anything to scroll.
+      if (saved) window.requestAnimationFrame(() => { main.scrollTop = Number(saved) || 0; });
+    } catch { /* a page that opens at the top is not a failure */ }
+
+    let pending = 0;
+    const remember = () => {
+      window.clearTimeout(pending);
+      pending = window.setTimeout(() => {
+        try { sessionStorage.setItem(key, String(main.scrollTop)); } catch { /* fine */ }
+      }, 150);
+    };
+    main.addEventListener("scroll", remember, { passive: true });
+    return () => {
+      window.clearTimeout(pending);
+      main.removeEventListener("scroll", remember);
+      try { sessionStorage.setItem(key, String(main.scrollTop)); } catch { /* fine */ }
+    };
+  }, [pathname]);
   // Dragging a whole department to a new place in the sidebar. `spaceDrop` is where it would land, and
   // which side of that department the line is drawn on.
   const [spaceDrop, setSpaceDrop] = useState<{ id: string; below: boolean } | null>(null);
