@@ -151,7 +151,20 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
     const open = expandAll || expanded[item.id];
     return (
       <div key={item.id}>
-        <div className="lw-row" onClick={() => setOpenId(item.id)}>
+        {/* A task can be picked up and dropped on any list in the sidebar. The id travels in the drag,
+            and the sidebar does the move - so filing something in the wrong place is not a dead end. */}
+        <div
+          className="lw-row"
+          draggable
+          onDragStart={(event) => {
+            event.dataTransfer.setData("application/x-hub-item", item.id);
+            event.dataTransfer.setData("text/plain", item.title);
+            event.dataTransfer.effectAllowed = "move";
+            document.body.dataset.draggingItem = item.id;
+          }}
+          onDragEnd={() => { delete document.body.dataset.draggingItem; }}
+          onClick={() => setOpenId(item.id)}
+        >
           <div className="lw-name" style={{ paddingLeft: depth * 26 }}>
             <button
               className="lw-caret"
@@ -318,7 +331,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
                 {cards.map((item) => {
                   const due = formatDue(item.dueOn);
                   return (
-                    <article key={item.id} className="lw-card" draggable={canEdit} onDragStart={(event) => event.dataTransfer.setData("text/plain", item.id)} onClick={() => setOpenId(item.id)}>
+                    <article key={item.id} className="lw-card" draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData("text/plain", item.id); event.dataTransfer.setData("application/x-hub-item", item.id); }} onClick={() => setOpenId(item.id)}>
                       <strong>{item.title}</strong>
                       {item.tags.length ? (
                         <div className="lw-card-tags">
@@ -1140,6 +1153,18 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
   const [description, setDescription] = useState("");
   const [tagDraft, setTagDraft] = useState("");
   const [pickingPerson, setPickingPerson] = useState(false);
+  // Where else this task could live. Fetched once the panel is open, because most of the time nobody
+  // needs it - but when a task is filed in the wrong place there was no way to move it at all.
+  const [allLists, setAllLists] = useState<Array<{ id: string; name: string; space: string }>>([]);
+
+  useEffect(() => {
+    let live = true;
+    fetch("/api/work/lists")
+      .then((response) => response.json() as Promise<{ lists?: Array<{ id: string; name: string; space: string }> }>)
+      .then((data) => { if (live) setAllLists(data.lists ?? []); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, []);
   const [comment, setComment] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -1230,7 +1255,23 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
         <style>{tpCss}</style>
         <header className="tp-top">
           <nav className="tp-crumbs" aria-label="Location">
-            <span className="tp-crumb">{item.listName}</span>
+            {canEdit && allLists.length > 1 ? (
+              <span className="tp-crumb tp-crumb--move">
+                {item.listName} <span aria-hidden="true">▾</span>
+                <select
+                  className="tp-overlay-select"
+                  value={item.listId}
+                  aria-label="Move this task to another list"
+                  onChange={(event) => { if (event.target.value !== item.listId) save({ listId: event.target.value }); }}
+                >
+                  {allLists.map((entry) => (
+                    <option key={entry.id} value={entry.id}>{entry.space} / {entry.name}</option>
+                  ))}
+                </select>
+              </span>
+            ) : (
+              <span className="tp-crumb">{item.listName}</span>
+            )}
             {item.ancestors.map((ancestor) => (
               <span key={ancestor.id} className="tp-crumb-wrap"><span className="tp-sep">/</span><button className="tp-crumb tp-crumb--link" onClick={() => onOpen(ancestor.id)}>{ancestor.title}</button></span>
             ))}
@@ -1476,6 +1517,7 @@ const tpCss = [
   ".tp-top{display:flex;align-items:center;gap:12px;height:48px;padding:0 12px 0 28px;border-bottom:1px solid var(--tp-border);flex:none}",
   ".tp-crumbs{flex:1;min-width:0;display:flex;align-items:center;gap:4px;font-size:12px;color:var(--tp-muted);overflow:hidden;white-space:nowrap}",
   ".tp-crumb-wrap{display:inline-flex;align-items:center;min-width:0}",
+  ".tp-crumb--move{position:relative;cursor:pointer;border-radius:5px;padding:1px 5px;margin:0 -5px}.tp-crumb--move:hover{background:rgba(123,104,238,.14);color:#7b68ee}",
   ".tp-crumb{overflow:hidden;text-overflow:ellipsis;max-width:260px}.tp-crumb--link{border:0;background:none;color:inherit;font:inherit;cursor:pointer;padding:0}.tp-crumb--link:hover{color:#7b68ee}",
   ".tp-sep{color:var(--tp-muted);opacity:.6;margin:0 4px}",
   ".tp-saving{font-size:11px;color:var(--tp-muted);white-space:nowrap}",
@@ -1622,6 +1664,7 @@ const lwCss = [
   ".lw-toast-close{border:0;background:none;color:inherit;opacity:.7;font-size:14px;cursor:pointer;padding:4px 6px;flex:none}",
   ".lw-colhead,.lw-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 110px 100px;align-items:center}",
   ".lw-colhead{font-size:11px;color:var(--lw-muted);padding:4px 0 6px 44px;border-bottom:1px solid var(--lw-border)}",
+  ".lw-row[draggable=true]{cursor:grab}.lw-row[draggable=true]:active{cursor:grabbing}",
   ".lw-row{min-height:38px;border-bottom:1px solid var(--lw-border);cursor:pointer}",
   ".lw-row:hover{background:var(--lw-hover)}",
   ".lw-name{display:flex;align-items:center;gap:7px;min-width:0;padding-right:10px}",

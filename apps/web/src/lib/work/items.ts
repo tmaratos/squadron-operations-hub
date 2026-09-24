@@ -294,3 +294,45 @@ export async function listAssignableUsers(): Promise<Array<{ id: string; fullNam
     .all<{ id: string; full_name: string; status: string }>();
   return result.results.map((user) => ({ id: user.id, fullName: user.full_name, pending: user.status === "PENDING" }));
 }
+
+/**
+ * Moves a task to another list.
+ *
+ * Statuses belong to a list, so the one the task is carrying means nothing in its new home - it is matched
+ * by name where the new list has the same step, and otherwise set to that list's first status. Custom field
+ * values are left alone: they belong to the old list's fields and simply stop being shown, rather than
+ * being deleted on the way past.
+ */
+export async function moveItem(itemId: string, listId: string): Promise<void> {
+  const db = getDatabase();
+  const now = nowIso();
+
+  const current = await db
+    .prepare("SELECT items.list_id, s.name AS status_name FROM items LEFT JOIN list_statuses s ON s.id = items.status_id WHERE items.id = ?")
+    .bind(itemId)
+    .first<{ list_id: string; status_name: string | null }>();
+  if (!current || current.list_id === listId) return;
+
+  const statuses = await db
+    .prepare("SELECT id, name FROM list_statuses WHERE list_id = ? ORDER BY display_order")
+    .bind(listId)
+    .all<{ id: string; name: string }>();
+  const matched = current.status_name
+    ? statuses.results.find((status) => status.name.toLowerCase() === current.status_name!.toLowerCase())
+    : undefined;
+  const statusId = matched?.id ?? statuses.results[0]?.id ?? null;
+
+  await db
+    .prepare(
+      "UPDATE items SET list_id = ?, status_id = ?, parent_id = NULL, " +
+      "display_order = (SELECT COALESCE(MAX(display_order), 0) + 1 FROM items WHERE list_id = ?), updated_at = ? WHERE id = ?"
+    )
+    .bind(listId, statusId, listId, now, itemId)
+    .run();
+
+  // Anything nested under it follows, so a move never splits a task from its subtasks across two lists.
+  await db
+    .prepare("UPDATE items SET list_id = ?, status_id = ?, updated_at = ? WHERE parent_id = ?")
+    .bind(listId, statusId, now, itemId)
+    .run();
+}

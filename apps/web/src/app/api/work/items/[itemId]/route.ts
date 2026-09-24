@@ -5,7 +5,7 @@ import { recordAuditEvent } from "@/lib/db/audit";
 import { notifyAssigned, notifyComment, notifyStatus } from "@/lib/notify/events";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { runAutomations, type AutomationEvent } from "@/lib/work/automations";
-import { addChecklist, addChecklistEntry, addComment, archiveItem, getItemDetail, setChecklistEntryDone, updateItem } from "@/lib/work/items";
+import { addChecklist, addChecklistEntry, addComment, archiveItem, getItemDetail, moveItem, setChecklistEntryDone, updateItem } from "@/lib/work/items";
 import { listStatuses } from "@/lib/work/structure";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
@@ -24,7 +24,9 @@ const updateItemSchema = z.object({
   comment: z.string().trim().min(1).max(10000).optional(),
   checklist: z.object({ name: z.string().trim().min(1).max(200) }).optional(),
   checklistEntry: z.object({ checklistId: z.string().trim().min(1).max(80), label: z.string().trim().min(1).max(300) }).optional(),
-  entryDone: z.object({ entryId: z.string().trim().min(1).max(80), done: z.boolean() }).optional()
+  entryDone: z.object({ entryId: z.string().trim().min(1).max(80), done: z.boolean() }).optional(),
+  // Moving the task somewhere else entirely, which is not a field on the task but a change of home.
+  listId: z.string().trim().min(1).max(80).optional()
 });
 
 type Params = { params: Promise<{ itemId: string }> };
@@ -49,7 +51,9 @@ export async function PATCH(request: Request, { params }: Params) {
     const before = await getItemDetail(itemId);
     if (!before) return NextResponse.json({ message: "Item not found." }, { status: 404 });
 
-    const { comment, checklist, checklistEntry, entryDone, ...changes } = updateItemSchema.parse(await request.json());
+    const { comment, checklist, checklistEntry, entryDone, listId, ...changes } = updateItemSchema.parse(await request.json());
+    // The move happens first, so anything else in the same request applies to the task in its new home.
+    if (listId && listId !== before.listId) await moveItem(itemId, listId);
     await updateItem(itemId, changes);
     if (comment) await addComment({ itemId, body: comment, userId: user.id });
     if (checklist) await addChecklist({ itemId, name: checklist.name });
@@ -84,6 +88,7 @@ export async function PATCH(request: Request, { params }: Params) {
     }
 
     const changed = Object.keys(changes);
+    if (listId && listId !== before.listId) changed.push("list");
     if (comment) changed.push("comment");
     if (checklist || checklistEntry || entryDone) changed.push("checklist");
     await recordAuditEvent({

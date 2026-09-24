@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   CalendarDays,
   Check,
@@ -63,9 +63,35 @@ function railFor(pathname: string): RailKey {
 
 export function AppShell({ children, user, workspaces, spaces }: { children: ReactNode; user: AuthenticatedUser; workspaces?: WorkspaceSummary[]; spaces?: SpaceNode[] }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [meOpen, setMeOpen] = useState(false);
+  // A task dragged from a list can be dropped on any other list here, which is the obvious way to move
+  // something filed in the wrong place - and was the thing people reached for first.
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [moveNote, setMoveNote] = useState<string | null>(null);
+
+  async function dropOnList(event: React.DragEvent, listId: string, listName: string) {
+    event.preventDefault();
+    setDropTarget(null);
+    const itemId = event.dataTransfer.getData("application/x-hub-item");
+    if (!itemId) return;
+    try {
+      const response = await fetch("/api/work/items/" + encodeURIComponent(itemId), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listId })
+      });
+      if (!response.ok) throw new Error("no");
+      setMoveNote("Moved to " + listName + ".");
+      window.setTimeout(() => setMoveNote(null), 4000);
+      router.refresh();
+    } catch {
+      setMoveNote("That could not be moved.");
+      window.setTimeout(() => setMoveNote(null), 4000);
+    }
+  }
   const [rail, setRail] = useState<RailKey>(railFor(pathname));
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -99,8 +125,20 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
   const railTitle = railItems.find((item) => item.key === rail)?.label ?? "Home";
 
-  const navLink = (href: string, label: string, icon: ReactNode, count?: number | string) => (
-    <Link key={href + label} href={href} className={"cu-link" + (active(href) ? " is-active" : "")}>
+  const navLink = (href: string, label: string, icon: ReactNode, count?: number | string, listId?: string) => (
+    <Link
+      key={href + label}
+      href={href}
+      className={"cu-link" + (active(href) ? " is-active" : "") + (dropTarget === listId ? " is-drop" : "")}
+      onDragOver={listId ? (event) => {
+        if (!event.dataTransfer.types.includes("application/x-hub-item")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "move";
+        setDropTarget(listId);
+      } : undefined}
+      onDragLeave={listId ? () => setDropTarget((current) => (current === listId ? null : current)) : undefined}
+      onDrop={listId ? (event) => dropOnList(event, listId, label) : undefined}
+    >
       <span className="cu-link-icon">{icon}</span>
       <span className="cu-link-label">{label}</span>
       {count !== undefined && count !== 0 ? <span className="cu-count">{count}</span> : null}
@@ -125,7 +163,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
               </button>
               {collapsed[space.id] ? null : (
                 <div className="cu-tree">
-                  {space.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems))}
+                  {space.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, list.id))}
                   {space.folders.map((folder) => (
                     <div key={folder.id}>
                       <button type="button" className="cu-link" onClick={() => toggle(folder.id)}>
@@ -134,7 +172,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
                       </button>
                       {collapsed[folder.id] ? null : (
                         <div className="cu-tree">
-                          {folder.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems))}
+                          {folder.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, list.id))}
                         </div>
                       )}
                     </div>
@@ -228,6 +266,8 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
           </div>
         </div>
       </header>
+
+      {moveNote ? <div className="cu-move-note" role="status">{moveNote}</div> : null}
 
       <nav className="cu-rail" aria-label="Apps">
         {railItems.map((item) => {
@@ -338,6 +378,8 @@ const shellCss = [
   ".cu-top-actions{display:flex;align-items:center;gap:6px}",
   ".cu-top-actions button,.cu-top-actions a{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:6px;background:none;color:var(--cu-muted);cursor:pointer}",
   ".cu-top-actions button:hover,.cu-top-actions a:hover{background:var(--cu-hover);color:var(--cu-text)}",
+  ".cu-link.is-drop{background:rgba(123,104,238,.22);outline:2px dashed #7b68ee;outline-offset:-2px}",
+  ".cu-move-note{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:90;padding:10px 16px;border-radius:10px;background:#7b68ee;color:#fff;font-size:13.5px;font-weight:600;box-shadow:0 12px 30px rgba(9,20,44,.28)}",
   ".cu-avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#5f55ee;color:#fff;font-size:11px;font-weight:700;border:0;cursor:pointer;font-family:inherit}",
   ".cu-me{position:relative}",
   ".cu-me-menu{position:absolute;top:36px;right:0;z-index:80;min-width:220px;padding:6px;border-radius:11px;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);box-shadow:0 16px 40px rgba(9,20,44,.2)}",
