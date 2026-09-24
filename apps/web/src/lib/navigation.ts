@@ -37,7 +37,7 @@ export const navigationGroups: NavigationGroup[] = [
       { label: "My tasks", href: "/tasks", icon: ClipboardCheck },
       { label: "All lists", href: "/spaces", icon: LayoutGrid },
       { label: "Calendar", href: "/calendar", icon: CalendarDays },
-      { label: "Command dashboard", href: "/dashboards", icon: LayoutDashboard }
+      { label: "Squadron health", href: "/dashboards", icon: LayoutDashboard }
     ]
   },
   {

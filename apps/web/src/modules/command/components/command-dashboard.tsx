@@ -6,7 +6,9 @@ import { OffersCard } from "@/components/work/offers-card";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import { loadDashboardItems, type DashboardItem } from "@/lib/work/dashboards";
 
-export async function CommandDashboard({ user: _user }: { user: AuthenticatedUser }) {
+// The everyday landing page: what needs this member, today. The command dashboard answers the other
+// question - how the squadron as a whole is doing - and the two should not try to be each other.
+export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
   const items = await loadDashboardItems();
   const open = items.filter((item) => !item.closed);
   const todayIso = today();
@@ -24,9 +26,14 @@ export async function CommandDashboard({ user: _user }: { user: AuthenticatedUse
     .sort((left, right) => (left.dueOn || "").localeCompare(right.dueOn || ""))
     .slice(0, 6);
 
-  const overviewMessage = open.length
-    ? String(open.length) + " open item" + (open.length === 1 ? "" : "s") + " across the squadron. Here is what is next."
-    : "No open work is recorded yet. Start by assigning a real owner and due date.";
+  const mine = open.filter((item) => item.assigneeIds.includes(user.id));
+  const mineLate = mine.filter((item) => item.dueOn && item.dueOn < todayIso).length;
+  const overviewMessage = mine.length
+    ? String(mine.length) + (mine.length === 1 ? " thing is yours" : " things are yours") +
+      (mineLate ? ", " + mineLate + " of them late." : ". Nothing of yours is late.")
+    : open.length
+      ? "Nothing is assigned to you. " + open.length + " open across the squadron."
+      : "No open work is recorded yet. Start by assigning a real owner and due date.";
 
   return (
     <div className="home-dashboard">
@@ -34,7 +41,7 @@ export async function CommandDashboard({ user: _user }: { user: AuthenticatedUse
         <section className="welcome-hero command-brief-hero">
           <div className="welcome-hero__shade" />
           <div className="welcome-hero__content">
-            <p className="command-brief__eyebrow">TN-170 Operations Hub · Squadron Overview</p>
+            <p className="command-brief__eyebrow">TN-170 Operations Hub · Your day</p>
             <h1>Squadron Overview</h1>
             <p>{overviewMessage}</p>
             <div className="hero-metrics" aria-label="Squadron work summary">
@@ -67,7 +74,7 @@ export async function CommandDashboard({ user: _user }: { user: AuthenticatedUse
           ) : (
             <EmptyState text="Nothing is overdue." />
           )}
-          <Link href="/dashboards" className="see-all-link">Open the command dashboard <ArrowRight size={16} /></Link>
+          <Link href="/dashboards" className="see-all-link">How is the squadron doing? Command dashboard <ArrowRight size={16} /></Link>
         </DashboardCard>
       </div>
 

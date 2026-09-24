@@ -4,6 +4,7 @@ import Link from "next/link";
 import { DashboardEditor } from "@/components/work/dashboard-editor";
 import { requireUser } from "@/lib/auth/session";
 import { getDashboard, listDashboards, loadDashboardItems, renderWidget, type DashboardItem, type WidgetResult } from "@/lib/work/dashboards";
+import { listPersonnelMembers, listPersonnelPositions } from "@/lib/operations/personnel";
 import { listDuties, outlook } from "@/lib/work/duties";
 import type { DashboardWidget } from "@/lib/work/types";
 
@@ -103,12 +104,21 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
   const { id } = await searchParams;
   const dashboards = await listDashboards();
   const selectedId = id ?? dashboards[0]?.id;
-  const [dashboard, items] = await Promise.all([selectedId ? getDashboard(selectedId) : Promise.resolve(null), loadDashboardItems()]);
+  const [dashboard, items, positions, personnel] = await Promise.all([
+    selectedId ? getDashboard(selectedId) : Promise.resolve(null),
+    loadDashboardItems(),
+    listPersonnelPositions().catch(() => []),
+    listPersonnelMembers().catch(() => [])
+  ]);
 
   const today = isoDay(0);
   const open = items.filter((item) => !item.closed);
   const overdueCount = open.filter((item) => item.dueOn && item.dueOn < today).length;
   const weekCount = open.filter((item) => item.dueOn && item.dueOn >= today && item.dueOn <= isoDay(7)).length;
+  // The numbers a commander is answerable for, rather than the ones a member is working through.
+  const unowned = open.filter((item) => item.dueOn && !item.assignees.length).length;
+  const vacancies = positions.filter((position) => position.assignmentStatus === "VACANT").length;
+  const onLeave = personnel.filter((member) => member.status === "LEAVE").length;
   const undated = open.filter((item) => !item.dueOn).length;
 
   const widgets: DashboardWidget[] = dashboard?.widgets ?? [];
@@ -161,8 +171,6 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
   const canEdit = user.globalRole !== "READ_ONLY";
 
   const hour = (new Date().getUTCHours() + 20) % 24;
-  const greeting = hour >= 4 && hour < 12 ? "Good morning" : hour >= 12 && hour < 18 ? "Good afternoon" : "Good evening";
-  const firstName = user.fullName.includes(",") ? user.fullName.split(",")[1].trim().split(" ")[0] : user.fullName.split(" ")[0];
 
   return (
     <div className="cd">
@@ -172,12 +180,19 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
         <div className="cd-hero-brand">
           <Image src="/tn170-logo.png" alt="TN-170 emblem" width={64} height={64} priority />
           <div>
-            <p className="cd-eyebrow">TN-170 Oak Ridge Composite Squadron</p>
-            <h1>{dashboard?.name ?? "Dashboards"}</h1>
+            <p className="cd-eyebrow">TN-170 Oak Ridge · Command view</p>
+            <h1>{dashboard?.name ?? "Command dashboard"}</h1>
+            {/* This page answers "how is the squadron doing", which is a different question from the
+                overview's "what needs me today" - so it reports the squadron, not the person reading it. */}
             <p className="cd-summary">
-              {greeting}, {firstName}. <strong>{open.length}</strong> open tasks,{" "}
+              <strong>{open.length}</strong> open across the squadron,{" "}
               <strong className={overdueCount ? "cd-text-late" : ""}>{overdueCount}</strong> overdue,{" "}
               <strong>{weekCount}</strong> due this week.
+            </p>
+            <p className="cd-summary cd-summary--health">
+              <strong className={unowned ? "cd-text-late" : ""}>{unowned}</strong> dated {unowned === 1 ? "task has" : "tasks have"} no owner ·{" "}
+              <strong>{vacancies}</strong> {vacancies === 1 ? "position" : "positions"} vacant ·{" "}
+              <strong>{onLeave}</strong> on leave
             </p>
           </div>
         </div>
@@ -340,6 +355,7 @@ const cdCss = [
   ".cd-hero-brand img{width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 4px 10px rgba(0,0,0,.35));flex:none}",
   ".cd-eyebrow{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.75}",
   ".cd-hero h1{margin:2px 0 4px;font-size:26px;font-weight:700;letter-spacing:-.01em;color:#fff}",
+  ".cd-summary--health{opacity:.9;font-size:13px}",
   ".cd-summary{margin:0;font-size:14px;opacity:.92}.cd-summary strong{font-weight:700}",
   ".cd-hero .cd-text-late{color:#ffb4b4}",
   ".cd-hero-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;position:relative;z-index:1}",
