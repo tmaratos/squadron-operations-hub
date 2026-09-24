@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
+import { notify } from "@/lib/notify/notifications";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 // Giving several tasks an owner at once.
@@ -45,6 +46,32 @@ export async function POST(request: Request) {
 
     for (let index = 0; index < statements.length; index += 50) {
       await db.batch(statements.slice(index, index + 50));
+    }
+
+    // Being given work is the thing a member most needs to hear about, and assigning in bulk is now the
+    // usual way it happens. Without this, the quickest way to hand out work was also the only way that
+    // told nobody.
+    if (person) {
+      const rows = await db
+        .prepare(
+          "SELECT i.id, i.title, i.list_id, i.due_on, l.name AS list_name FROM items i JOIN lists l ON l.id = i.list_id " +
+          "WHERE i.id IN (" + input.itemIds.map(() => "?").join(", ") + ")"
+        )
+        .bind(...input.itemIds)
+        .all<{ id: string; title: string; list_id: string; due_on: string | null; list_name: string }>();
+
+      await notify(
+        rows.results.map((row) => ({
+          userId: person!.id,
+          kind: "ASSIGNED" as const,
+          title: actor.fullName + " gave you: " + row.title,
+          body: "In " + row.list_name + "." + (row.due_on ? " Due " + row.due_on + "." : ""),
+          itemId: row.id,
+          listId: row.list_id,
+          url: (process.env.APP_URL ?? "https://tn170adminhub.tristanmaratos.com") + "/lists/" + row.list_id + "?item=" + row.id,
+          actorUserId: actor.id
+        }))
+      ).catch((error) => console.error(error));
     }
 
     await recordAuditEvent({
