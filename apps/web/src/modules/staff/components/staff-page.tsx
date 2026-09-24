@@ -194,6 +194,19 @@ export function StaffPage({
 
       {notice ? <div className={`inline-notice inline-notice--${notice.tone}`} role="status"><AlertCircle size={17} /><span>{notice.message}</span></div> : null}
 
+      {showForm && canManage ? (
+        <SectionCard title="Create duty assignment" description="One senior member may hold multiple duties. Mark one assignment as primary when that person owns the functional area.">
+          <form className="staff-assignment-form" onSubmit={addAssignment}>
+            <label>Member<select name="userId" required defaultValue=""><option value="" disabled>Select a senior member</option>{users.map((user) => <option key={user.id} value={user.id}>{user.fullName} · {formatRole(user.globalRole)}</option>)}</select></label>
+            <label>Functional area<select name="functionalAreaKey" defaultValue="command">{functionalAreas.map((area) => <option key={area.key} value={area.key}>{area.name}</option>)}</select></label>
+            <label>Duty title<input name="dutyTitle" required minLength={2} maxLength={180} placeholder="Safety Officer" /></label>
+            <label>Start date<input name="startsOn" type="date" defaultValue={today()} required /></label>
+            <label className="checkbox-field"><input name="isPrimary" type="checkbox" /> Primary owner for this functional area</label>
+            <div><button className="button button--primary" type="submit" disabled={creating}>{creating ? <LoaderCircle className="spin" size={16} /> : <UserRoundCog size={16} />}{creating ? "Assigning..." : "Create assignment"}</button><button className="button button--ghost" type="button" onClick={() => setShowForm(false)}>Cancel</button></div>
+          </form>
+        </SectionCard>
+      ) : null}
+
       <div className="content-grid content-grid--wide personnel-directory-grid">
         <SectionCard title="Current organization chart" description={canManage ? "Press Change on any position to say who holds it now. Whoever holds it gets that job's recurring work." : "Who holds which position in the squadron."}>
           <div className="org-position-list">
@@ -306,18 +319,6 @@ export function StaffPage({
         </div>
       </div>
 
-      {showForm && canManage ? (
-        <SectionCard title="Create duty assignment" description="One senior member may hold multiple duties. Mark one assignment as primary when that person owns the functional area.">
-          <form className="staff-assignment-form" onSubmit={addAssignment}>
-            <label>Member<select name="userId" required defaultValue=""><option value="" disabled>Select a senior member</option>{users.map((user) => <option key={user.id} value={user.id}>{user.fullName} · {formatRole(user.globalRole)}</option>)}</select></label>
-            <label>Functional area<select name="functionalAreaKey" defaultValue="command">{functionalAreas.map((area) => <option key={area.key} value={area.key}>{area.name}</option>)}</select></label>
-            <label>Duty title<input name="dutyTitle" required minLength={2} maxLength={180} placeholder="Safety Officer" /></label>
-            <label>Start date<input name="startsOn" type="date" defaultValue={today()} required /></label>
-            <label className="checkbox-field"><input name="isPrimary" type="checkbox" /> Primary owner for this functional area</label>
-            <div><button className="button button--primary" type="submit" disabled={creating}>{creating ? <LoaderCircle className="spin" size={16} /> : <UserRoundCog size={16} />}{creating ? "Assigning..." : "Create assignment"}</button><button className="button button--ghost" type="button" onClick={() => setShowForm(false)}>Cancel</button></div>
-          </form>
-        </SectionCard>
-      ) : null}
 
       <div className="content-grid content-grid--wide">
         <SectionCard title="Functional area ownership" description="Primary and supporting duty assignments by staff section.">

@@ -6,7 +6,9 @@ import { createDutyAssignment, listDutyAssignments } from "@/lib/operations/staf
 import { assertSameOrigin } from "@/lib/security/origin";
 
 const createSchema = z.object({
-  userId: z.string().uuid(),
+  // Not every account id is a UUID - invited members and anything seeded are not - and rejecting those
+  // here failed the form with "that was invalid" and no way to tell which field was the problem.
+  userId: z.string().trim().min(1).max(80),
   functionalAreaKey: z.string().trim().min(1).max(80),
   dutyTitle: z.string().trim().min(2).max(180),
   isPrimary: z.boolean().default(false),
