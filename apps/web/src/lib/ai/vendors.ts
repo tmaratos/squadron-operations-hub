@@ -51,12 +51,24 @@ export async function vendorChat(providerId: string, userId: string, messages: C
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": credentials.apiKey, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({ model, max_tokens: maxTokens, temperature: 0.2, system: system || undefined, messages: rest.map((message) => ({ role: message.role, content: message.content })) }),
+      // Anthropic has no JSON mode, so when JSON is wanted the reply is started for it with an opening
+      // brace. The model then has nowhere to put a preamble, and the brace is put back before parsing.
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        temperature: 0.2,
+        system: system || undefined,
+        messages: [
+          ...rest.map((message) => ({ role: message.role, content: message.content })),
+          ...(options.json ? [{ role: "assistant" as const, content: "{" }] : [])
+        ]
+      }),
       signal
     });
     if (!response.ok) throw new Error(await readError(response));
     const data = (await response.json()) as { content?: Array<{ type?: string; text?: string }> };
-    return (data.content ?? []).filter((part) => part.type === "text").map((part) => part.text ?? "").join("").trim();
+    const text = (data.content ?? []).filter((part) => part.type === "text").map((part) => part.text ?? "").join("").trim();
+    return options.json && !text.startsWith("{") ? "{" + text : text;
   }
 
   if (providerId === "google-gemini") {
