@@ -47,12 +47,34 @@ export async function createGmailDraft(input: {
     body: JSON.stringify({ message: { raw: toBase64Url(message) } })
   });
   if (!response.ok) {
-    const detail = (await response.text()).slice(0, 300);
-    throw new Error(response.status === 403 ? "Google refused the draft. Reconnect Gmail in My connections." : "The draft could not be created. " + detail);
+    throw new Error(await googleReason(response, "The draft could not be created"));
   }
   const payload = await response.json<{ id?: string; message?: { id?: string } }>();
   const draftId = payload.id ?? payload.message?.id ?? "";
   return { draftId, url: "https://mail.google.com/mail/u/0/#drafts" };
+}
+
+/** Google's own explanation, said plainly, with the fix where the reason is one we recognise. */
+async function googleReason(response: Response, prefix: string): Promise<string> {
+  let detail = "";
+  try {
+    const body = await response.json<{ error?: { message?: string; status?: string } }>();
+    detail = body.error?.message ?? "";
+  } catch {
+    detail = "";
+  }
+
+  if (/has not been used in project|is disabled/i.test(detail)) {
+    return prefix + ": the Gmail API is switched off for this Hub's Google project. An administrator has to " +
+      "enable it in the Google Cloud console, then try again. Google said: " + detail.slice(0, 300);
+  }
+  if (response.status === 401 || /invalid credentials|invalid_grant/i.test(detail)) {
+    return prefix + ": Google no longer accepts the saved permission. Sign out and back in, then reconnect Gmail.";
+  }
+  if (response.status === 403 && /insufficient|scope/i.test(detail)) {
+    return prefix + ": this Hub was not given permission for that. Reconnect Gmail in My connections and allow it when Google asks.";
+  }
+  return prefix + (detail ? ": " + detail.slice(0, 300) : " just now. Google gave no reason.");
 }
 
 // ---------------------------------------------------------------- reading
@@ -112,8 +134,9 @@ export async function listLabelledMail(userId: string, label = HUB_LABEL, limit 
   const query = new URLSearchParams({ q: "label:" + label, maxResults: String(limit) });
   const listResponse = await fetch(GMAIL_API + "/users/me/messages?" + query, { headers });
   if (!listResponse.ok) {
-    if (listResponse.status === 403) throw new Error("Google refused. Reconnect Gmail reading in My connections.");
-    throw new Error("Your mail could not be read just now.");
+    // Google says why. Replacing that with a guess - "reconnect Gmail" - sends people round a loop that
+    // cannot fix it, when the real answer is usually that the Gmail API is switched off for the project.
+    throw new Error(await googleReason(listResponse, "Your mail could not be read"));
   }
   const listed = await listResponse.json<{ messages?: Array<{ id: string }> }>();
 
