@@ -29,6 +29,7 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { CommandPalette } from "@/components/command-palette";
+import { ConfirmButton } from "@/components/confirm-button";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
@@ -70,7 +71,38 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   // A task dragged from a list can be dropped on any other list here, which is the obvious way to move
   // something filed in the wrong place - and was the thing people reached for first.
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  // Right-clicking a department or list gives the menu people expect from every other tool: rename it,
+  // remove it. Without it the only way to tidy the sidebar was to go and find another page.
+  const [menu, setMenu] = useState<{ kind: "space" | "list"; id: string; name: string; x: number; y: number } | null>(null);
+  const [renamingHere, setRenamingHere] = useState(false);
   const [moveNote, setMoveNote] = useState<string | null>(null);
+
+  function openMenu(event: React.MouseEvent, kind: "space" | "list", id: string, name: string) {
+    event.preventDefault();
+    event.stopPropagation();
+    setRenamingHere(false);
+    // Kept inside the window, so a right-click near the bottom does not open a menu nobody can reach.
+    setMenu({ kind, id, name, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 190) });
+  }
+
+  async function structure(body: Record<string, unknown>, done: string) {
+    try {
+      const response = await fetch("/api/work/structure", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(data.message || "That could not be done.");
+      setMenu(null);
+      setMoveNote(data.message ?? done);
+      window.setTimeout(() => setMoveNote(null), 4000);
+      router.refresh();
+    } catch (caught) {
+      setMoveNote(caught instanceof Error ? caught.message : "That could not be done.");
+      window.setTimeout(() => setMoveNote(null), 4000);
+    }
+  }
 
   async function dropOnList(event: React.DragEvent, listId: string, listName: string) {
     event.preventDefault();
@@ -109,6 +141,15 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   }, []);
 
   useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMenu(null); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
+  }, [menu]);
+
+  useEffect(() => {
     setRail(railFor(pathname));
     setMobileOpen(false);
     setMeOpen(false);
@@ -130,6 +171,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
       key={href + label}
       href={href}
       className={"cu-link" + (active(href) ? " is-active" : "") + (dropTarget === listId ? " is-drop" : "")}
+      onContextMenu={listId ? (event) => openMenu(event, "list", listId, label) : undefined}
       onDragOver={listId ? (event) => {
         if (!event.dataTransfer.types.includes("application/x-hub-item")) return;
         event.preventDefault();
@@ -156,7 +198,12 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
           {navLink("/tasks", "All Tasks", <ListChecks size={15} />)}
           {spaceTree.map((space) => (
             <div key={space.id}>
-              <button type="button" className="cu-link cu-space" onClick={() => toggle(space.id)}>
+              <button
+                type="button"
+                className="cu-link cu-space"
+                onClick={() => toggle(space.id)}
+                onContextMenu={(event) => openMenu(event, "space", space.id, space.name)}
+              >
                 <span className="cu-space-avatar">{space.name.slice(0, 1).toUpperCase()}</span>
                 <span className="cu-link-label">{space.name}</span>
                 {collapsed[space.id] ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
@@ -269,6 +316,55 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
 
       {moveNote ? <div className="cu-move-note" role="status">{moveNote}</div> : null}
 
+      {menu ? (
+        <div
+          className="cu-ctx"
+          style={{ left: menu.x, top: menu.y }}
+          role="menu"
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <p className="cu-ctx-title">{menu.name}</p>
+          {renamingHere ? (
+            <form
+              className="cu-ctx-rename"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const value = new FormData(event.currentTarget).get("name");
+                const name = typeof value === "string" ? value.trim() : "";
+                if (!name || name === menu.name) { setMenu(null); return; }
+                structure({ action: "rename", kind: menu.kind, id: menu.id, name }, "Renamed.");
+              }}
+            >
+              <input name="name" defaultValue={menu.name} maxLength={80} aria-label="New name" autoFocus />
+              <button type="submit" className="cu-ctx-item cu-ctx-item--go">Save</button>
+            </form>
+          ) : (
+            <>
+              <Link
+                role="menuitem"
+                className="cu-ctx-item"
+                href={menu.kind === "list" ? "/lists/" + menu.id : "/spaces"}
+                onClick={() => setMenu(null)}
+              >
+                Open
+              </Link>
+              <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => setRenamingHere(true)}>Rename</button>
+              {menu.kind === "space" ? (
+                <Link role="menuitem" className="cu-ctx-item" href="/spaces" onClick={() => setMenu(null)}>Add a list</Link>
+              ) : null}
+              <ConfirmButton
+                className="cu-ctx-item cu-ctx-item--danger"
+                question={menu.kind === "space" ? "Remove it and its lists?" : "Remove this list?"}
+                onConfirm={() => structure({ action: "archive", kind: menu.kind, id: menu.id }, "Removed.")}
+              >
+                Delete
+              </ConfirmButton>
+            </>
+          )}
+        </div>
+      ) : null}
+
       <nav className="cu-rail" aria-label="Apps">
         {railItems.map((item) => {
           const Icon = item.icon;
@@ -378,6 +474,15 @@ const shellCss = [
   ".cu-top-actions{display:flex;align-items:center;gap:6px}",
   ".cu-top-actions button,.cu-top-actions a{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:6px;background:none;color:var(--cu-muted);cursor:pointer}",
   ".cu-top-actions button:hover,.cu-top-actions a:hover{background:var(--cu-hover);color:var(--cu-text)}",
+  ".cu-ctx{position:fixed;z-index:95;min-width:200px;padding:6px;border-radius:11px;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);box-shadow:0 16px 40px rgba(9,20,44,.28)}",
+  "html[data-theme=dark] .cu-ctx{background:#25262a;border-color:#3a3d44}",
+  ".cu-ctx-title{margin:4px 8px 6px;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--cu-muted,#8b93a1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".cu-ctx-item{display:block;width:100%;text-align:left;border:0;background:none;color:inherit;font:inherit;font-size:13.5px;padding:7px 9px;border-radius:7px;cursor:pointer;text-decoration:none}",
+  ".cu-ctx-item:hover{background:rgba(123,104,238,.12)}",
+  ".cu-ctx-item--danger{color:#d03b3b;font-weight:600}",
+  ".cu-ctx-item--go{background:#7b68ee;color:#fff;font-weight:600;text-align:center}",
+  ".cu-ctx-rename{display:flex;flex-direction:column;gap:6px;padding:2px}",
+  ".cu-ctx-rename input{font:inherit;font-size:13.5px;min-height:32px;padding:0 8px;border-radius:7px;border:1px solid var(--cu-border,#d5d8de);width:100%;box-sizing:border-box}",
   ".cu-link.is-drop{background:rgba(123,104,238,.22);outline:2px dashed #7b68ee;outline-offset:-2px}",
   ".cu-move-note{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:90;padding:10px 16px;border-radius:10px;background:#7b68ee;color:#fff;font-size:13.5px;font-weight:600;box-shadow:0 12px 30px rgba(9,20,44,.28)}",
   ".cu-avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#5f55ee;color:#fff;font-size:11px;font-weight:700;border:0;cursor:pointer;font-family:inherit}",
