@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 // What you have to do, in the order you have to do it.
 //
@@ -47,9 +47,54 @@ function whenLabel(dueOn: string | null): string {
   return new Date(dueOn + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function MyTasks({ items, userId }: { items: TaskRow[]; userId: string }) {
+export function MyTasks({ items: initialItems, userId }: { items: TaskRow[]; userId: string }) {
+  const [items, setItems] = useState(initialItems);
   const [tab, setTab] = useState<Tab>("mine");
   const [search, setSearch] = useState("");
+  const [picked, setPicked] = useState<string[]>([]);
+  const [people, setPeople] = useState<Array<{ userId: string; fullName: string }>>([]);
+  const [owner, setOwner] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  // Only fetched when there is something to assign, so the ordinary case costs nothing.
+  useEffect(() => {
+    if (!picked.length || people.length) return;
+    fetch("/api/directory")
+      .then((response) => response.json() as Promise<{ people?: Array<{ userId: string | null; fullName: string }> }>)
+      .then((data) => setPeople((data.people ?? []).filter((entry): entry is { userId: string; fullName: string } => Boolean(entry.userId))))
+      .catch(() => undefined);
+  }, [picked.length, people.length]);
+
+  function toggle(id: string) {
+    setPicked((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
+  }
+
+  async function assign() {
+    if (!picked.length || !owner) return;
+    setBusy(true);
+    setNote(null);
+    try {
+      const response = await fetch("/api/work/assign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ itemIds: picked, userId: owner })
+      });
+      const data = (await response.json()) as { message?: string };
+      if (!response.ok) throw new Error(data.message || "Those could not be assigned.");
+      const person = people.find((entry) => entry.userId === owner);
+      setItems((current) => current.map((item) => (picked.includes(item.id)
+        ? { ...item, assigneeIds: [owner], assignees: person ? [person.fullName] : item.assignees }
+        : item)));
+      setPicked([]);
+      setOwner("");
+      setNote(data.message ?? "Done.");
+    } catch (caught) {
+      setNote(caught instanceof Error ? caught.message : "Those could not be assigned.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const open = useMemo(() => items.filter((item) => !item.closed), [items]);
   const mineCount = useMemo(() => open.filter((item) => item.assigneeIds.includes(userId)).length, [open, userId]);
@@ -101,13 +146,34 @@ export function MyTasks({ items, userId }: { items: TaskRow[]; userId: string })
         />
       </div>
 
+      {picked.length ? (
+        <div className="mt-bar">
+          <strong>{picked.length} selected</strong>
+          <select value={owner} onChange={(event) => setOwner(event.target.value)} aria-label="Give these to">
+            <option value="">Give these to…</option>
+            {people.map((person) => <option key={person.userId} value={person.userId}>{person.fullName}</option>)}
+          </select>
+          <button type="button" className="mt-go" disabled={!owner || busy} onClick={assign}>{busy ? "Assigning…" : "Assign"}</button>
+          <button type="button" className="mt-clear" onClick={() => setPicked([])}>Clear</button>
+        </div>
+      ) : null}
+
+      {note ? <p className="mt-note" role="status">{note}</p> : null}
+
       {groups.length ? (
         groups.map((group) => (
           <div key={group.label} className="mt-group">
             <h2>{group.label} <span className="mt-n">{group.rows.length}</span></h2>
             <ul>
               {group.rows.map((item) => (
-                <li key={item.id}>
+                <li key={item.id} className={picked.includes(item.id) ? "is-picked" : ""}>
+                  <input
+                    type="checkbox"
+                    className="mt-pick"
+                    checked={picked.includes(item.id)}
+                    aria-label={"Select " + item.title}
+                    onChange={() => toggle(item.id)}
+                  />
                   <Link href={"/lists/" + item.listId + "?item=" + item.id}>
                     <span className="mt-title">{item.title}</span>
                     <span className="mt-meta">
@@ -148,9 +214,18 @@ const mtCss = [
   ".mt-group h2{margin:0 0 8px;font-size:14px;letter-spacing:.02em;text-transform:uppercase;color:var(--cu-muted,#656f7d);display:flex;align-items:center;gap:8px}",
   ".mt-group ul{list-style:none;margin:0;padding:0;border:1px solid var(--cu-border,#e4e6eb);border-radius:12px;overflow:hidden;background:var(--cu-bg,#fff)}",
   "html[data-theme=dark] .mt-group ul{background:#222326;border-color:#3a3d44}",
+  ".mt-group li{display:flex;align-items:center;gap:0}",
   ".mt-group li + li{border-top:1px solid var(--cu-border,#eef0f3)}",
+  ".mt-group li.is-picked{background:rgba(123,104,238,.1)}",
+  ".mt-pick{flex:0 0 auto;width:17px;height:17px;margin:0 0 0 14px;accent-color:#7b68ee}",
+  ".mt-bar{position:sticky;top:8px;z-index:5;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:11px 14px;border-radius:11px;background:#7b68ee;color:#fff}",
+  ".mt-bar select{font:inherit;font-size:13.5px;min-height:34px;border-radius:8px;padding:0 8px;border:0}",
+  ".mt-go{border:0;background:#fff;color:#4b3fd0;font:inherit;font-size:13.5px;font-weight:700;padding:8px 16px;border-radius:8px;cursor:pointer}",
+  ".mt-go:disabled{opacity:.6;cursor:default}",
+  ".mt-clear{border:1px solid rgba(255,255,255,.5);background:none;color:#fff;font:inherit;font-size:13.5px;font-weight:600;padding:7px 13px;border-radius:8px;cursor:pointer}",
+  ".mt-note{margin:0;font-size:13px;padding:10px 13px;border-radius:9px;background:rgba(12,163,12,.12)}",
   "html[data-theme=dark] .mt-group li + li{border-color:#33363c}",
-  ".mt-group a{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 16px;text-decoration:none;color:inherit;flex-wrap:wrap}",
+  ".mt-group a{flex:1;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 16px;text-decoration:none;color:inherit;flex-wrap:wrap}",
   ".mt-group a:hover{background:rgba(123,104,238,.07)}",
   ".mt-title{font-size:14.5px;line-height:1.45;min-width:0;flex:1}",
   ".mt-meta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--cu-muted,#656f7d)}",
