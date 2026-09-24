@@ -1174,10 +1174,18 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
     setSaving(false);
   }
 
+  // Sizing a textarea to its text only works once the browser has laid it out. Called straight from a ref
+  // it runs too early - scrollHeight comes back as a single empty line - and the task name ends up eight
+  // pixels tall with twenty-six pixel type inside it, which is to say invisible. So it measures again on
+  // the next frame, and the CSS carries a minimum height in case even that is early.
   const grow = (element: HTMLTextAreaElement | null) => {
     if (!element) return;
-    element.style.height = "auto";
-    element.style.height = element.scrollHeight + "px";
+    const size = () => {
+      element.style.height = "auto";
+      element.style.height = Math.max(element.scrollHeight, 34) + "px";
+    };
+    size();
+    requestAnimationFrame(size);
   };
 
   if (!item) {
@@ -1475,7 +1483,7 @@ const tpCss = [
   ".tp-body{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 340px}",
   ".tp-main{overflow-y:auto;padding:24px 36px 64px;display:flex;flex-direction:column;gap:26px}",
   ".tp-side{border-left:1px solid var(--tp-border);background:var(--tp-side);display:flex;flex-direction:column;min-height:0}",
-  ".tp-title{display:block;width:calc(100% + 12px);border:0;outline:0;resize:none;overflow:hidden;background:transparent;color:inherit;font:inherit;font-size:26px;font-weight:700;line-height:1.3;padding:4px 6px;margin:0 -6px;border-radius:6px;box-shadow:none}",
+  ".tp-title{display:block;width:calc(100% + 12px);min-height:42px;border:0;outline:0;resize:none;overflow:hidden;background:transparent;color:inherit;font:inherit;font-size:26px;font-weight:700;line-height:1.3;padding:4px 6px;margin:0 -6px;border-radius:6px;box-shadow:none}",
   ".tp-title:hover:not(:disabled),.tp-title:focus{background:var(--tp-hover)}",
   ".tp-props{display:flex;flex-direction:column}",
   ".tp-prop{display:grid;grid-template-columns:160px minmax(0,1fr);align-items:center;min-height:38px;gap:12px;border-radius:6px}",
@@ -1562,7 +1570,7 @@ const tpCss = [
   "@media (max-width:760px){",
   ".tp-top{padding-left:16px}",
   ".tp-main{padding:16px 16px 40px;gap:20px}",
-  ".tp-title{font-size:20px;line-height:1.35}",
+  ".tp-title{font-size:20px;line-height:1.35;min-height:34px}",
   ".tp-saving{display:none}",
   ".tp-prop{grid-template-columns:minmax(0,1fr);gap:4px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--tp-border)}",
   ".tp-props{gap:0}",

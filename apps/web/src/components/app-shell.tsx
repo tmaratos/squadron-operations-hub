@@ -65,6 +65,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [meOpen, setMeOpen] = useState(false);
   const [rail, setRail] = useState<RailKey>(railFor(pathname));
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -84,6 +85,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   useEffect(() => {
     setRail(railFor(pathname));
     setMobileOpen(false);
+    setMeOpen(false);
   }, [pathname]);
 
   function toggleTheme() {
@@ -198,7 +200,32 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           <NotificationBell />
-          <span className="cu-avatar" title={user.fullName}>{initials(user.fullName)}</span>
+          <div className="cu-me">
+            <button
+              type="button"
+              className="cu-avatar"
+              title={user.fullName}
+              aria-haspopup="menu"
+              aria-expanded={meOpen}
+              onClick={() => setMeOpen(!meOpen)}
+            >
+              {initials(user.fullName)}
+            </button>
+            {meOpen ? (
+              <div className="cu-me-menu" role="menu">
+                <div className="cu-me-who">
+                  <strong>{user.fullName}</strong>
+                  <small>{user.email}</small>
+                </div>
+                <Link href="/connections" role="menuitem" className="cu-menu-item" onClick={() => setMeOpen(false)}>My connections</Link>
+                <Link href="/notifications" role="menuitem" className="cu-menu-item" onClick={() => setMeOpen(false)}>Notifications</Link>
+                {/* A real form post, so signing out works the same whether or not JavaScript is having a good day. */}
+                <form method="post" action="/api/auth/logout">
+                  <button type="submit" role="menuitem" className="cu-menu-item cu-menu-item--danger">Sign out</button>
+                </form>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
@@ -311,7 +338,16 @@ const shellCss = [
   ".cu-top-actions{display:flex;align-items:center;gap:6px}",
   ".cu-top-actions button,.cu-top-actions a{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:6px;background:none;color:var(--cu-muted);cursor:pointer}",
   ".cu-top-actions button:hover,.cu-top-actions a:hover{background:var(--cu-hover);color:var(--cu-text)}",
-  ".cu-avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#5f55ee;color:#fff;font-size:11px;font-weight:700}",
+  ".cu-avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:#5f55ee;color:#fff;font-size:11px;font-weight:700;border:0;cursor:pointer;font-family:inherit}",
+  ".cu-me{position:relative}",
+  ".cu-me-menu{position:absolute;top:36px;right:0;z-index:80;min-width:220px;padding:6px;border-radius:11px;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);box-shadow:0 16px 40px rgba(9,20,44,.2)}",
+  "html[data-theme=dark] .cu-me-menu{background:#25262a;border-color:#3a3d44}",
+  ".cu-me-who{padding:8px 10px 10px;border-bottom:1px solid var(--cu-border,#eef0f3);margin-bottom:4px;display:flex;flex-direction:column;gap:2px}",
+  "html[data-theme=dark] .cu-me-who{border-color:#33363c}",
+  ".cu-me-who strong{font-size:13.5px}.cu-me-who small{font-size:11.5px;color:var(--cu-muted,#656f7d);word-break:break-all}",
+  ".cu-me-menu form{margin:0}",
+  ".cu-me-menu .cu-menu-item{width:100%;text-align:left;border:0;background:none;font:inherit;font-size:13.5px;cursor:pointer}",
+  ".cu-menu-item--danger{color:#d03b3b;font-weight:600}",
   ".cu-rail{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0;background:var(--cu-rail);border-right:1px solid var(--cu-border);overflow-y:auto}",
   ".cu-rail-item{display:flex;flex-direction:column;align-items:center;gap:3px;width:56px;padding:5px 0;border-radius:8px;color:var(--cu-muted);text-decoration:none;font-size:10px;font-weight:600}",
   ".cu-rail-icon{display:grid;place-items:center;width:32px;height:28px;border-radius:8px}",
