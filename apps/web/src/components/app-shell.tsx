@@ -33,6 +33,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { CommandPalette } from "@/components/command-palette";
 import { ConfirmButton } from "@/components/confirm-button";
+import { PulseWidget } from "@/components/assist/pulse-widget";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { navigationGroups, utilityNavigation } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
@@ -527,6 +528,9 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           </div>
         </div>
       </header>
+
+      {/* On every page, because an assistant somebody has to navigate to is not helping. */}
+      <PulseWidget />
 
       {moveNote ? <div className="cu-move-note" role="status">{moveNote}</div> : null}
 
