@@ -10,6 +10,8 @@ import type { Automation, AutomationAction, AutomationCondition, AutomationTrigg
 type Person = { id: string; fullName: string; pending?: boolean };
 type Mode = "list" | "board" | "table" | "calendar";
 
+const MODE_ICON: Record<Mode, string> = { list: "☰", board: "▦", table: "▤", calendar: "🗓" };
+
 const MODE_LABELS: Record<Mode, string> = { list: "☰ List", board: "▦ Board", table: "▤ Table", calendar: "▣ Calendar" };
 const CATEGORY_LABELS: Record<ListStatus["category"], string> = { NOT_STARTED: "Not started", ACTIVE: "Active", DONE: "Done", CLOSED: "Closed" };
 type ApiResult = { message?: string; item: ItemDetail; items: WorkItem[] };
@@ -54,7 +56,48 @@ function StatusIcon({ status }: { status?: ListStatus }) {
 
 export function ListWorkspace({ list, initialItems, people, canEdit, initialOpenId }: { list: ListDetail; initialItems: WorkItem[]; people: Person[]; canEdit: boolean; initialOpenId?: string | null }) {
   const [items, setItems] = useState<WorkItem[]>(initialItems);
-  const [mode, setMode] = useState<Mode>("list");
+  // Which saved view is open. A list's views are real, named, saved things now, not four fixed tabs.
+  const [views, setViews] = useState(list.views);
+  const [viewId, setViewId] = useState<string>(() => (list.views.find((view) => view.isDefault) ?? list.views[0])?.id ?? "");
+  const view = views.find((entry) => entry.id === viewId) ?? views[0];
+  const mode: Mode = (view?.type as Mode) ?? "list";
+  const setMode = (next: Mode) => {
+    const found = views.find((entry) => entry.type === next);
+    if (found) setViewId(found.id);
+  };
+  const [viewBusy, setViewBusy] = useState(false);
+  const [renamingView, setRenamingView] = useState<string | null>(null);
+  const [addingView, setAddingView] = useState(false);
+
+  async function viewAction(body: Record<string, unknown>) {
+    setViewBusy(true);
+    try {
+      const response = await fetch("/api/work/lists/" + list.id + "/views", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = (await response.json()) as { views?: typeof list.views; message?: string };
+      if (!response.ok) throw new Error(data.message || "That view could not be saved.");
+      if (data.views) {
+        setViews(data.views);
+        if (!data.views.some((entry) => entry.id === viewId)) setViewId(data.views[0]?.id ?? "");
+      }
+      setRenamingView(null);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "That view could not be saved.");
+    } finally {
+      setViewBusy(false);
+    }
+  }
+
+  /** Changes to how this view looks are saved to the view, so they are still there tomorrow. */
+  function setViewConfig(change: Record<string, unknown>) {
+    if (!view) return;
+    const next = { ...view.config, ...change };
+    setViews((current) => current.map((entry) => (entry.id === view.id ? { ...entry, config: next } : entry)));
+    viewAction({ action: "update", id: view.id, config: next });
+  }
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
@@ -116,9 +159,40 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   };
 
   const needle = search.trim().toLowerCase();
-  const matches = (item: WorkItem) =>
-    (showClosed || !isClosed(item)) &&
-    (!needle || item.title.toLowerCase().includes(needle) || item.tags.some((tag) => tag.label.includes(needle)));
+  // What the open view keeps. Saved on the view, so a way of looking at the work survives the visit.
+  const viewFilters = view?.config.filters ?? {};
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const dayFrom = (days: number) => new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+
+  const matches = (item: WorkItem) => {
+    if (!(showClosed || viewFilters.includeClosed || !isClosed(item))) return false;
+    if (needle && !(item.title.toLowerCase().includes(needle) || item.tags.some((tag) => tag.label.includes(needle)))) return false;
+    if (viewFilters.priorities?.length && !(item.priority && viewFilters.priorities.includes(item.priority))) return false;
+    if (viewFilters.tags?.length && !item.tags.some((tag) => viewFilters.tags!.includes(tag.label))) return false;
+    if (viewFilters.assigneeIds?.length && !item.assignees.some((person) => viewFilters.assigneeIds!.includes(person.id))) return false;
+    if (viewFilters.due) {
+      const due = item.dueOn;
+      if (viewFilters.due === "none" && due) return false;
+      if (viewFilters.due === "overdue" && !(due && due < todayIso)) return false;
+      if (viewFilters.due === "today" && due !== todayIso) return false;
+      if (viewFilters.due === "next7" && !(due && due >= todayIso && due <= dayFrom(7))) return false;
+      if (viewFilters.due === "next14" && !(due && due >= todayIso && due <= dayFrom(14))) return false;
+    }
+    return true;
+  };
+
+  /** The order rows appear in, from the view's own sort. */
+  const inViewOrder = (rows: WorkItem[]): WorkItem[] => {
+    const by = view?.config.sortBy ?? "due";
+    if (by === "manual") return rows;
+    const rank: Record<string, number> = { URGENT: 0, HIGH: 1, NORMAL: 2, LOW: 3 };
+    return [...rows].sort((left, right) => {
+      if (by === "title") return left.title.localeCompare(right.title);
+      if (by === "priority") return (rank[left.priority ?? ""] ?? 9) - (rank[right.priority ?? ""] ?? 9);
+      if (by === "updated") return (right.updatedAt ?? "").localeCompare(left.updatedAt ?? "");
+      return (left.dueOn ?? "9999").localeCompare(right.dueOn ?? "9999");
+    });
+  };
 
   const childrenOf = useMemo(() => {
     const map = new Map<string, WorkItem[]>();
@@ -302,6 +376,46 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   }
 
   const visibleStatuses = list.statuses.filter((status) => showClosed || (status.category !== "DONE" && status.category !== "CLOSED"));
+
+  // Grouping by something other than the section. The sections stay their own rendering because they are
+  // the only grouping you can drag between - the rest are ways of reading, not ways of filing.
+  const groupBy = view?.config.groupBy ?? "status";
+  const otherGroups = (() => {
+    if (groupBy === "status") return null;
+    const rows = inViewOrder(topLevel.filter(matches));
+    if (groupBy === "none") return [{ key: "all", label: "Everything", color: "#7b68ee", rows }];
+
+    const buckets = new Map<string, { key: string; label: string; color: string; rows: WorkItem[] }>();
+    const put = (key: string, label: string, color: string, item: WorkItem) => {
+      const held = buckets.get(key) ?? { key, label, color, rows: [] };
+      held.rows.push(item);
+      buckets.set(key, held);
+    };
+
+    rows.forEach((item) => {
+      if (groupBy === "priority") {
+        const level = item.priority ?? "NONE";
+        put(level, level === "NONE" ? "no priority" : level.toLowerCase(), PRIORITY_COLOR[item.priority ?? "LOW"] ?? "#87909e", item);
+      } else if (groupBy === "assignee") {
+        if (!item.assignees.length) put("nobody", "nobody", "#87909e", item);
+        else item.assignees.forEach((person) => put(person.id, person.fullName, "#7b68ee", item));
+      } else {
+        const due = item.dueOn;
+        const key = !due ? "none" : due < todayIso ? "late" : due === todayIso ? "today" : due <= dayFrom(7) ? "week" : "later";
+        const labels: Record<string, string> = { late: "late", today: "today", week: "this week", later: "later", none: "no date" };
+        const colors: Record<string, string> = { late: "#e5484d", today: "#f5a623", week: "#7b68ee", later: "#87909e", none: "#87909e" };
+        put(key, labels[key], colors[key], item);
+      }
+    });
+
+    const order = groupBy === "priority"
+      ? ["URGENT", "HIGH", "NORMAL", "LOW", "NONE"]
+      : groupBy === "due" ? ["late", "today", "week", "later", "none"] : [];
+    const list = [...buckets.values()];
+    return order.length
+      ? list.sort((left, right) => order.indexOf(left.key) - order.indexOf(right.key))
+      : list.sort((left, right) => (left.key === "nobody" ? 1 : right.key === "nobody" ? -1 : left.label.localeCompare(right.label)));
+  })();
   const unassignedStatus = topLevel.filter((item) => matches(item) && (!item.statusId || !statusById.has(item.statusId)));
   const openCount = items.filter((item) => !isClosed(item)).length;
 
@@ -315,11 +429,73 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
       </header>
 
       <div className="lw-views" role="tablist">
-        {(Object.keys(MODE_LABELS) as Mode[]).map((value) => (
-          <button key={value} role="tab" aria-selected={mode === value} className={mode === value ? "is-active" : ""} onClick={() => setMode(value)}>
-            {MODE_LABELS[value]}
-          </button>
+        {views.map((entry) => (
+          renamingView === entry.id ? (
+            <form
+              key={entry.id}
+              className="lw-view-rename"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const value = new FormData(event.currentTarget).get("name");
+                const name = typeof value === "string" ? value.trim() : "";
+                if (name && name !== entry.name) viewAction({ action: "update", id: entry.id, name });
+                else setRenamingView(null);
+              }}
+            >
+              <input name="name" defaultValue={entry.name} maxLength={60} autoFocus aria-label="View name" onBlur={() => setRenamingView(null)} />
+            </form>
+          ) : (
+            <button
+              key={entry.id}
+              role="tab"
+              aria-selected={viewId === entry.id}
+              className={viewId === entry.id ? "is-active" : ""}
+              onClick={() => setViewId(entry.id)}
+              onDoubleClick={() => canEdit && setRenamingView(entry.id)}
+              title={entry.isDefault ? entry.name + " — opens by default" : "Double-click to rename"}
+            >
+              {MODE_ICON[entry.type as Mode] ?? "▤"} {entry.name}
+              {entry.isDefault ? <i className="lw-view-default" aria-label="Default view">•</i> : null}
+            </button>
+          )
         ))}
+        {canEdit ? (
+          <div className="lw-view-add">
+            <button type="button" className="lw-view-plus" onClick={() => setAddingView(!addingView)} aria-label="Add a view">+ View</button>
+            {addingView ? (
+              <form
+                className="lw-view-new"
+                onMouseDown={(event) => event.stopPropagation()}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const form = new FormData(event.currentTarget);
+                  const name = String(form.get("name") ?? "").trim();
+                  const type = String(form.get("type") ?? "list") as Mode;
+                  if (!name) return;
+                  setAddingView(false);
+                  viewAction({ action: "create", name, type, config: { groupBy: "status", sortBy: "due" } });
+                }}
+              >
+                <input name="name" placeholder="What this view is for" maxLength={60} autoFocus />
+                <select name="type" defaultValue="list">
+                  {(Object.keys(MODE_LABELS) as Mode[]).map((value) => <option key={value} value={value}>{MODE_LABELS[value]}</option>)}
+                </select>
+                <button type="submit" className="lw-primary" disabled={viewBusy}>Add</button>
+                <button type="button" className="lw-ghost" onClick={() => setAddingView(false)}>Cancel</button>
+              </form>
+            ) : null}
+          </div>
+        ) : null}
+        {view && canEdit ? (
+          <span className="lw-view-tools">
+            {!view.isDefault ? <button type="button" className="lw-ghost" disabled={viewBusy} onClick={() => viewAction({ action: "setDefault", id: view.id })}>Make default</button> : null}
+            {views.length > 1 ? (
+              <ConfirmButton className="lw-ghost lw-ghost--danger" question={"Delete the " + view.name + " view?"} onConfirm={() => viewAction({ action: "delete", id: view.id })}>
+                Delete view
+              </ConfirmButton>
+            ) : null}
+          </span>
+        ) : null}
       </div>
 
       {picked.length ? (
@@ -349,7 +525,37 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
 
       <div className="lw-toolbar">
         <div className="lw-chips">
-          <span className="lw-chip lw-chip--on">Group: Status</span>
+          <label className="lw-chip lw-chip--select">
+            Group
+            <select value={view?.config.groupBy ?? "status"} disabled={!canEdit} onChange={(event) => setViewConfig({ groupBy: event.target.value })} aria-label="Group by">
+              <option value="status">by section</option>
+              <option value="priority">by priority</option>
+              <option value="assignee">by owner</option>
+              <option value="due">by when</option>
+              <option value="none">not at all</option>
+            </select>
+          </label>
+          <label className="lw-chip lw-chip--select">
+            Sort
+            <select value={view?.config.sortBy ?? "due"} disabled={!canEdit} onChange={(event) => setViewConfig({ sortBy: event.target.value })} aria-label="Sort by">
+              <option value="due">soonest first</option>
+              <option value="priority">most urgent</option>
+              <option value="title">by name</option>
+              <option value="updated">recently changed</option>
+              <option value="manual">as arranged</option>
+            </select>
+          </label>
+          <label className="lw-chip lw-chip--select">
+            Show
+            <select value={viewFilters.due ?? ""} disabled={!canEdit} onChange={(event) => setViewConfig({ filters: { ...viewFilters, due: event.target.value || undefined } })} aria-label="Filter by date">
+              <option value="">everything</option>
+              <option value="overdue">overdue only</option>
+              <option value="today">due today</option>
+              <option value="next7">next 7 days</option>
+              <option value="next14">next 14 days</option>
+              <option value="none">no date set</option>
+            </select>
+          </label>
           <button className={"lw-chip" + (expandAll ? " lw-chip--on" : "")} onClick={() => setExpandAll(!expandAll)}>⑂ {expandAll ? "Expanded" : "Collapsed"}</button>
           <button className={"lw-chip" + (showClosed ? " lw-chip--on" : "")} onClick={() => setShowClosed(!showClosed)}>✓ Closed</button>
         </div>
@@ -369,10 +575,24 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
       </div>
       {error ? <p className="lw-error" role="alert">{error}</p> : null}
 
-      {mode === "list" ? (
+      {mode === "list" && otherGroups ? (
+        <div className="lw-groups">
+          {otherGroups.map((group) => (
+            <section key={group.key} className="lw-group">
+              <div className="lw-group-head">
+                <span className="lw-pill" style={{ background: group.color }}>{group.label}</span>
+                <span className="lw-n">{group.rows.length}</span>
+              </div>
+              <div className="lw-colhead"><span>Name</span><span>Assignee</span><span>Due date</span><span>Priority</span></div>
+              {group.rows.map((item) => renderRow(item, 0))}
+            </section>
+          ))}
+          {otherGroups.every((group) => !group.rows.length) ? <p className="lw-faint" style={{ padding: 16 }}>Nothing matches this view.</p> : null}
+        </div>
+      ) : mode === "list" ? (
         <div className="lw-groups">
           {visibleStatuses.map((status) => {
-            const rows = topLevel.filter((item) => item.statusId === status.id && matches(item));
+            const rows = inViewOrder(topLevel.filter((item) => item.statusId === status.id && matches(item)));
             const folded = collapsedGroups[status.id];
             return (
               // The board could take a dragged task; the list, which is what most people actually use,
@@ -1943,6 +2163,18 @@ const lwCss = [
   ".lw-also-list label{display:flex;align-items:center;gap:7px;font-size:13px;padding:4px 6px;border-radius:6px;cursor:pointer}",
   ".lw-also-list label:hover{background:rgba(123,104,238,.1)}",
   ".lw-also-list small{opacity:.6;font-size:11px;margin-left:auto}",
+  ".lw-chip--select{display:inline-flex;align-items:center;gap:5px;cursor:pointer}",
+  ".lw-chip--select select{border:0;background:none;color:inherit;font:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:0;outline:none}",
+  ".lw-view-rename input{font:inherit;font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid #7b68ee;background:transparent;color:inherit;width:150px}",
+  ".lw-view-default{font-style:normal;color:#7b68ee;margin-left:4px}",
+  ".lw-view-add{position:relative;display:inline-flex}",
+  ".lw-view-plus{border:0;background:none;color:var(--muted,#656f7d);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:6px 10px}",
+  ".lw-view-plus:hover{color:#7b68ee}",
+  ".lw-view-new{position:absolute;top:calc(100% + 4px);left:0;z-index:60;display:flex;gap:6px;align-items:center;padding:8px;border-radius:10px;border:1px solid var(--border,#e4e6eb);background:var(--surface,#fff);box-shadow:0 14px 34px rgba(9,20,44,.22)}",
+  "html[data-theme=dark] .lw-view-new{background:#26272b;border-color:#3a3c42}",
+  ".lw-view-new input,.lw-view-new select{font:inherit;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit}",
+  ".lw-view-tools{margin-left:auto;display:flex;gap:4px;align-items:center}",
+  ".lw-ghost--danger{color:#d03b3b}",
   ".lw-hidden-note{font-size:10.5px;opacity:.6;white-space:nowrap}",
   ".lw-add-section{display:block;margin:10px 0 0;border:1px dashed var(--border,#d5d8de);background:none;color:var(--muted,#656f7d);font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;cursor:pointer;width:100%;text-align:left}",
   ".lw-add-section:hover{border-color:#7b68ee;color:#7b68ee;border-style:solid}",
