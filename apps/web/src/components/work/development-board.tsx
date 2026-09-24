@@ -35,6 +35,7 @@ export function DevelopmentBoard() {
   const [canEdit, setCanEdit] = useState(false);
   const [useChart, setUseChart] = useState(true);
   const [note, setNote] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
@@ -158,35 +159,47 @@ export function DevelopmentBoard() {
                   <small>{member.capid}{member.hasAccount ? "" : " · no Hub account yet"}</small>
                 </div>
                 <div className="dv-pos">
-                  <input
-                    className="dv-input"
-                    key={member.capid + ":" + (member.dutyPosition ?? "")}
-                    defaultValue={member.dutyPosition ?? ""}
-                    placeholder="Duty position"
-                    disabled={!canEdit}
-                    onBlur={(event) => {
-                      const value = event.target.value.trim();
-                      if (value !== (member.dutyPosition ?? "")) {
-                        send({ action: "member", capid: member.capid, dutyPosition: value || null, clearPosition: !value }, member.capid);
-                      }
-                    }}
-                  />
+                  {/* Positions belong to the organisation chart on the People page. This page is about how
+                      far somebody has got, so it shows the position rather than asking for it again - and
+                      still lets it be corrected here when the chart is out of date. */}
+                  {correcting === member.capid ? (
+                    <input
+                      className="dv-input"
+                      key={member.capid + ":" + (member.dutyPosition ?? "")}
+                      defaultValue={member.dutyPosition ?? ""}
+                      placeholder="Duty position"
+                      autoFocus
+                      disabled={!canEdit}
+                      onBlur={(event) => {
+                        const value = event.target.value.trim();
+                        setCorrecting(null);
+                        if (value !== (member.dutyPosition ?? "")) {
+                          send({ action: "member", capid: member.capid, dutyPosition: value || null, clearPosition: !value }, member.capid);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="dv-position-text">
+                      {member.dutyPosition || <em>No position recorded</em>}
+                      {canEdit ? <button type="button" className="dv-link" onClick={() => setCorrecting(member.capid)}>Correct</button> : null}
+                    </span>
+                  )}
                   {member.positionSource === "CHART" ? (
                     <small className="dv-from">
-                      From the staff records.
+                      From the People page.
                       {canEdit ? (
                         <button type="button" className="dv-link" onClick={() => send({ action: "member", capid: member.capid, ignoreSource: true, clearPosition: true }, member.capid)}>Ignore it</button>
                       ) : null}
                     </small>
                   ) : member.ignoreSource && member.chartPosition ? (
                     <small className="dv-from">
-                      Staff records say &ldquo;{member.chartPosition}&rdquo;, ignored.
+                      The People page says &ldquo;{member.chartPosition}&rdquo;, ignored.
                       {canEdit ? (
                         <button type="button" className="dv-link" onClick={() => send({ action: "member", capid: member.capid, ignoreSource: false }, member.capid)}>Use it again</button>
                       ) : null}
                     </small>
                   ) : member.positionSource === "SET" && member.chartPosition && member.chartPosition !== member.dutyPosition ? (
-                    <small className="dv-from">Set here. Staff records say &ldquo;{member.chartPosition}&rdquo;.</small>
+                    <small className="dv-from">Corrected here. The People page says &ldquo;{member.chartPosition}&rdquo;.</small>
                   ) : null}
                 </div>
                 <select
@@ -248,6 +261,8 @@ const dvCss = [
   ".dv-switch{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;cursor:pointer}",
   ".dv-switch input{width:16px;height:16px;accent-color:#7b68ee}",
   ".dv-pos{display:flex;flex-direction:column;gap:3px;min-width:0}",
+  ".dv-position-text{display:flex;align-items:center;gap:8px;font-size:13.5px;min-height:30px}",
+  ".dv-position-text em{opacity:.5;font-style:normal}",
   ".dv-from{font-size:11.5px;color:var(--cu-muted,#8b93a1);line-height:1.4}",
   ".dv-link{border:0;background:none;padding:0 0 0 5px;color:#7b68ee;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;text-decoration:underline}",
   ".dv-input{font:inherit;font-size:13px;min-height:34px;padding:0 9px;border:1px solid var(--cu-border,#d5d8de);border-radius:8px;width:100%;box-sizing:border-box}",

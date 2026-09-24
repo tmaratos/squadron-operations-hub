@@ -10,8 +10,8 @@ export default async function DevelopmentPage() {
     <div className="page-stack">
       <PageHeader
         eyebrow="People"
-        title="Positions and development"
-        description="Who holds which duty position, how far each member has gone in professional development, and what the Hub can put in front of them next."
+        title="Professional development"
+        description="How far each member has gone, and what the Hub can put in front of them next. Who holds which position is recorded on the People and positions page; it is shown here for context and can be corrected if it is out of date."
       />
       <DevelopmentBoard />
     </div>
