@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import type { Agent } from "@/lib/ai/agents";
@@ -35,6 +36,7 @@ export function AgentsBoard({ agents: initial, canEdit }: { agents: Agent[]; can
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Partial<Agent> & { open?: boolean } | null>(null);
+  const router = useRouter();
 
   async function send(body: Record<string, unknown>) {
     setBusy(true);
@@ -50,6 +52,9 @@ export function AgentsBoard({ agents: initial, canEdit }: { agents: Agent[]; can
       if (data.agents) setAgents(data.agents);
       setEditing(null);
       setNote(data.message ?? "Saved.");
+      // The sidebar is rendered on the server, so a new agent never reached it and the list looked stale
+      // however many times the page was refreshed.
+      router.refresh();
     } catch (caught) {
       setNote(caught instanceof Error ? caught.message : "That could not be saved.");
     } finally {
@@ -170,14 +175,15 @@ const agCss = [
   ".ag h2{font-size:15px;margin:0 0 10px;display:flex;align-items:center;gap:8px}",
   ".ag-n{font-size:12px;font-weight:600;opacity:.6}",
   ".ag-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(320px,1fr))}",
-  ".ag-card{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--border,#e4e6eb);border-radius:10px;background:var(--surface,#fff)}",
+  ".ag-card{display:grid;grid-template-columns:38px 1fr;grid-template-areas:'face body' 'face actions';gap:6px 12px;align-items:start;padding:14px;border:1px solid var(--border,#e4e6eb);border-radius:10px;background:var(--surface,#fff)}",
+  ".ag-card .ag-face{grid-area:face}.ag-body{grid-area:body}",
   "html[data-theme=dark] .ag-card{background:#222326;border-color:#34363b}",
   ".ag-face{font-size:24px;line-height:1;flex:none;width:38px;height:38px;display:grid;place-items:center;border-radius:9px;background:rgba(123,104,238,.14)}",
   ".ag-body{flex:1;min-width:0}",
   ".ag-body h3{margin:0;font-size:14.5px}",
   ".ag-body p{margin:3px 0 0;font-size:12.5px}",
   ".ag-meta{opacity:.6;font-size:11.5px !important}",
-  ".ag-actions{display:flex;flex-direction:column;gap:5px;flex:none}",
+  ".ag-actions{grid-area:actions;display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}",
   ".ag-btn{border:1px solid var(--border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;white-space:nowrap;text-decoration:none;text-align:center}",
   ".ag-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}",
   ".ag-btn--danger{color:#d03b3b}.ag-btn--danger:hover{border-color:#d03b3b}",

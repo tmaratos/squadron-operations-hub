@@ -196,7 +196,9 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
   useEffect(() => {
     try {
       const saved = localStorage.getItem("hub-collapsed");
-      if (saved) setCollapsed(JSON.parse(saved) as Record<string, boolean>);
+      // Merged over the defaults, never in place of them. Replacing them dropped the Agents default, which
+      // left it neither open nor closed - and a section in that state took two presses to open.
+      if (saved) setCollapsed((current) => ({ ...current, ...(JSON.parse(saved) as Record<string, boolean>) }));
     } catch {
       // A browser with site data blocked still gets a working sidebar, just not a remembered one.
     }
@@ -412,6 +414,9 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
 
   // Agents live in the sidebar the way people do, but folded away by default: a squadron with a dozen of
   // them should not lose its lists behind a wall of faces.
+  // Folded by default in the sidebar, but never on the AI rail: opening AI to be shown a heading and
+  // nothing else is the whole point of that rail missed.
+  const agentsFolded = rail !== "ai" && (collapsed.agents ?? true);
   const agentsSection = agents && agents.length ? (
     <section className="cu-section">
       <div className="cu-section-head">
@@ -420,7 +425,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           <Link href="/agents" aria-label="Manage agents" title="Manage agents"><Plus size={14} /></Link>
         </span>
       </div>
-      {collapsed.agents === false ? (
+      {agentsFolded ? null : (
         <>
           {agents.map((agent) => (
             <Link
@@ -439,7 +444,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           ))}
           <Link href="/agents" className="cu-link cu-link--quiet"><span className="cu-link-icon">⚙</span><span className="cu-link-label">Manage agents</span></Link>
         </>
-      ) : null}
+      )}
     </section>
   ) : null;
 
