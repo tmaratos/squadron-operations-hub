@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canApproveAccounts } from "@/lib/auth/types";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { createPosition, listPersonnelMembers, listPersonnelPositions, removePosition, setPositionHolder } from "@/lib/operations/personnel";
+import { createPosition, listPersonnelMembers, listPersonnelPositions, removePosition, setMemberStatus, setPositionHolder } from "@/lib/operations/personnel";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 // Changing the organisation chart from inside the app.
@@ -32,7 +32,14 @@ const schema = z.discriminatedUnion("action", [
     functionalAreaKey: z.string().trim().min(1).max(80),
     reportsToPositionId: z.string().trim().max(80).nullable().optional()
   }),
-  z.object({ action: z.literal("remove"), positionId: z.string().trim().min(1).max(80) })
+  z.object({ action: z.literal("remove"), positionId: z.string().trim().min(1).max(80) }),
+  z.object({
+    action: z.literal("member"),
+    memberId: z.string().trim().min(1).max(80),
+    status: z.enum(["ACTIVE", "LEAVE", "INACTIVE"]),
+    // An empty string clears the note rather than leaving yesterday's explanation in place.
+    statusNote: z.string().trim().max(400).nullable().optional()
+  })
 ]);
 
 export async function POST(request: Request) {
@@ -65,6 +72,25 @@ export async function POST(request: Request) {
         message: position?.incumbentName
           ? position.title + " is " + position.incumbentName + " now. Recurring work for that job goes to them."
           : (position?.title ?? "That position") + " is vacant. Its recurring work will have no owner until somebody holds it."
+      });
+    }
+
+    if (input.action === "member") {
+      await setMemberStatus(input);
+      const members = await listPersonnelMembers();
+      const member = members.find((entry) => entry.id === input.memberId);
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "MEMBER_STATUS_SET",
+        entityType: "personnel_member",
+        entityId: input.memberId,
+        summary: user.fullName + " marked " + (member?.fullName ?? "a member") + " as " + input.status.toLowerCase(),
+        metadata: { status: input.status }
+      });
+      return NextResponse.json({
+        positions: await listPersonnelPositions(),
+        members,
+        message: (member?.fullName ?? "That member") + " is " + (input.status === "LEAVE" ? "on leave" : input.status === "INACTIVE" ? "inactive" : "active") + "."
       });
     }
 

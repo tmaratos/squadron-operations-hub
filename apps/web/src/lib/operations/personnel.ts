@@ -234,3 +234,20 @@ export async function createPosition(input: {
 export async function removePosition(positionId: string): Promise<void> {
   await getDatabase().prepare("DELETE FROM personnel_positions WHERE id = ?").bind(positionId).run();
 }
+
+/**
+ * Sets whether a member is active, on leave, or inactive, and the note that goes with it.
+ *
+ * The note is free text and clearing it must actually clear it: "on leave, covered by Johnson" stops being
+ * true the day the cover ends, and a note nobody can delete is worse than no note.
+ */
+export async function setMemberStatus(input: {
+  memberId: string;
+  status: "ACTIVE" | "LEAVE" | "INACTIVE";
+  statusNote?: string | null;
+}): Promise<void> {
+  await getDatabase()
+    .prepare("UPDATE personnel_members SET status = ?, status_note = ?, updated_at = ? WHERE id = ?")
+    .bind(input.status, input.statusNote?.trim() || null, new Date().toISOString(), input.memberId)
+    .run();
+}

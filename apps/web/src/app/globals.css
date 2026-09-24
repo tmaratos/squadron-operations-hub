@@ -855,3 +855,10 @@ html[data-theme="dark"] .home-task-list .home-task-row:hover { background: rgba(
 .org-edit { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 4px 0; }
 .org-edit select { font: inherit; font-size: 13px; min-height: 32px; padding: 0 8px; border-radius: 7px; max-width: 260px; }
 .org-edit__acting, .org-edit__cancel { border: 1px solid var(--border, #2a3a52); background: none; color: inherit; font: inherit; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 7px; cursor: pointer; }
+
+/* Marking somebody on leave, and the note that goes with it. */
+.member-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.member-edit select, .member-edit input { font: inherit; font-size: 12.5px; min-height: 30px; padding: 0 8px; border-radius: 7px; }
+.member-edit input { flex: 1 1 160px; min-width: 0; }
+.member-edit__save, .member-edit__cancel { border: 1px solid var(--border, #2a3a52); background: none; color: inherit; font: inherit; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 7px; cursor: pointer; }
+.member-edit__save { background: #7b68ee; border-color: #7b68ee; color: #fff; }

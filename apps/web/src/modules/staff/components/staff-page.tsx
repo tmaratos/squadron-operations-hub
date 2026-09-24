@@ -42,6 +42,9 @@ export function StaffPage({
   // The chart is editable now, so it has to be state rather than a prop read once.
   const [positions, setPositions] = useState(personnelPositions);
   const [editingPosition, setEditingPosition] = useState<string | null>(null);
+  const [members, setMembers] = useState(personnelMembers);
+  const [editingMember, setEditingMember] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -138,10 +141,33 @@ export function StaffPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "assign", positionId, incumbentId, assignmentStatus })
       });
-      const data = (await response.json()) as { positions?: PersonnelPositionRecord[]; message?: string };
+      const data = (await response.json()) as { positions?: PersonnelPositionRecord[]; members?: PersonnelMemberRecord[]; message?: string };
       if (!response.ok) throw new Error(data.message || "That change could not be saved.");
       if (data.positions) setPositions(data.positions);
+      if (data.members) setMembers(data.members);
       setEditingPosition(null);
+      setNotice({ tone: "success", message: data.message ?? "Saved." });
+    } catch (caught) {
+      setNotice({ tone: "danger", message: caught instanceof Error ? caught.message : "That change could not be saved." });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function saveMember(memberId: string, status: "ACTIVE" | "LEAVE" | "INACTIVE", statusNote: string | null) {
+    setBusyId(memberId);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/staff/positions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "member", memberId, status, statusNote })
+      });
+      const data = (await response.json()) as { members?: PersonnelMemberRecord[]; positions?: PersonnelPositionRecord[]; message?: string };
+      if (!response.ok) throw new Error(data.message || "That change could not be saved.");
+      if (data.members) setMembers(data.members);
+      if (data.positions) setPositions(data.positions);
+      setEditingMember(null);
       setNotice({ tone: "success", message: data.message ?? "Saved." });
     } catch (caught) {
       setNotice({ tone: "danger", message: caught instanceof Error ? caught.message : "That change could not be saved." });
@@ -217,15 +243,50 @@ export function StaffPage({
         </SectionCard>
 
         <div className="personnel-directory-side">
-          <SectionCard title="Personnel directory" description="Directory records exist independently of Hub login accounts.">
+          <SectionCard title="Personnel directory" description={canManage ? "Press Change to mark somebody on leave or inactive, or to edit the note beside their name. Clearing the note removes it." : "Directory records exist independently of Hub login accounts."}>
             <div className="personnel-member-list">
-              {personnelMembers.map((member) => {
-                const memberPositions = personnelPositions.filter((position) => position.incumbentId === member.id);
+              {members.map((member) => {
+                const memberPositions = positions.filter((position) => position.incumbentId === member.id);
                 return (
                   <article key={member.id}>
                     <div className="member-avatar">{initials(member.fullName)}</div>
-                    <div><strong>{member.rank} {member.fullName}</strong><span>{memberPositions.map((position) => position.title).join(" · ") || "No current position"}</span>{member.statusNote ? <small>{member.statusNote}</small> : null}</div>
-                    <span className={`personnel-state personnel-state--${member.status.toLowerCase()}`}>{member.status === "LEAVE" ? "On leave" : member.userId ? "Hub linked" : "Directory"}</span>
+                    <div>
+                      <strong>{member.rank} {member.fullName}</strong>
+                      <span>{memberPositions.map((position) => position.title).join(" · ") || "No current position"}</span>
+                      {editingMember === member.id ? (
+                        <div className="member-edit">
+                          <select
+                            defaultValue={member.status}
+                            disabled={busyId === member.id}
+                            aria-label={"Status for " + member.fullName}
+                            onChange={(event) => saveMember(member.id, event.target.value as "ACTIVE" | "LEAVE" | "INACTIVE", noteDraft.trim() || null)}
+                          >
+                            <option value="ACTIVE">Active</option>
+                            <option value="LEAVE">On leave</option>
+                            <option value="INACTIVE">Inactive</option>
+                          </select>
+                          <input
+                            value={noteDraft}
+                            maxLength={400}
+                            placeholder="Note (optional)"
+                            aria-label={"Note for " + member.fullName}
+                            onChange={(event) => setNoteDraft(event.target.value)}
+                          />
+                          <button type="button" className="member-edit__save" disabled={busyId === member.id} onClick={() => saveMember(member.id, member.status, noteDraft.trim() || null)}>Save</button>
+                          <button type="button" className="member-edit__cancel" onClick={() => setEditingMember(null)}>Close</button>
+                        </div>
+                      ) : member.statusNote ? <small>{member.statusNote}</small> : null}
+                    </div>
+                    {canManage && editingMember !== member.id ? (
+                      <button
+                        type="button"
+                        className="org-change"
+                        onClick={() => { setEditingMember(member.id); setNoteDraft(member.statusNote ?? ""); }}
+                      >
+                        Change
+                      </button>
+                    ) : null}
+                    <span className={`personnel-state personnel-state--${member.status.toLowerCase()}`}>{member.status === "LEAVE" ? "On leave" : member.status === "INACTIVE" ? "Inactive" : member.userId ? "Hub linked" : "Directory"}</span>
                   </article>
                 );
               })}
