@@ -111,6 +111,34 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
     }
   }
 
+  // Picking several tasks to deal with together. Clearing up is never a one-task job.
+  const [picked, setPicked] = useState<string[]>([]);
+  const [allLists, setAllLists] = useState<Array<{ id: string; name: string; space: string }>>([]);
+
+  useEffect(() => {
+    let live = true;
+    fetch("/api/work/lists")
+      .then((response) => response.json() as Promise<{ lists?: Array<{ id: string; name: string; space: string }> }>)
+      .then((data) => { if (live) setAllLists(data.lists ?? []); })
+      .catch(() => undefined);
+    return () => { live = false; };
+  }, []);
+
+  function togglePick(id: string) {
+    setPicked((current) => (current.includes(id) ? current.filter((entry) => entry !== id) : [...current, id]));
+  }
+
+  async function bulk(body: Record<string, unknown>) {
+    setError("");
+    try {
+      await send("/api/work/items/bulk", "POST", body);
+      setPicked([]);
+      await reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not do that.");
+    }
+  }
+
   async function removeItem(itemId: string) {
     setError("");
     try {
@@ -177,6 +205,16 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
           onClick={() => setOpenId(item.id)}
         >
           <div className="lw-name" style={{ paddingLeft: depth * 26 }}>
+            {canEdit ? (
+              <input
+                type="checkbox"
+                className="lw-pick"
+                checked={picked.includes(item.id)}
+                aria-label={"Select " + item.title}
+                onClick={(event) => event.stopPropagation()}
+                onChange={() => togglePick(item.id)}
+              />
+            ) : null}
             <button
               className="lw-caret"
               aria-label={open ? "Hide subtasks" : "Show subtasks"}
@@ -246,6 +284,31 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
           </button>
         ))}
       </div>
+
+      {picked.length ? (
+        <div className="lw-bulk">
+          <strong>{picked.length} selected</strong>
+          <select
+            className="lw-bulk-move"
+            value=""
+            aria-label="Move the selected tasks"
+            onChange={(event) => { if (event.target.value) bulk({ action: "move", itemIds: picked, listId: event.target.value }); }}
+          >
+            <option value="">Move to…</option>
+            {allLists.filter((entry) => entry.id !== list.id).map((entry) => (
+              <option key={entry.id} value={entry.id}>{entry.space} / {entry.name}</option>
+            ))}
+          </select>
+          <ConfirmButton
+            className="lw-bulk-delete"
+            question={"Delete " + picked.length + "?"}
+            onConfirm={() => bulk({ action: "delete", itemIds: picked })}
+          >
+            Delete
+          </ConfirmButton>
+          <button type="button" className="lw-bulk-clear" onClick={() => setPicked([])}>Clear</button>
+        </div>
+      ) : null}
 
       <div className="lw-toolbar">
         <div className="lw-chips">
@@ -1659,6 +1722,11 @@ const lwCss = [
   ".lw-views{display:flex;gap:2px;padding:0 20px;border-bottom:1px solid var(--lw-border)}",
   ".lw-views button{border:0;border-bottom:2px solid transparent;background:none;color:var(--lw-muted);font:inherit;font-size:13px;padding:8px 10px;cursor:pointer}",
   ".lw-views button.is-active{color:inherit;border-bottom-color:#7b68ee;font-weight:600}",
+  ".lw-pick{width:15px;height:15px;margin-right:9px;flex:0 0 auto;accent-color:#7b68ee}",
+  ".lw-bulk{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 24px;padding:10px 14px;border-radius:10px;background:#7b68ee;color:#fff}",
+  ".lw-bulk select{font:inherit;font-size:13px;min-height:32px;border-radius:7px;border:0;padding:0 8px;max-width:240px}",
+  ".lw-bulk-delete{border:0;background:#fff;color:#c0392b;font:inherit;font-size:13px;font-weight:700;padding:7px 14px;border-radius:7px;cursor:pointer}",
+  ".lw-bulk-clear{border:1px solid rgba(255,255,255,.5);background:none;color:#fff;font:inherit;font-size:13px;font-weight:600;padding:6px 12px;border-radius:7px;cursor:pointer}",
   ".lw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:8px 24px;border-bottom:1px solid var(--lw-border)}",
   ".lw-chips,.lw-tools{display:flex;align-items:center;gap:6px}",
   ".lw-chip{border:1px solid var(--lw-border);background:none;color:inherit;font:inherit;font-size:12px;padding:3px 10px;border-radius:14px;cursor:pointer}",
