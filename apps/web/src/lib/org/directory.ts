@@ -23,6 +23,12 @@ export interface DirectoryPerson {
   rank: string | null;
   /** Every other address that reaches the same person, so one member is one row in the list. */
   alsoKnownAs: string[];
+  /**
+   * Whether work can be given to them at all. Somebody recorded on leave or inactive is still in the
+   * directory - they are still a member, and hiding them only raises "why is this person missing" - but
+   * they must not be handed new work while they are away.
+   */
+  availability?: "ACTIVE" | "LEAVE" | "INACTIVE";
 }
 
 interface DrivePermission {
@@ -76,16 +82,63 @@ export async function listDirectory(actorUserId: string, query = ""): Promise<Di
     byPerson.set(key, keep);
   });
 
+  // Who is away. Recorded against the personnel record, so it is found by CAPID rather than by address.
+  const away = await awayByCapid();
+  byPerson.forEach((person) => {
+    person.availability = (person.capid ? away.get(person.capid) : undefined) ?? "ACTIVE";
+  });
+
   const needle = query.trim().toLowerCase();
   const people = [...byPerson.values()]
     .filter((person) => !needle || [person.fullName, person.email, person.capid ?? "", ...person.alsoKnownAs].some((value) => value.toLowerCase().includes(needle)))
     .sort((left, right) => {
       // People who can be assigned right now come first; then alphabetical, so the list never reshuffles oddly.
+      const leftAway = left.availability && left.availability !== "ACTIVE";
+      const rightAway = right.availability && right.availability !== "ACTIVE";
+      if (leftAway !== rightAway) return leftAway ? 1 : -1;
       if (Boolean(left.userId) !== Boolean(right.userId)) return left.userId ? -1 : 1;
       return surname(left.fullName).localeCompare(surname(right.fullName)) || left.fullName.localeCompare(right.fullName);
     });
 
   return { people, driveNote: drive.note };
+}
+
+/**
+ * Of the accounts given, the ones that must not be handed new work, with the reason.
+ *
+ * The picker greys these out, but a greyed button is a courtesy and not a rule: the same assignment can
+ * arrive from the bulk bar, the assistant, or anything else that calls the API. This is where it is
+ * actually refused.
+ */
+export async function unavailableAssignees(userIds: string[]): Promise<Array<{ userId: string; fullName: string; status: "LEAVE" | "INACTIVE" }>> {
+  if (!userIds.length) return [];
+  try {
+    const marks = userIds.map(() => "?").join(",");
+    const rows = await getDatabase()
+      .prepare(
+        "SELECT user_id, full_name, status FROM personnel_members " +
+        "WHERE user_id IN (" + marks + ") AND status IN ('LEAVE','INACTIVE')"
+      )
+      .bind(...userIds)
+      .all<{ user_id: string; full_name: string; status: "LEAVE" | "INACTIVE" }>();
+    return rows.results.map((row) => ({ userId: row.user_id, fullName: row.full_name, status: row.status }));
+  } catch {
+    return [];
+  }
+}
+
+/** CAPIDs of members who are on leave or inactive, so the caller can say who cannot take work. */
+export async function awayByCapid(): Promise<Map<string, "LEAVE" | "INACTIVE">> {
+  const away = new Map<string, "LEAVE" | "INACTIVE">();
+  try {
+    const rows = await getDatabase()
+      .prepare("SELECT capid, status FROM personnel_members WHERE capid IS NOT NULL AND status IN ('LEAVE','INACTIVE')")
+      .all<{ capid: string; status: "LEAVE" | "INACTIVE" }>();
+    rows.results.forEach((row) => away.set(row.capid, row.status));
+  } catch {
+    // No personnel records yet is not a reason to stop the directory working.
+  }
+  return away;
 }
 
 async function hubPeople(): Promise<DirectoryPerson[]> {

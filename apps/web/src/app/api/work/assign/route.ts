@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
+import { unavailableAssignees } from "@/lib/org/directory";
 import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { notify } from "@/lib/notify/notifications";
@@ -28,6 +29,16 @@ export async function POST(request: Request) {
     const now = new Date().toISOString();
 
     let person: { id: string; full_name: string } | null = null;
+    if (input.userId) {
+      const away = await unavailableAssignees([input.userId]);
+      if (away.length) {
+        return NextResponse.json({
+          message: away[0].fullName + " is " + (away[0].status === "LEAVE" ? "on leave" : "inactive") +
+            ". Change that on the People and positions page before giving them work."
+        }, { status: 409 });
+      }
+    }
+
     if (input.userId) {
       person = await db
         .prepare("SELECT id, full_name FROM users WHERE id = ? AND status IN ('APPROVED','PENDING')")

@@ -14,6 +14,8 @@ export interface PickablePerson {
   capid: string | null;
   rank: string | null;
   alsoKnownAs?: string[];
+  /** Somebody on leave or inactive stays in the list, greyed, rather than vanishing without explanation. */
+  availability?: "ACTIVE" | "LEAVE" | "INACTIVE";
 }
 
 export function PeoplePicker({
@@ -114,8 +116,9 @@ export function PeoplePicker({
             type="button"
             role="option"
             aria-selected="false"
-            className="pp-row"
-            disabled={busyEmail === person.email}
+            className={"pp-row" + (person.availability && person.availability !== "ACTIVE" ? " pp-row--away" : "")}
+            disabled={busyEmail === person.email || (!!person.availability && person.availability !== "ACTIVE")}
+            title={person.availability === "LEAVE" ? person.fullName + " is on leave" : person.availability === "INACTIVE" ? person.fullName + " is inactive" : undefined}
             onClick={() => choose(person)}
           >
             <span className="pp-avatar">{initials(person.fullName)}</span>
@@ -124,6 +127,8 @@ export function PeoplePicker({
               <small>{[person.dutyTitle, person.capid ? "CAPID " + person.capid : null, person.capid && person.email.endsWith("@tncap.us") ? null : person.email].filter(Boolean).join(" · ")}</small>
             </span>
             {busyEmail === person.email ? <span className="pp-tag">Adding…</span>
+              : person.availability === "LEAVE" ? <span className="pp-tag pp-tag--away">On leave</span>
+              : person.availability === "INACTIVE" ? <span className="pp-tag pp-tag--away">Inactive</span>
               : person.source === "drive" ? <span className="pp-tag">Has Drive access</span>
               : person.pending ? <span className="pp-tag">Not signed in yet</span>
               : null}
@@ -156,6 +161,10 @@ const ppCss = [
   ".pp-who small{font-size:11.5px;color:var(--cu-muted,#656f7d);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
   ".pp-tag{flex:0 0 auto;font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:999px;background:rgba(42,120,214,.14);color:#1c5cab}",
   "html[data-theme=dark] .pp-tag{background:rgba(57,135,229,.2);color:#9ec5f4}",
+  ".pp-tag--away{background:rgba(208,59,59,.14);color:#c0392b}",
+  "html[data-theme=dark] .pp-tag--away{background:rgba(208,59,59,.22);color:#f0a0a0}",
+  ".pp-row--away{opacity:.55}",
+  ".pp-row--away:hover{background:none;cursor:not-allowed}",
   ".pp-msg{margin:8px 2px 2px;font-size:12.5px;color:var(--cu-muted,#656f7d);line-height:1.45}",
   ".pp-msg--bad{color:#c03030}",
   ".pp-foot{margin:8px 2px 0;padding-top:8px;border-top:1px solid var(--cu-border,#e4e6eb);font-size:11.5px;color:var(--cu-muted,#656f7d);line-height:1.45}",

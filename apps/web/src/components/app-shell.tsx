@@ -84,6 +84,7 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   // The app's own right-click, everywhere the app has something better to offer than the browser does.
   const [pageMenu, setPageMenu] = useState<{ x: number; y: number; href: string | null; label: string } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const pageMenuRef = useRef<HTMLDivElement | null>(null);
   const [moveNote, setMoveNote] = useState<string | null>(null);
 
   // Chrome's menu is for a web page: back, forward, view source, cast, translate. None of it is any use
@@ -112,7 +113,13 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
 
   useEffect(() => {
     if (!pageMenu) return;
-    const close = () => setPageMenu(null);
+    // Ask whether the press landed inside the menu, rather than trusting stopPropagation to keep it out
+    // of here. Both listeners sit on the same node, and stopPropagation does not stop a sibling listener
+    // on that node - so the menu closed on the way down and its own buttons never saw a click at all.
+    const close = (event: MouseEvent) => {
+      if (pageMenuRef.current?.contains(event.target as Node)) return;
+      setPageMenu(null);
+    };
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setPageMenu(null); };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", onKey);
@@ -478,9 +485,9 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
       {pageMenu ? (
         <div
           className="cu-ctx"
+          ref={pageMenuRef}
           style={{ left: pageMenu.x, top: pageMenu.y }}
           role="menu"
-          onMouseDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
           <p className="cu-ctx-title">{pageMenu.label}</p>

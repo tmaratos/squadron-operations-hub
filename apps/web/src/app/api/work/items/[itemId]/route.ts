@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
+import { unavailableAssignees } from "@/lib/org/directory";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { notifyAssigned, notifyComment, notifyStatus } from "@/lib/notify/events";
 import { assertSameOrigin } from "@/lib/security/origin";
@@ -52,6 +53,17 @@ export async function PATCH(request: Request, { params }: Params) {
     if (!before) return NextResponse.json({ message: "Item not found." }, { status: 404 });
 
     const { comment, checklist, checklistEntry, entryDone, listId, ...changes } = updateItemSchema.parse(await request.json());
+
+    // Somebody on leave or inactive does not get handed new work, whatever asked for it.
+    if (changes.assigneeIds?.length) {
+      const away = await unavailableAssignees(changes.assigneeIds);
+      if (away.length) {
+        return NextResponse.json({
+          message: away.map((person) => person.fullName + " is " + (person.status === "LEAVE" ? "on leave" : "inactive")).join("; ") +
+            ". Change that on the People and positions page first."
+        }, { status: 409 });
+      }
+    }
     // The move happens first, so anything else in the same request applies to the task in its new home.
     if (listId && listId !== before.listId) await moveItem(itemId, listId);
     await updateItem(itemId, changes);

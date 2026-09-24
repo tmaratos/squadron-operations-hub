@@ -238,8 +238,13 @@ export function StaffPage({
                         onChange={(event) => savePosition(position.id, event.target.value || null, event.target.value ? "FILLED" : "VACANT")}
                       >
                         <option value="">Nobody — leave it vacant</option>
+                        {/* Somebody on leave or inactive stays listed, so it is clear why they cannot be
+                            chosen, but a post cannot be handed to them while they are away. */}
                         {personnelMembers.map((member) => (
-                          <option key={member.id} value={member.id}>{member.rank} {member.fullName}</option>
+                          <option key={member.id} value={member.id} disabled={member.status !== "ACTIVE"}>
+                            {member.rank} {member.fullName}
+                            {member.status === "LEAVE" ? " — on leave" : member.status === "INACTIVE" ? " — inactive" : ""}
+                          </option>
                         ))}
                       </select>
                       {position.incumbentId ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
@@ -66,10 +66,16 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   const [inlineEdit, setInlineEdit] = useState<{ itemId: string; field: "assignee" | "priority" } | null>(null);
   // Right-clicking a task offers the things you do to a task, rather than the things a browser does to a page.
   const [rowMenu, setRowMenu] = useState<{ item: WorkItem; x: number; y: number } | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!rowMenu) return;
-    const close = () => setRowMenu(null);
+    // Same trap as the sidebar menu: closing on any mousedown tore this menu down before its own buttons
+    // could be clicked, and stopPropagation does not help when both listeners are on the same node.
+    const close = (event: MouseEvent) => {
+      if (rowMenuRef.current?.contains(event.target as Node)) return;
+      setRowMenu(null);
+    };
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setRowMenu(null); };
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", onKey);
@@ -490,9 +496,9 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
       {rowMenu ? (
         <div
           className="lw-rowmenu"
+          ref={rowMenuRef}
           style={{ left: rowMenu.x, top: rowMenu.y }}
           role="menu"
-          onMouseDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
           <p className="lw-rowmenu-title">{rowMenu.item.title}</p>
