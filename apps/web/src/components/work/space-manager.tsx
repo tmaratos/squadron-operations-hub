@@ -16,6 +16,7 @@ export function SpaceManager({ spaces: initialSpaces, canEdit }: { spaces: Space
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [adding, setAdding] = useState<string | null>(null); // a space id, or "space" for a new department
   const router = useRouter();
 
   async function send(body: Record<string, unknown>, key: string) {
@@ -31,6 +32,7 @@ export function SpaceManager({ spaces: initialSpaces, canEdit }: { spaces: Space
       if (!response.ok) throw new Error(data.message || "That change could not be saved.");
       if (data.spaces) setSpaces(data.spaces);
       setRenaming(null);
+      setAdding(null);
       setNote(data.message ?? "Saved.");
       router.refresh(); // the sidebar is rendered elsewhere and has to hear about this too
     } catch (caught) {
@@ -50,10 +52,38 @@ export function SpaceManager({ spaces: initialSpaces, canEdit }: { spaces: Space
     };
   }
 
+  function create(kind: "space" | "list", spaceId?: string) {
+    return (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const value = new FormData(form).get("name");
+      const name = typeof value === "string" ? value.trim() : "";
+      if (!name) return;
+      form.reset();
+      send({ action: "create", kind, name, ...(spaceId ? { spaceId } : {}) }, spaceId ?? "space");
+    };
+  }
+
   return (
     <div className="sm">
       <style>{smCss}</style>
       {note ? <p className="sm-note" role="status">{note}</p> : null}
+
+      {canEdit ? (
+        <div className="sm-new">
+          {adding === "space" ? (
+            <form onSubmit={create("space")} className="sm-rename">
+              <input name="name" placeholder="Department name, e.g. Emergency Services" maxLength={80} aria-label="New department name" autoFocus />
+              <button type="submit" className="sm-btn sm-btn--primary" disabled={busy === "space"}>
+                {busy === "space" ? "Creating…" : "Create"}
+              </button>
+              <button type="button" className="sm-btn" onClick={() => setAdding(null)}>Cancel</button>
+            </form>
+          ) : (
+            <button type="button" className="sm-btn sm-btn--primary" onClick={() => setAdding("space")}>New department</button>
+          )}
+        </div>
+      ) : null}
 
       {spaces.length === 0 ? <p className="sm-empty">No departments yet.</p> : null}
 
@@ -136,6 +166,19 @@ export function SpaceManager({ spaces: initialSpaces, canEdit }: { spaces: Space
                 ))}
               </div>
             ))}
+            {canEdit ? (
+              adding === space.id ? (
+                <form onSubmit={create("list", space.id)} className="sm-rename sm-add">
+                  <input name="name" placeholder="List name" maxLength={80} aria-label={"New list in " + space.name} autoFocus />
+                  <button type="submit" className="sm-btn sm-btn--primary" disabled={busy === space.id}>
+                    {busy === space.id ? "Creating…" : "Create"}
+                  </button>
+                  <button type="button" className="sm-btn" onClick={() => setAdding(null)}>Cancel</button>
+                </form>
+              ) : (
+                <button type="button" className="sm-btn sm-add" onClick={() => setAdding(space.id)}>+ Add a list</button>
+              )
+            ) : null}
           </section>
         ))}
       </div>
@@ -155,5 +198,7 @@ const smCss = [
   ".sm-list{display:flex;align-items:center;gap:8px;justify-content:space-between}",
   ".sm-list .spaces-list{flex:1;min-width:0}",
   ".sm-note{margin:0 0 14px;font-size:13px;padding:10px 13px;border-radius:9px;background:rgba(123,104,238,.12)}",
-  ".sm-empty{font-size:14px;color:var(--muted,#656f7d)}"
+  ".sm-empty{font-size:14px;color:var(--muted,#656f7d)}",
+  ".sm-new{margin:0 0 16px}",
+  ".sm-add{margin-top:8px;align-self:flex-start}"
 ].join("");

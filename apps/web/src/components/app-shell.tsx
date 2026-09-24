@@ -26,7 +26,7 @@ import {
   Sun,
   X
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AssistantPanel } from "@/components/ai/assistant-panel";
 import { CommandPalette } from "@/components/command-palette";
 import { ConfirmButton } from "@/components/confirm-button";
@@ -74,13 +74,15 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
   // Right-clicking a department or list gives the menu people expect from every other tool: rename it,
   // remove it. Without it the only way to tidy the sidebar was to go and find another page.
   const [menu, setMenu] = useState<{ kind: "space" | "list"; id: string; name: string; x: number; y: number } | null>(null);
-  const [renamingHere, setRenamingHere] = useState(false);
+  const [menuForm, setMenuForm] = useState<"rename" | "list" | null>(null);
+  const [addingSpace, setAddingSpace] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [moveNote, setMoveNote] = useState<string | null>(null);
 
   function openMenu(event: React.MouseEvent, kind: "space" | "list", id: string, name: string) {
     event.preventDefault();
     event.stopPropagation();
-    setRenamingHere(false);
+    setMenuForm(null);
     // Kept inside the window, so a right-click near the bottom does not open a menu nobody can reach.
     setMenu({ kind, id, name, x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 190) });
   }
@@ -92,12 +94,14 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      const data = (await response.json().catch(() => ({}))) as { message?: string; id?: string };
       if (!response.ok) throw new Error(data.message || "That could not be done.");
       setMenu(null);
+      setMenuForm(null);
       setMoveNote(data.message ?? done);
       window.setTimeout(() => setMoveNote(null), 4000);
       router.refresh();
+      if (body.action === "create" && body.kind === "list" && data.id) router.push("/lists/" + data.id);
     } catch (caught) {
       setMoveNote(caught instanceof Error ? caught.message : "That could not be done.");
       window.setTimeout(() => setMoveNote(null), 4000);
@@ -142,11 +146,17 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
 
   useEffect(() => {
     if (!menu) return;
-    const close = () => setMenu(null);
+    // Closing on any document click raced the menu's own buttons: the first press of a two-step delete
+    // could close the menu before the second one existed, so deleting appeared to do nothing at all.
+    // Only a press that lands outside the menu closes it.
+    const onDown = (event: MouseEvent) => {
+      if (menuRef.current?.contains(event.target as Node)) return;
+      setMenu(null);
+    };
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setMenu(null); };
-    document.addEventListener("click", close);
+    document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", onKey); };
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [menu]);
 
   useEffect(() => {
@@ -191,8 +201,26 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
     <section className="cu-section">
       <div className="cu-section-head">
         <button type="button" onClick={() => toggle("spaces")}>Spaces</button>
-        <Link href="/spaces" aria-label="Manage spaces"><Plus size={14} /></Link>
+        <button type="button" aria-label="New department" title="New department" onClick={() => setAddingSpace((open) => !open)}>
+          <Plus size={14} />
+        </button>
       </div>
+      {addingSpace ? (
+        <form
+          className="cu-side-new"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const value = new FormData(event.currentTarget).get("name");
+            const name = typeof value === "string" ? value.trim() : "";
+            if (!name) { setAddingSpace(false); return; }
+            setAddingSpace(false);
+            structure({ action: "create", kind: "space", name }, "Created.");
+          }}
+        >
+          <input name="name" placeholder="Department name" maxLength={80} aria-label="New department name" autoFocus />
+          <button type="submit">Create</button>
+        </form>
+      ) : null}
       {collapsed.spaces ? null : (
         <>
           {navLink("/tasks", "All Tasks", <ListChecks size={15} />)}
@@ -319,25 +347,38 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
       {menu ? (
         <div
           className="cu-ctx"
+          ref={menuRef}
           style={{ left: menu.x, top: menu.y }}
           role="menu"
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
           <p className="cu-ctx-title">{menu.name}</p>
-          {renamingHere ? (
+          {menuForm ? (
             <form
               className="cu-ctx-rename"
               onSubmit={(event) => {
                 event.preventDefault();
                 const value = new FormData(event.currentTarget).get("name");
                 const name = typeof value === "string" ? value.trim() : "";
-                if (!name || name === menu.name) { setMenu(null); return; }
+                if (!name) { setMenu(null); return; }
+                if (menuForm === "list") {
+                  structure({ action: "create", kind: "list", spaceId: menu.id, name }, "Created.");
+                  return;
+                }
+                if (name === menu.name) { setMenu(null); return; }
                 structure({ action: "rename", kind: menu.kind, id: menu.id, name }, "Renamed.");
               }}
             >
-              <input name="name" defaultValue={menu.name} maxLength={80} aria-label="New name" autoFocus />
-              <button type="submit" className="cu-ctx-item cu-ctx-item--go">Save</button>
+              <input
+                name="name"
+                defaultValue={menuForm === "rename" ? menu.name : ""}
+                placeholder={menuForm === "list" ? "List name" : undefined}
+                maxLength={80}
+                aria-label={menuForm === "list" ? "New list name" : "New name"}
+                autoFocus
+              />
+              <button type="submit" className="cu-ctx-item cu-ctx-item--go">{menuForm === "list" ? "Create" : "Save"}</button>
             </form>
           ) : (
             <>
@@ -349,9 +390,9 @@ export function AppShell({ children, user, workspaces, spaces }: { children: Rea
               >
                 Open
               </Link>
-              <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => setRenamingHere(true)}>Rename</button>
+              <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => setMenuForm("rename")}>Rename</button>
               {menu.kind === "space" ? (
-                <Link role="menuitem" className="cu-ctx-item" href="/spaces" onClick={() => setMenu(null)}>Add a list</Link>
+                <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => setMenuForm("list")}>Add a list</button>
               ) : null}
               <ConfirmButton
                 className="cu-ctx-item cu-ctx-item--danger"
@@ -517,6 +558,9 @@ const shellCss = [
   ".cu-count{font-size:11px;color:var(--cu-muted)}",
   ".cu-space-avatar{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;background:#7b68ee;color:#fff;font-size:10px;font-weight:800;flex:none}",
   ".cu-tree{padding-left:14px}",
+  ".cu-side-new{display:flex;gap:6px;padding:4px 8px 8px}",
+  ".cu-side-new input{flex:1;min-width:0;font:inherit;font-size:13px;min-height:30px;padding:0 8px;border-radius:7px;border:1px solid var(--cu-border);background:var(--cu-bg);color:var(--cu-text)}",
+  ".cu-side-new button{border:0;background:#7b68ee;color:#fff;font:inherit;font-size:12.5px;font-weight:600;padding:0 10px;border-radius:7px;cursor:pointer}",
   ".cu-empty{margin:4px 8px;font-size:12px;color:var(--cu-muted)}",
   ".cu-main{min-width:0;min-height:0;overflow-y:auto;padding:20px 24px;background:var(--cu-bg)}",
   ".cu-backdrop{display:none}",

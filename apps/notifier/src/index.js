@@ -6,6 +6,7 @@
 // Everything it sends already exists as a row in the Hub, so a member can always check what they were told.
 
 import { generateDutyWork } from "./duty-work.js";
+import { generateRecurringWork } from "./recurring-work.js";
 
 const APP_URL = "https://tn170adminhub.tristanmaratos.com";
 const BATCH = 200;
@@ -50,9 +51,10 @@ async function run(event, env) {
   const digest = hour === 18 ? "EVENING" : hour === 6 ? "MORNING" : null;
   // Duties become real work before anybody has to remember them.
   const generated = digest ? await generateDutyWork(env) : 0;
+  const routines = digest ? await generateRecurringWork(env) : 0;
   const raised = digest ? await raiseDeadlineNotices(env) : 0;
   const sent = await deliver(env, digest);
-  return { generated, raised, sent, digest, squadronHour: hour, cron: event.cron ?? null };
+  return { generated, routines, raised, sent, digest, squadronHour: hour, cron: event.cron ?? null };
 }
 
 // ---------------------------------------------------------------- deadlines

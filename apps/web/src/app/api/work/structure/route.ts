@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
-import { archiveNode, getWorkspaceTree, renameNode } from "@/lib/work/structure";
+import { archiveNode, createFolder, createList, createSpace, getWorkspaceTree, renameNode } from "@/lib/work/structure";
 
 // Renaming and removing departments, folders and lists.
 //
@@ -14,7 +14,22 @@ import { archiveNode, getWorkspaceTree, renameNode } from "@/lib/work/structure"
 // Removing archives rather than deletes: the work inside is still in the database and an administrator can
 // bring it back, which matters when the thing being removed turns out to have been the one people were using.
 
+export async function GET() {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
+  return NextResponse.json({ spaces: await getWorkspaceTree() });
+}
+
 const schema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("create"),
+    kind: z.enum(["space", "folder", "list"]),
+    name: z.string().trim().min(1).max(80),
+    // A list needs to know where it goes; a department does not.
+    spaceId: z.string().trim().min(1).max(80).optional(),
+    folderId: z.string().trim().min(1).max(80).optional(),
+    description: z.string().trim().max(400).optional()
+  }),
   z.object({
     action: z.literal("rename"),
     kind: z.enum(["space", "folder", "list"]),
@@ -38,6 +53,53 @@ export async function POST(request: Request) {
     }
     const input = schema.parse(await request.json());
     const db = getDatabase();
+
+    if (input.action === "create") {
+      // Nothing in the app could make a department or a list: only the assistant could, through its own
+      // tools, which left a member who wanted a new list with a menu item that went nowhere.
+      if (input.kind !== "space" && !input.spaceId) {
+        return NextResponse.json({ message: "Say which department it belongs to." }, { status: 400 });
+      }
+
+      const existing = await getWorkspaceTree();
+      const wanted = input.name.trim().toLowerCase();
+      const clash = input.kind === "space"
+        ? existing.some((space) => space.name.trim().toLowerCase() === wanted)
+        : existing.find((space) => space.id === input.spaceId)?.lists.some((list) => list.name.trim().toLowerCase() === wanted);
+      if (clash) {
+        return NextResponse.json(
+          { message: "There is already " + (input.kind === "space" ? "a department" : "a list") + " called " + input.name.trim() + "." },
+          { status: 409 }
+        );
+      }
+
+      const id = input.kind === "space"
+        ? await createSpace({ name: input.name, description: input.description ?? null, userId: user.id })
+        : input.kind === "folder"
+          ? await createFolder({ spaceId: input.spaceId as string, name: input.name })
+          : await createList({
+              spaceId: input.spaceId as string,
+              folderId: input.folderId ?? null,
+              name: input.name,
+              description: input.description ?? null,
+              userId: user.id
+            });
+
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "STRUCTURE_CREATED",
+        entityType: input.kind,
+        entityId: id,
+        summary: user.fullName + " created the " + input.kind + " " + input.name.trim(),
+        metadata: { kind: input.kind, name: input.name.trim() }
+      });
+
+      return NextResponse.json({
+        spaces: await getWorkspaceTree(),
+        id,
+        message: input.name.trim() + " is ready."
+      });
+    }
 
     if (input.action === "rename") {
       await renameNode(input.kind, input.id, input.name);
