@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
+import { MentionBox, renderMentions } from "./mention-box";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
 
@@ -1723,7 +1724,7 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                   <span className="lw-avatar">{initials(entry.authorName)}</span>
                   <div className="tp-comment-card">
                     <div className="tp-comment-head"><strong>{entry.authorName}</strong><span>{new Date(entry.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span></div>
-                    <div className="tp-comment-body">{entry.body}</div>
+                    <div className="tp-comment-body">{renderMentions(entry.body)}</div>
                   </div>
                 </div>
               ))}
@@ -1731,9 +1732,12 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
             </div>
             {canEdit ? (
               <form className="tp-compose" onSubmit={(event) => { event.preventDefault(); postComment(); }}>
-                <textarea rows={3} value={comment} placeholder="Write a comment…" aria-label="Comment" onChange={(event) => setComment(event.target.value)}
-                  onKeyDown={(event) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); postComment(); } }} />
-                <div className="tp-compose-row"><span>Ctrl + Enter to send</span><button type="submit" className="lw-primary" disabled={!comment.trim()}>Comment</button></div>
+                <MentionBox
+                  value={comment}
+                  onChange={setComment}
+                  onSend={postComment}
+                />
+                <div className="tp-compose-row"><span>Type @ to name somebody · Ctrl + Enter to send</span><button type="submit" className="lw-primary" disabled={!comment.trim()}>Comment</button></div>
               </form>
             ) : null}
           </aside>

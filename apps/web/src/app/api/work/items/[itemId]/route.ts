@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { unavailableAssignees } from "@/lib/org/directory";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { notifyAssigned, notifyComment, notifyStatus } from "@/lib/notify/events";
+import { notifyAssigned, notifyComment, notifyMentions, notifyStatus } from "@/lib/notify/events";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { runAutomations, type AutomationEvent } from "@/lib/work/automations";
 import { addChecklist, addChecklistEntry, addComment, archiveItem, getItemDetail, moveItem, setChecklistEntryDone, updateItem } from "@/lib/work/items";
@@ -91,7 +91,12 @@ export async function PATCH(request: Request, { params }: Params) {
       const actor = { id: user.id, fullName: user.fullName };
       try {
         await notifyAssigned({ item: after, addedUserIds: newlyAssigned.map((person) => person.id), actor });
-        if (comment) await notifyComment({ item: after, comment, actor });
+        if (comment) {
+          // Naming somebody is asking them directly, so they hear about it even if the task was nothing
+          // to do with them until now.
+          await notifyMentions({ item: after, comment, actor });
+          await notifyComment({ item: after, comment, actor });
+        }
         const statusEvent = events.find((event) => event.type === "status_changed");
         if (statusEvent && statusEvent.type === "status_changed") await notifyStatus({ item: after, statusName: statusEvent.statusName, actor });
       } catch (notifyError) {
