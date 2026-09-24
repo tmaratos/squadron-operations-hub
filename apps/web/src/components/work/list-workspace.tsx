@@ -419,6 +419,11 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
               {unassignedStatus.map((item) => renderRow(item, 0))}
             </section>
           ) : null}
+          {/* Sections are edited from a button in the toolbar, which nobody looking at a column of sections
+              thinks to press. This is where the next one would go, so the way to add it is here too. */}
+          {canEdit ? (
+            <button type="button" className="lw-add-section" onClick={() => setEditingStatuses(true)}>+ Add section</button>
+          ) : null}
         </div>
       ) : mode === "table" ? (
         <TableView
@@ -678,6 +683,19 @@ function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses:
   const [rows, setRows] = useState<StatusDraft[]>(statuses.map((status) => ({ id: status.id, name: status.name, color: /^#[0-9a-fA-F]{6}$/.test(status.color) ? status.color : "#87909e", category: status.category })));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Adding two sections to a squadron with fifteen lists should not be fifteen visits to this dialog.
+  const [others, setOthers] = useState<Array<{ id: string; name: string; spaceName: string }>>([]);
+  const [alsoIn, setAlsoIn] = useState<string[]>([]);
+  const [progress, setProgress] = useState("");
+
+  useEffect(() => {
+    fetch("/api/work/structure")
+      .then((response) => response.json() as Promise<{ spaces?: Array<{ name: string; lists: Array<{ id: string; name: string }> }> }>)
+      .then((data) => setOthers((data.spaces ?? []).flatMap((space) => space.lists
+        .filter((list) => list.id !== listId)
+        .map((list) => ({ id: list.id, name: list.name, spaceName: space.name })))))
+      .catch(() => undefined);
+  }, [listId]);
   const update = (index: number, change: Partial<StatusDraft>) => setRows(rows.map((row, position) => (position === index ? { ...row, ...change } : row)));
   const moveRow = (index: number, delta: number) => {
     const target = index + delta;
@@ -698,6 +716,30 @@ function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses:
       });
       const data = (await response.json().catch(() => ({}))) as { message?: string };
       if (!response.ok) throw new Error(data.message || "Could not save.");
+
+      // Other lists only ever gain sections they do not already have. Nothing is renamed, recoloured or
+      // removed there: replacing another list's sections would strip the status off every task in it, and
+      // "add two sections" must never quietly mean that.
+      for (const target of alsoIn) {
+        const label = others.find((entry) => entry.id === target)?.name ?? "that list";
+        setProgress("Adding to " + label + "…");
+        const current = await fetch("/api/work/lists/" + target + "/statuses").then((r) => r.json() as Promise<{ statuses?: ListStatus[] }>);
+        const held = current.statuses ?? [];
+        const heldNames = new Set(held.map((status) => status.name.trim().toLowerCase()));
+        const missing = rows.filter((row) => !heldNames.has(row.name.trim().toLowerCase()));
+        if (!missing.length) continue;
+        await fetch("/api/work/lists/" + target + "/statuses", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            statuses: [
+              ...held.map((status) => ({ id: status.id, name: status.name, color: /^#[0-9a-fA-F]{6}$/.test(status.color) ? status.color : "#87909e", category: status.category })),
+              ...missing.map((row) => ({ id: null, name: row.name.trim(), color: row.color, category: row.category }))
+            ]
+          })
+        });
+      }
+
       window.location.reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save.");
@@ -725,10 +767,35 @@ function StatusEditor({ listId, statuses, onClose }: { listId: string; statuses:
           ))}
         </div>
         <button className="lw-add" style={{ paddingLeft: 4 }} onClick={() => setRows([...rows, { id: null, name: "new status", color: "#7b68ee", category: "ACTIVE" }])}>+ Add status</button>
+        {others.length ? (
+          <details className="lw-also">
+            <summary>Also add these sections to other lists{alsoIn.length ? " (" + alsoIn.length + ")" : ""}</summary>
+            <p className="lw-faint">Those lists only gain sections they do not already have. Nothing there is renamed or removed, and no task loses its status.</p>
+            <div className="lw-also-list">
+              {others.map((entry) => (
+                <label key={entry.id}>
+                  <input
+                    type="checkbox"
+                    checked={alsoIn.includes(entry.id)}
+                    onChange={() => setAlsoIn((current) => current.includes(entry.id) ? current.filter((id) => id !== entry.id) : [...current, entry.id])}
+                  />
+                  <span>{entry.name}</span>
+                  <small>{entry.spaceName}</small>
+                </label>
+              ))}
+            </div>
+            <button type="button" className="lw-ghost" onClick={() => setAlsoIn(alsoIn.length === others.length ? [] : others.map((entry) => entry.id))}>
+              {alsoIn.length === others.length ? "None" : "Every list"}
+            </button>
+          </details>
+        ) : null}
         {error ? <p className="lw-error">{error}</p> : null}
         <div className="lw-modal-actions">
+          {progress ? <span className="lw-faint">{progress}</span> : null}
           <button className="lw-ghost" onClick={onClose}>Cancel</button>
-          <button className="lw-primary" onClick={save} disabled={saving || rows.some((row) => !row.name.trim())}>{saving ? "Saving…" : "Save statuses"}</button>
+          <button className="lw-primary" onClick={save} disabled={saving || rows.some((row) => !row.name.trim())}>
+            {saving ? "Saving…" : alsoIn.length ? "Save, and add to " + alsoIn.length + " more" : "Save sections"}
+          </button>
         </div>
       </div>
     </div>
@@ -1837,6 +1904,14 @@ const lwCss = [
   ".lw-colhead{font-size:11px;color:var(--lw-muted);padding:4px 0 6px 44px;border-bottom:1px solid var(--lw-border)}",
   ".lw-row[draggable=true]{cursor:grab}.lw-row[draggable=true]:active{cursor:grabbing}",
   inlinePickerCss,
+  ".lw-also{margin:12px 0 0;border-top:1px solid var(--border,#eef0f3);padding-top:10px}",
+  ".lw-also summary{cursor:pointer;font-size:13.5px;font-weight:600}",
+  ".lw-also-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:4px;max-height:200px;overflow-y:auto;margin:8px 0}",
+  ".lw-also-list label{display:flex;align-items:center;gap:7px;font-size:13px;padding:4px 6px;border-radius:6px;cursor:pointer}",
+  ".lw-also-list label:hover{background:rgba(123,104,238,.1)}",
+  ".lw-also-list small{opacity:.6;font-size:11px;margin-left:auto}",
+  ".lw-add-section{display:block;margin:10px 0 0;border:1px dashed var(--border,#d5d8de);background:none;color:var(--muted,#656f7d);font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;cursor:pointer;width:100%;text-align:left}",
+  ".lw-add-section:hover{border-color:#7b68ee;color:#7b68ee;border-style:solid}",
   ".lw-rowmenu{position:fixed;z-index:95;min-width:200px;padding:6px;border-radius:11px;border:1px solid var(--border,#e4e6eb);background:var(--surface,#fff);box-shadow:0 16px 40px rgba(9,20,44,.28)}",
   "html[data-theme=dark] .lw-rowmenu{background:#26272b;border-color:#3a3c42}",
   ".lw-rowmenu-title{margin:4px 8px 6px;font-size:11.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",

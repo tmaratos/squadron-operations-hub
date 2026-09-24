@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
-import { saveStatuses } from "@/lib/work/structure";
+import { listStatuses, saveStatuses } from "@/lib/work/structure";
 
 const statusesSchema = z.object({
   statuses: z.array(z.object({
@@ -13,6 +13,15 @@ const statusesSchema = z.object({
     category: z.enum(["NOT_STARTED", "ACTIVE", "DONE", "CLOSED"])
   })).min(1).max(20)
 });
+
+// Reading a list's sections back, so one list's sections can be copied onto another without first
+// guessing what that other list already has.
+export async function GET(_request: Request, { params }: { params: Promise<{ listId: string }> }) {
+  const user = await getCurrentUser();
+  if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
+  const { listId } = await params;
+  return NextResponse.json({ statuses: await listStatuses(listId) });
+}
 
 export async function PUT(request: Request, { params }: { params: Promise<{ listId: string }> }) {
   try {
