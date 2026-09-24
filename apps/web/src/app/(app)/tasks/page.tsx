@@ -33,7 +33,14 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const described: string[] = [];
   let shown = items;
 
-  if (date) { shown = shown.filter((item) => item.dueOn === date); described.push("due " + date); }
+  if (date) {
+    shown = shown.filter((item) => item.dueOn === date);
+    // "due Wed 30 Sep" rather than "due 2026-09-30": this heading is read, not parsed.
+    const when = new Date(date + "T12:00:00");
+    described.push("due " + (Number.isNaN(when.getTime())
+      ? date
+      : when.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "America/New_York" })));
+  }
   if (due === "overdue") { shown = shown.filter((item) => item.dueOn && item.dueOn < today && !item.closed); described.push("overdue"); }
   if (due === "today") { shown = shown.filter((item) => item.dueOn === today); described.push("due today"); }
   if (due === "next7") { shown = shown.filter((item) => item.dueOn && item.dueOn >= today && item.dueOn <= isoDay(7)); described.push("due in the next 7 days"); }
