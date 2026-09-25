@@ -13,6 +13,16 @@ type Mode = "list" | "board" | "table" | "calendar";
 
 const MODE_ICON: Record<Mode, string> = { list: "☰", board: "▦", table: "▤", calendar: "🗓" };
 
+// Why somebody would choose one over another, in the words a squadron member would use. Shown on the tab
+// and once under the tabs the first time, because four names with no explanation is a decision nobody can
+// make - and the usual result is that everyone stays on the first one forever.
+const MODE_WHY: Record<Mode, string> = {
+  list: "A straightforward work list, grouped into sections. Best for getting through things.",
+  board: "The same work as cards in columns, one column per section. Best for seeing what is where.",
+  table: "A spreadsheet. Every field editable in place. Best for planning and tidying a lot at once.",
+  calendar: "The same work laid out by date. Best for seeing what lands when."
+};
+
 const MODE_LABELS: Record<Mode, string> = { list: "☰ List", board: "▦ Board", table: "▤ Table", calendar: "▣ Calendar" };
 const CATEGORY_LABELS: Record<ListStatus["category"], string> = { NOT_STARTED: "Not started", ACTIVE: "Active", DONE: "Done", CLOSED: "Closed" };
 type ApiResult = { message?: string; item: ItemDetail; items: WorkItem[] };
@@ -69,6 +79,11 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   const [viewBusy, setViewBusy] = useState(false);
   const [renamingView, setRenamingView] = useState<string | null>(null);
   const [addingView, setAddingView] = useState(false);
+  // Explained once, then never again. An explanation that cannot be dismissed becomes furniture.
+  const [whyDismissed, setWhyDismissed] = useState(true);
+  useEffect(() => {
+    try { setWhyDismissed(localStorage.getItem("lw-why-seen") === "1"); } catch { setWhyDismissed(false); }
+  }, []);
 
   async function viewAction(body: Record<string, unknown>) {
     setViewBusy(true);
@@ -460,7 +475,7 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
               className={viewId === entry.id ? "is-active" : ""}
               onClick={() => setViewId(entry.id)}
               onDoubleClick={() => canEdit && setRenamingView(entry.id)}
-              title={entry.isDefault ? entry.name + " — opens by default" : "Double-click to rename"}
+              title={(MODE_WHY[entry.type as Mode] ?? "") + (entry.isDefault ? " Opens by default." : " Double-click to rename.")}
             >
               {MODE_ICON[entry.type as Mode] ?? "▤"} {entry.name}
               {entry.isDefault ? <i className="lw-view-default" aria-label="Default view">•</i> : null}
@@ -505,6 +520,15 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
           </span>
         ) : null}
       </div>
+
+      {view && !whyDismissed ? (
+        <p className="lw-why">
+          <strong>{MODE_LABELS[mode]}:</strong> {MODE_WHY[mode]}
+          <button type="button" onClick={() => { setWhyDismissed(true); try { localStorage.setItem("lw-why-seen", "1"); } catch { /* fine */ } }}>
+            Got it
+          </button>
+        </p>
+      ) : null}
 
       {picked.length ? (
         <div className="lw-bulk">
@@ -2203,6 +2227,9 @@ const lwCss = [
   ".lw-view-new input,.lw-view-new select{font:inherit;font-size:13px;padding:5px 8px;border-radius:6px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit}",
   ".lw-view-tools{margin-left:auto;display:flex;gap:4px;align-items:center}",
   ".lw-ghost--danger{color:#d03b3b}",
+  ".lw-why{display:flex;align-items:flex-start;gap:8px;margin:0;padding:9px 24px;font-size:12.5px;line-height:1.5;background:rgba(123,104,238,.08);border-bottom:1px solid var(--lw-border)}",
+  ".lw-why strong{flex:none}",
+  ".lw-why button{margin-left:auto;flex:none;border:0;background:none;color:#7b68ee;font:inherit;font-size:12px;font-weight:700;cursor:pointer}",
   ".lw-hidden-note{font-size:10.5px;opacity:.6;white-space:nowrap}",
   ".lw-add-section{display:block;margin:10px 0 0;border:1px dashed var(--border,#d5d8de);background:none;color:var(--muted,#656f7d);font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;cursor:pointer;width:100%;text-align:left}",
   ".lw-add-section:hover{border-color:#7b68ee;color:#7b68ee;border-style:solid}",

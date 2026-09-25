@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   Check,
@@ -36,7 +36,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PulseWidget } from "@/components/assist/pulse-widget";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { navigationGroups, utilityNavigation } from "@/lib/navigation";
+import { breadcrumbFor, sectionByKey, sectionFor, sections, type SectionKey } from "@/lib/navigation";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import type { SpaceNode } from "@/lib/work/types";
 
@@ -48,27 +48,12 @@ export interface WorkspaceSummary {
 
 const defaultWorkspaces: WorkspaceSummary[] = [{ id: "tn-170", name: "TN-170 Oak Ridge", shortName: "170" }];
 
-type RailKey = "home" | "spaces" | "planner" | "goals" | "ai" | "docs" | "dashboards" | "more";
+type RailKey = SectionKey;
 
-const railItems: Array<{ key: RailKey; label: string; href: string; icon: typeof Home }> = [
-  { key: "home", label: "Home", href: "/", icon: Home },
-  { key: "spaces", label: "Spaces", href: "/spaces", icon: Grid3x3 },
-  { key: "planner", label: "Planner", href: "/calendar", icon: CalendarDays },
-  { key: "goals", label: "Goals", href: "/goals", icon: Target },
-  { key: "ai", label: "AI", href: "/agents", icon: Bot },
-  { key: "docs", label: "Docs", href: "/documents", icon: FileText },
-  { key: "dashboards", label: "Dashboard", href: "/dashboards", icon: LayoutDashboard },
-  { key: "more", label: "More", href: "/staff", icon: NotebookTabs }
-];
+const railItems = sections.map((section) => ({ key: section.key, label: section.label, href: section.href, icon: section.icon }));
 
 function railFor(pathname: string): RailKey {
-  if (pathname.startsWith("/spaces") || pathname.startsWith("/lists")) return "spaces";
-  if (pathname.startsWith("/calendar")) return "planner";
-  if (pathname.startsWith("/goals")) return "goals";
-  if (pathname.startsWith("/agents")) return "ai";
-  if (pathname.startsWith("/documents")) return "docs";
-  if (pathname.startsWith("/dashboards") || pathname.startsWith("/readiness")) return "dashboards";
-  return "home";
+  return sectionFor(pathname);
 }
 
 export function AppShell({ children, user, workspaces, spaces, agents }: {
@@ -79,6 +64,8 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
   agents?: Array<{ id: string; name: string; emoji: string; purpose: string | null; shared: boolean }>;
 }) {
   const pathname = usePathname();
+  const params = useSearchParams();
+  const search = params.toString() ? "?" + params.toString() : "";
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
@@ -483,17 +470,56 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
     </section>
   ) : null;
 
-  const hubSections = navigationGroups.map((group) => (
-    <section className="cu-section" key={group.label}>
-      <div className="cu-section-head">
-        <button type="button" onClick={() => toggle("group-" + group.label)}>{group.label}</button>
-      </div>
-      {collapsed["group-" + group.label] ? null : group.items.map((item) => {
-        const Icon = item.icon;
-        return navLink(item.href, item.label, <Icon size={15} />);
-      })}
-    </section>
-  ));
+  /**
+   * A section's own menu, drawn from the one map.
+   *
+   * Every group opens in place with a chevron, so its contents can be seen without first navigating into a
+   * page and finding a second menu there. What is open is remembered, and the group holding the current
+   * page is opened whether or not it was.
+   */
+  const sectionMenu = (key: SectionKey) => {
+    const section = sectionByKey(key);
+    return (
+      <>
+        <p className="cu-blurb">{section.blurb}</p>
+        {section.groups.map((group) => {
+          const groupKey = "grp-" + key + "-" + group.label;
+          const holdsCurrent = group.items.some((item) => item.href.split("?")[0] === pathname);
+          const folded = (collapsed[groupKey] ?? false) && !holdsCurrent;
+          return (
+            <section className="cu-section" key={groupKey}>
+              <div className="cu-section-head">
+                <button type="button" className="cu-group-toggle" onClick={() => toggle(groupKey)} aria-expanded={!folded}>
+                  {folded ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                  <span>{group.label}</span>
+                </button>
+              </div>
+              {folded ? null : group.items.map((item) => {
+                const Icon = item.icon;
+                const here = item.href.split("?")[0] === pathname && (!item.href.includes("?") || item.href.slice(item.href.indexOf("?")) === search);
+                return (
+                  <Link
+                    key={item.href + item.label}
+                    href={item.href}
+                    className={"cu-link cu-nav-item" + (here ? " is-active" : "")}
+                    aria-current={here ? "page" : undefined}
+                  >
+                    <span className="cu-link-icon">{Icon ? <Icon size={15} /> : null}</span>
+                    <span className="cu-nav-text">
+                      <span className="cu-link-label">{item.label}</span>
+                      {item.hint ? <small>{item.hint}</small> : null}
+                    </span>
+                  </Link>
+                );
+              })}
+            </section>
+          );
+        })}
+        {section.dynamic === "spaces" ? spacesSection : null}
+        {section.dynamic === "agents" ? agentsSection : null}
+      </>
+    );
+  };
 
   return (
     <div className="cu-shell">
@@ -703,61 +729,26 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           <button className="cu-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={16} /></button>
         </div>
         <div className="cu-sidebar-body">
-          {rail === "home" ? (
-            <>
-              <section className="cu-section">
-                {navLink("/notifications", "Notifications", <Inbox size={15} />)}
-                {navLink("/tasks", "My tasks", <ClipboardCheck size={15} />)}
-                {navLink("/calendar", "Calendar", <CalendarDays size={15} />)}
-                {navLink("/start-here", "New here? Start here", <HelpCircle size={15} />)}
-              </section>
-              <section className="cu-section">
-                <div className="cu-section-head"><button type="button" onClick={() => toggle("favorites")}>Favorites</button></div>
-                {collapsed.favorites ? null : (
-                  <>
-                    {navLink("/", "Squadron Overview", <Star size={15} />)}
-                    {spaceTree[0]?.lists[0] ? navLink("/lists/" + spaceTree[0].lists[0].id, spaceTree[0].lists[0].name, <Star size={15} />, spaceTree[0].lists[0].openItems) : null}
-                  </>
-                )}
-              </section>
-              {spacesSection}
-              {agentsSection}
-            </>
-          ) : null}
-          {rail === "spaces" ? <>{spacesSection}{agentsSection}</> : null}
-          {rail === "goals" ? (
-            <section className="cu-section">
-              {navLink("/goals", "All goals", <Target size={15} />)}
-              {navLink("/dashboards", "Squadron health", <LayoutDashboard size={15} />)}
-            </section>
-          ) : null}
-          {rail === "ai" ? agentsSection ?? <p className="cu-empty">No agents yet. Make one on the Agents page.</p> : null}
-          {rail === "planner" ? (
-            <section className="cu-section">
-              {navLink("/calendar", "Calendar", <CalendarDays size={15} />)}
-              {navLink("/tasks", "My tasks", <ClipboardCheck size={15} />)}
-            </section>
-          ) : null}
-          {rail === "docs" ? hubSections.filter((_, index) => navigationGroups[index].label === "The squadron") : null}
-          {rail === "dashboards" ? (
-            <section className="cu-section">
-              {navLink("/dashboards", "Command dashboard", <LayoutDashboard size={15} />)}
-              {navLink("/", "Squadron overview", <LayoutDashboard size={15} />)}
-              {navLink("/readiness", "Readiness", <LayoutDashboard size={15} />)}
-            </section>
-          ) : null}
-          {rail === "more" ? hubSections : null}
-          <section className="cu-section cu-section--utility">
-            {utilityNavigation.map((item) => {
-              const Icon = item.icon;
-              return navLink(item.href, item.label, <Icon size={15} />);
-            })}
-          </section>
+          {sectionMenu(rail)}
         </div>
       </aside>
 
       {mobileOpen ? <button className="cu-backdrop" onClick={() => setMobileOpen(false)} aria-label="Close navigation" /> : null}
-      <main className="cu-main">{children}</main>
+      <main className="cu-main">
+        {/* Where you are, and the way back to the part of the app it belongs to. */}
+        {pathname !== "/" ? (
+          <nav className="cu-crumbs" aria-label="Breadcrumb">
+            {breadcrumbFor(pathname).map((crumb, index, all) => (
+              <span key={crumb.href + crumb.label}>
+                {index < all.length - 1
+                  ? <><Link href={crumb.href}>{crumb.label}</Link><i aria-hidden="true">/</i></>
+                  : <strong aria-current="page">{crumb.label}</strong>}
+              </span>
+            ))}
+          </nav>
+        ) : null}
+        {children}
+      </main>
 
       {/* Phone navigation: the four places members actually go, always within thumb reach. */}
       <nav className="cu-bottom" aria-label="Main sections">
@@ -855,6 +846,18 @@ const shellCss = [
   ".cu-head-actions button{display:grid;place-items:center;padding:3px;border-radius:5px}",
   ".cu-head-actions button:hover{background:rgba(123,104,238,.16);color:var(--cu-text)}",
   ".cu-link--quiet{opacity:.65;font-size:12.5px}",
+  ".cu-blurb{margin:2px 10px 10px;font-size:11.5px;line-height:1.45;color:var(--cu-muted)}",
+  ".cu-group-toggle{display:flex;align-items:center;gap:5px}",
+  ".cu-nav-item{align-items:flex-start;padding-top:6px;padding-bottom:6px;min-height:auto}",
+  ".cu-nav-item .cu-link-icon{margin-top:1px}",
+  ".cu-nav-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}",
+  ".cu-nav-text small{font-size:10.5px;line-height:1.35;color:var(--cu-muted);white-space:normal}",
+  ".cu-nav-item.is-active .cu-nav-text small{color:inherit;opacity:.75}",
+  ".cu-crumbs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 14px;font-size:12.5px;color:var(--cu-muted)}",
+  ".cu-crumbs a{color:inherit;text-decoration:none}",
+  ".cu-crumbs a:hover{color:#7b68ee;text-decoration:underline}",
+  ".cu-crumbs i{font-style:normal;opacity:.45;margin-left:6px}",
+  ".cu-crumbs strong{color:var(--cu-text);font-weight:600}",
   ".cu-agent{gap:10px;min-height:34px}",
   ".cu-agent-face{position:relative;flex:none;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:13px;background:linear-gradient(135deg,#7b68ee,#b06ab3);box-shadow:0 1px 3px rgba(9,20,44,.3)}",
   ".cu-agent-dot{position:absolute;right:-1px;bottom:-1px;width:8px;height:8px;border-radius:50%;background:#2ecc71;border:2px solid var(--cu-side)}",
