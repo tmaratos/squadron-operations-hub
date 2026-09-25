@@ -517,6 +517,32 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         })}
         {section.dynamic === "spaces" ? spacesSection : null}
         {section.dynamic === "agents" ? agentsSection : null}
+
+        {/* Home keeps the departments and lists.
+            Stripping them off it was an over-correction: one canonical name and address per capability is
+            what stops people getting lost, and the list tree is neither - it is the squadron's own work,
+            and the everyday landing page is exactly where somebody expects to find it. Favourites too. */}
+        {key === "home" ? (
+          <>
+            <section className="cu-section">
+              <div className="cu-section-head">
+                <button type="button" className="cu-group-toggle" onClick={() => toggle("favorites")} aria-expanded={!collapsed.favorites}>
+                  {collapsed.favorites ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+                  <span>Favourites</span>
+                </button>
+              </div>
+              {collapsed.favorites ? null : (
+                <>
+                  {navLink("/dashboards", "Command dashboard", <LayoutDashboard size={15} />)}
+                  {spaceTree[0]?.lists[0]
+                    ? navLink("/lists/" + spaceTree[0].lists[0].id, spaceTree[0].lists[0].name, <Star size={15} />, spaceTree[0].lists[0].openItems)
+                    : null}
+                </>
+              )}
+            </section>
+            {spacesSection}
+          </>
+        ) : null}
       </>
     );
   };
@@ -729,6 +755,27 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           <button className="cu-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={16} /></button>
         </div>
         <div className="cu-sidebar-body">
+          {/* On a phone the rail of section icons is not on screen, so without this the drawer shows only
+              the section you are already in and there is no way to reach another one. It switches which
+              section the menu is showing, exactly as pressing the rail does on a wider screen. */}
+          <div className="cu-sections" role="tablist" aria-label="Sections">
+            {sections.map((section) => {
+              const Icon = section.icon;
+              return (
+                <button
+                  key={section.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={rail === section.key}
+                  className={"cu-section-chip" + (rail === section.key ? " is-active" : "")}
+                  onClick={() => setRail(section.key)}
+                >
+                  <Icon size={14} />
+                  <span>{section.label}</span>
+                </button>
+              );
+            })}
+          </div>
           {sectionMenu(rail)}
         </div>
       </aside>
@@ -846,6 +893,7 @@ const shellCss = [
   ".cu-head-actions button{display:grid;place-items:center;padding:3px;border-radius:5px}",
   ".cu-head-actions button:hover{background:rgba(123,104,238,.16);color:var(--cu-text)}",
   ".cu-link--quiet{opacity:.65;font-size:12.5px}",
+  ".cu-sections{display:none}",
   ".cu-blurb{margin:2px 10px 10px;font-size:11.5px;line-height:1.45;color:var(--cu-muted)}",
   ".cu-group-toggle{display:flex;align-items:center;gap:5px}",
   ".cu-nav-item{align-items:flex-start;padding-top:6px;padding-bottom:6px;min-height:auto}",
@@ -902,6 +950,10 @@ const shellCss = [
   ".cu-bottom{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--cu-side);border-top:1px solid var(--cu-border);padding:6px 4px calc(6px + env(safe-area-inset-bottom));}",
   ".cu-bottom-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;color:var(--cu-muted);text-decoration:none;font-size:11px;font-weight:600;min-height:52px;justify-content:center}",
   ".cu-bottom-item.is-active{color:#7b68ee;background:var(--cu-active)}",
+  ".cu-sections{display:flex;gap:6px;overflow-x:auto;padding:4px 10px 10px;margin-bottom:6px;border-bottom:1px solid var(--cu-border);scrollbar-width:none}",
+  ".cu-sections::-webkit-scrollbar{display:none}",
+  ".cu-section-chip{display:flex;align-items:center;gap:6px;flex:0 0 auto;border:1px solid var(--cu-border);background:none;color:var(--cu-muted);font:inherit;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:999px;cursor:pointer;min-height:38px}",
+  ".cu-section-chip.is-active{background:#7b68ee;border-color:#7b68ee;color:#fff}",
   ".cu-me-menu{position:fixed;top:auto;left:8px;right:8px;bottom:calc(72px + env(safe-area-inset-bottom));min-width:0;max-height:60vh;overflow-y:auto}",
   ".cu-me-menu .cu-menu-item,.cu-me-menu button{min-height:44px}",
   "}"

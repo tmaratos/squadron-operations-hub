@@ -25,7 +25,7 @@ const MODE_WHY: Record<Mode, string> = {
 
 const MODE_LABELS: Record<Mode, string> = { list: "☰ List", board: "▦ Board", table: "▤ Table", calendar: "▣ Calendar" };
 const CATEGORY_LABELS: Record<ListStatus["category"], string> = { NOT_STARTED: "Not started", ACTIVE: "Active", DONE: "Done", CLOSED: "Closed" };
-type ApiResult = { message?: string; item: ItemDetail; items: WorkItem[] };
+type ApiResult = { message?: string; item: ItemDetail; items: WorkItem[]; watching?: boolean; watcherCount?: number };
 
 const PRIORITIES: ItemPriority[] = ["URGENT", "HIGH", "NORMAL", "LOW"];
 const PRIORITY_COLOR: Record<ItemPriority, string> = { URGENT: "#e5484d", HIGH: "#f5a623", NORMAL: "#5f55ee", LOW: "#87909e" };
@@ -1679,6 +1679,7 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
     return () => { live = false; };
   }, []);
   const [comment, setComment] = useState("");
+  const [watching, setWatching] = useState(false);
   // Who was picked from the @ list, so their names can become ids when the comment is saved.
   const [named, setNamed] = useState<Array<{ id: string; fullName: string }>>([]);
   const [saving, setSaving] = useState(false);
@@ -1692,7 +1693,9 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
   useEffect(() => {
     let active = true;
     send("/api/work/items/" + itemId, "GET").then((data) => {
-      if (active && data.item) adopt(data.item);
+      if (!active) return;
+      if (data.item) adopt(data.item);
+      if (typeof data.watching === "boolean") setWatching(data.watching);
     }).catch(() => undefined);
     return () => {
       active = false;
@@ -1795,6 +1798,22 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
             ))}
           </nav>
           <span className="tp-saving" aria-live="polite">{saving ? "Saving…" : "All changes saved"}</span>
+          {/* Hearing about a task without being given it. People used to assign themselves work they were
+              not doing just to stay informed, which made the task look owned when it was not. */}
+          <button
+            type="button"
+            className={"tp-watch" + (watching ? " is-on" : "")}
+            aria-pressed={watching}
+            title={watching ? "You are following this. Press to stop." : "Tell me about this task, even though it is not mine"}
+            onClick={async () => {
+              const next = !watching;
+              setWatching(next);
+              const data = await send("/api/work/items/" + itemId, "PATCH", { watching: next });
+              if (typeof data?.watching === "boolean") setWatching(data.watching);
+            }}
+          >
+            {watching ? "🔔 Following" : "🔕 Follow"}
+          </button>
           {canEdit ? (
             <ConfirmButton
               className="tp-icon tp-icon--danger"
@@ -2072,6 +2091,9 @@ const tpCss = [
   ".tp-value{display:flex;align-items:center;gap:6px;min-width:0;font-size:13px}.tp-wrap{flex-wrap:wrap;padding:4px 0}",
   ".tp-status{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:6px;color:#fff;font-size:11px;font-weight:700;letter-spacing:.03em;cursor:pointer}",
   ".tp-overlay-select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:13px}",
+  ".tp-watch{flex:none;border:1px solid var(--tp-border);background:none;color:var(--tp-muted);font:inherit;font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:999px;cursor:pointer;white-space:nowrap}",
+  ".tp-watch:hover{border-color:#7b68ee;color:#7b68ee}",
+  ".tp-watch.is-on{background:rgba(123,104,238,.16);border-color:#7b68ee;color:#7b68ee}",
   ".tp-done{display:grid;place-items:center;width:28px;height:28px;border:1px solid var(--tp-border);border-radius:6px;background:none;color:var(--tp-muted);cursor:pointer;font-size:13px}.tp-done:hover{border-color:#0ca30c;color:#0ca30c}",
   ".tp-person{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 4px 0 3px;border-radius:14px;background:var(--tp-hover);font-size:12px}",
   ".tp-person .lw-avatar{border:0}",

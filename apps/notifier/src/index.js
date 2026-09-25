@@ -59,6 +59,42 @@ async function run(event, env) {
 
 // ---------------------------------------------------------------- deadlines
 
+// When a deadline is worth mentioning: a week out, three days out, the day before, and the day itself.
+// Then every day once it is late, because late is the part that needs nagging.
+//
+// Milestones rather than "every day inside the window". A task with a fortnight's notice used to produce
+// a fortnight of identical emails, and the squadron learned to delete them unread - which costs you the
+// one that mattered.
+const LADDER = [7, 3, 1, 0];
+
+/**
+ * Who holds each functional area, by the name a department carries.
+ *
+ * This is how a dated task nobody has taken reaches the person whose job it is. The Finance department's
+ * work reaches the Finance Officer; Logistics reaches the Logistics Officer. A task with an assignee goes
+ * to the assignee and stops there - the position holder is the fallback, not a second copy.
+ */
+async function positionHolders(env) {
+  const byArea = new Map();
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT p.functional_area_name AS area, m.user_id AS user_id
+       FROM personnel_positions p
+       JOIN personnel_members m ON m.id = p.incumbent_id
+       WHERE m.user_id IS NOT NULL AND m.status = 'ACTIVE' AND p.functional_area_name IS NOT NULL`
+    ).all();
+    for (const row of rows.results || []) {
+      const key = String(row.area).trim().toLowerCase();
+      const held = byArea.get(key) || [];
+      if (!held.includes(row.user_id)) held.push(row.user_id);
+      byArea.set(key, held);
+    }
+  } catch {
+    // No organisation chart yet. Assignees still get their own notices.
+  }
+  return byArea;
+}
+
 async function raiseDeadlineNotices(env) {
   const today = new Date().toISOString().slice(0, 10);
 
@@ -86,16 +122,87 @@ async function raiseDeadlineNotices(env) {
   const now = new Date().toISOString();
   const statements = [];
 
+  // Dated, open, and nobody has taken it: these go to whoever holds the department's position instead.
+  const holders = await positionHolders(env);
+  let unowned = { results: [] };
+  try {
+    unowned = await env.DB.prepare(
+      `SELECT i.id AS item_id, i.list_id AS list_id, i.title AS title, i.due_on AS due_on,
+              l.name AS list_name, sp.name AS space_name
+       FROM items i
+       JOIN lists l ON l.id = i.list_id
+       JOIN spaces sp ON sp.id = l.space_id
+       LEFT JOIN list_statuses s ON s.id = i.status_id
+       WHERE i.due_on IS NOT NULL
+         AND i.archived_at IS NULL
+         AND l.archived_at IS NULL
+         AND (s.category IS NULL OR s.category NOT IN ('DONE','CLOSED'))
+         AND NOT EXISTS (SELECT 1 FROM item_assignees a WHERE a.item_id = i.id)`
+    ).all();
+  } catch {
+    unowned = { results: [] };
+  }
+
+  const queued = [];
   for (const row of rows.results || []) {
+    queued.push({ ...row, viaPosition: false, viaWatch: false });
+  }
+
+  // People following a task they are not doing. The deadline is the whole reason they followed it.
+  let followed = { results: [] };
+  try {
+    followed = await env.DB.prepare(
+      `SELECT w.user_id AS user_id, i.id AS item_id, i.list_id AS list_id, i.title AS title, i.due_on AS due_on,
+              l.name AS list_name,
+              COALESCE(p.lead_days, 3) AS lead_days,
+              COALESCE(p.on_due_soon, 1) AS on_due_soon,
+              COALESCE(p.on_overdue, 1) AS on_overdue,
+              COALESCE(p.email_enabled, 1) AS email_enabled
+       FROM item_watchers w
+       JOIN items i ON i.id = w.item_id
+       JOIN lists l ON l.id = i.list_id
+       JOIN users u ON u.id = w.user_id
+       LEFT JOIN list_statuses s ON s.id = i.status_id
+       LEFT JOIN notification_prefs p ON p.user_id = w.user_id
+       WHERE i.due_on IS NOT NULL
+         AND i.archived_at IS NULL
+         AND l.archived_at IS NULL
+         AND u.status IN ('APPROVED','PENDING')
+         AND (s.category IS NULL OR s.category NOT IN ('DONE','CLOSED'))
+         AND NOT EXISTS (SELECT 1 FROM item_assignees a WHERE a.item_id = i.id AND a.user_id = w.user_id)`
+    ).all();
+  } catch {
+    followed = { results: [] };
+  }
+  for (const row of followed.results || []) {
+    queued.push({ ...row, viaPosition: false, viaWatch: true });
+  }
+  for (const row of unowned.results || []) {
+    for (const userId of holders.get(String(row.space_name || "").trim().toLowerCase()) || []) {
+      queued.push({
+        ...row,
+        user_id: userId,
+        lead_days: 7,
+        on_due_soon: 1,
+        on_overdue: 1,
+        email_enabled: 1,
+        viaPosition: true
+      });
+    }
+  }
+
+  for (const row of queued) {
     const days = daysBetween(today, row.due_on);
     const late = days < 0;
     if (late && !row.on_overdue) continue;
     if (!late && !row.on_due_soon) continue;
-    if (!late && days > row.lead_days) continue;
+    // A rung of the ladder, not every day of the window. Late still speaks up daily.
+    if (!late && !LADDER.includes(days)) continue;
+    if (!late && days > Math.max(row.lead_days, 7)) continue;
 
     const kind = late ? "OVERDUE" : "DUE_SOON";
-    // A member hears about a given deadline once a day at most, however often this runs.
-    const dedupe = kind + ":" + row.item_id + ":" + today;
+    // Once per member per task per rung. Late uses the date, so it repeats daily and nothing else does.
+    const dedupe = kind + ":" + row.item_id + ":" + (late ? today : "d" + days) + (row.viaPosition ? ":pos" : row.viaWatch ? ":watch" : "");
     const title = late
       ? row.title + " is " + plural(Math.abs(days), "day") + " late"
       : days === 0
@@ -111,7 +218,11 @@ async function raiseDeadlineNotices(env) {
         row.user_id,
         kind,
         title.slice(0, 300),
-        "In " + row.list_name + ". Due " + row.due_on + ".",
+        (row.viaPosition
+          ? "Nobody has taken this. It is " + row.space_name + " work, which is yours. In " + row.list_name + ". Due " + row.due_on + "."
+          : row.viaWatch
+            ? "You are following this one. In " + row.list_name + ". Due " + row.due_on + "."
+            : "In " + row.list_name + ". Due " + row.due_on + "."),
         row.item_id,
         row.list_id,
         APP_URL + "/lists/" + row.list_id + "?item=" + row.item_id,

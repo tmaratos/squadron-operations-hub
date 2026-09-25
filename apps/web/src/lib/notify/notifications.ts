@@ -122,6 +122,10 @@ export async function savePrefs(userId: string, prefs: NotificationPrefs): Promi
 /**
  * Records notices, skipping anyone who has turned that kind off and anyone being told about their own
  * action. Whether an email follows is decided here too: a member with email off still sees it in the Hub.
+ *
+ * Only the act is suppressed, never the consequence. Somebody who assigns a task to themselves is not told
+ * that they did it - they were there - but the deadline notices that follow are raised by the hourly run
+ * with no actor at all, so they arrive exactly as they would for work somebody else had given them.
  */
 export async function notify(notices: NewNotification[]): Promise<void> {
   const wanted = notices.filter((notice) => notice.userId && notice.userId !== notice.actorUserId);

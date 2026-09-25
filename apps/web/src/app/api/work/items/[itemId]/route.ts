@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { unavailableAssignees } from "@/lib/org/directory";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { notifyAssigned, notifyComment, notifyMentions, notifyStatus } from "@/lib/notify/events";
+import { notifyAssigned, notifyComment, notifyMentions, notifyStatus, setWatching, watchersOf } from "@/lib/notify/events";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { runAutomations, type AutomationEvent } from "@/lib/work/automations";
 import { addChecklist, addChecklistEntry, addComment, archiveItem, getItemDetail, moveItem, setChecklistEntryDone, updateItem } from "@/lib/work/items";
@@ -21,6 +21,8 @@ const updateItemSchema = z.object({
   parentId: z.string().trim().max(80).nullable().optional(),
   tags: z.array(z.string().trim().min(1).max(40)).max(30).optional(),
   assigneeIds: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+  // Following a task without taking it on.
+  watching: z.boolean().optional(),
   fieldValues: z.record(z.string(), z.unknown()).optional(),
   comment: z.string().trim().min(1).max(10000).optional(),
   checklist: z.object({ name: z.string().trim().min(1).max(200) }).optional(),
@@ -38,7 +40,8 @@ export async function GET(_request: Request, { params }: Params) {
   const { itemId } = await params;
   const item = await getItemDetail(itemId);
   if (!item) return NextResponse.json({ message: "Item not found." }, { status: 404 });
-  return NextResponse.json({ item });
+  const watchers = await watchersOf(itemId);
+  return NextResponse.json({ item, watching: watchers.includes(user.id), watcherCount: watchers.length });
 }
 
 export async function PATCH(request: Request, { params }: Params) {
@@ -52,7 +55,11 @@ export async function PATCH(request: Request, { params }: Params) {
     const before = await getItemDetail(itemId);
     if (!before) return NextResponse.json({ message: "Item not found." }, { status: 404 });
 
-    const { comment, checklist, checklistEntry, entryDone, listId, ...changes } = updateItemSchema.parse(await request.json());
+    const { comment, checklist, checklistEntry, entryDone, listId, watching, ...changes } = updateItemSchema.parse(await request.json());
+
+    if (watching !== undefined) {
+      await setWatching(itemId, user.id, watching);
+    }
 
     // Somebody on leave or inactive does not get handed new work, whatever asked for it.
     if (changes.assigneeIds?.length) {
@@ -116,7 +123,13 @@ export async function PATCH(request: Request, { params }: Params) {
       summary: user.fullName + " updated " + before.title + " (" + changed.join(", ") + ")",
       metadata: { changed, previousStatusId: before.statusId, newStatusId: changes.statusId ?? before.statusId }
     });
-    return NextResponse.json({ item: await getItemDetail(itemId), message: "Saved." });
+    const watchers = await watchersOf(itemId);
+    return NextResponse.json({
+      item: await getItemDetail(itemId),
+      watching: watchers.includes(user.id),
+      watcherCount: watchers.length,
+      message: "Saved."
+    });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ message: "The change was invalid.", issues: error.issues }, { status: 400 });
     console.error(error);

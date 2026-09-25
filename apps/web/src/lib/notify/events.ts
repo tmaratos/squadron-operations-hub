@@ -13,13 +13,43 @@ function itemUrl(item: { id: string; listId: string }): string {
 /** Everyone who should hear about activity on an item: whoever it is assigned to, plus whoever raised it. */
 async function interestedIn(item: ItemDetail): Promise<string[]> {
   const people = new Set(item.assignees.map((person) => person.id));
+  const db = getDatabase();
   try {
-    const row = await getDatabase().prepare("SELECT created_by FROM items WHERE id = ?").bind(item.id).first<{ created_by: string | null }>();
+    const row = await db.prepare("SELECT created_by FROM items WHERE id = ?").bind(item.id).first<{ created_by: string | null }>();
     if (row?.created_by) people.add(row.created_by);
   } catch {
     // The assignees alone are enough to be useful.
   }
+  try {
+    // Anybody who asked to hear about this one, whether or not they are doing it.
+    const rows = await db.prepare("SELECT user_id FROM item_watchers WHERE item_id = ?").bind(item.id).all<{ user_id: string }>();
+    rows.results.forEach((row) => people.add(row.user_id));
+  } catch {
+    // The table is not there yet.
+  }
   return [...people];
+}
+
+/** Whether this member is following the task, and who else is. */
+export async function watchersOf(itemId: string): Promise<string[]> {
+  try {
+    const rows = await getDatabase().prepare("SELECT user_id FROM item_watchers WHERE item_id = ?").bind(itemId).all<{ user_id: string }>();
+    return rows.results.map((row) => row.user_id);
+  } catch {
+    return [];
+  }
+}
+
+export async function setWatching(itemId: string, userId: string, watching: boolean): Promise<void> {
+  const db = getDatabase();
+  if (watching) {
+    await db
+      .prepare("INSERT OR IGNORE INTO item_watchers (item_id, user_id, created_at) VALUES (?, ?, ?)")
+      .bind(itemId, userId, new Date().toISOString())
+      .run();
+    return;
+  }
+  await db.prepare("DELETE FROM item_watchers WHERE item_id = ? AND user_id = ?").bind(itemId, userId).run();
 }
 
 export async function notifyAssigned(input: { item: ItemDetail; addedUserIds: string[]; actor: { id: string; fullName: string } }): Promise<void> {
