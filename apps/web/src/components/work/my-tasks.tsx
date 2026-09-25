@@ -50,12 +50,12 @@ function whenLabel(dueOn: string | null): string {
   return new Date(dueOn + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function MyTasks({ items: initialItems, userId, filterLabel }: { items: TaskRow[]; userId: string; filterLabel?: string }) {
+export function MyTasks({ items: initialItems, userId, filterLabel, showEveryone }: { items: TaskRow[]; userId: string; filterLabel?: string; showEveryone?: boolean }) {
   const [items, setItems] = useState(initialItems);
   // Arriving from a dashboard number means asking a question about the squadron, not about yourself.
   // Defaulting to Mine answered it with your own work - usually none of it - so the five overdue tasks
   // that were counted a moment ago showed as an empty page that looked like My tasks.
-  const [tab, setTab] = useState<Tab>(filterLabel ? "everyone" : "mine");
+  const [tab, setTab] = useState<Tab>(filterLabel || showEveryone ? "everyone" : "mine");
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [people, setPeople] = useState<Array<{ userId: string; fullName: string }>>([]);

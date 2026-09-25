@@ -66,6 +66,8 @@ export interface Section {
   groups: NavigationGroup[];
   /** Spaces and AI grow their own trees from the squadron's data. */
   dynamic?: "spaces" | "agents";
+  /** What the + in this section's header makes. Left out where the section makes nothing. */
+  create?: { label: string; href: string };
 }
 
 export const sections: Section[] = [
@@ -89,6 +91,7 @@ export const sections: Section[] = [
   },
   {
     key: "spaces",
+    create: { label: "New department or list", href: "/spaces" },
     label: "Spaces",
     icon: Grid3x3,
     href: "/spaces",
@@ -98,7 +101,7 @@ export const sections: Section[] = [
       {
         label: "All work",
         items: [
-          { label: "All tasks", href: "/tasks", icon: ClipboardCheck, hint: "Across every list" },
+          { label: "All tasks", href: "/tasks?scope=all&from=spaces", icon: ClipboardCheck, hint: "Everybody's work, every list" },
           { label: "Departments and lists", href: "/spaces", icon: Grid3x3, hint: "Add, rename, reorganise" }
         ]
       }
@@ -115,14 +118,15 @@ export const sections: Section[] = [
         label: "Dates",
         items: [
           { label: "Calendar", href: "/calendar", icon: CalendarDays, hint: "Work by date" },
-          { label: "Deadlines", href: "/tasks?due=next14", icon: ClipboardCheck, hint: "Due in the next fortnight" },
-          { label: "Overdue", href: "/tasks?due=overdue", icon: ClipboardCheck, hint: "Past its date and still open" }
+          { label: "Deadlines", href: "/tasks?due=next14&from=planner", icon: ClipboardCheck, hint: "Due in the next fortnight" },
+          { label: "Overdue", href: "/tasks?due=overdue&from=planner", icon: ClipboardCheck, hint: "Past its date and still open" }
         ]
       }
     ]
   },
   {
     key: "goals",
+    create: { label: "New goal", href: "/goals" },
     label: "Goals",
     icon: Target,
     href: "/goals",
@@ -136,6 +140,7 @@ export const sections: Section[] = [
   },
   {
     key: "ai",
+    create: { label: "New agent", href: "/agents" },
     label: "AI",
     icon: Bot,
     href: "/agents",
@@ -150,6 +155,7 @@ export const sections: Section[] = [
   },
   {
     key: "docs",
+    create: { label: "New document", href: "/documents" },
     label: "Docs",
     icon: FileText,
     href: "/documents",
@@ -184,6 +190,7 @@ export const sections: Section[] = [
   },
   {
     key: "squadron",
+    create: { label: "Add a person", href: "/staff" },
     label: "Squadron",
     icon: Users,
     href: "/staff",
@@ -242,7 +249,17 @@ export const sections: Section[] = [
  * dashboard: it used to light up "Dashboard" in the rail while showing the Readiness page, which reads as
  * having been redirected somewhere you did not ask for.
  */
-export function sectionFor(pathname: string): SectionKey {
+export function sectionFor(pathname: string, search?: string): SectionKey {
+  // A filtered task view belongs to whatever opened it.
+  //
+  // Without this, pressing "Deadlines" in Planner or "no owner" on the Command dashboard landed on /tasks
+  // and the whole left side changed to Home - so the section a member was working in vanished underneath
+  // them, and the way back was to start again. The section travels in the link.
+  if (search) {
+    const from = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search).get("from");
+    if (from && sections.some((section) => section.key === from)) return from as SectionKey;
+  }
+
   const routes: Array<[string, SectionKey]> = [
     ["/tasks", "home"],
     ["/notifications", "home"],
@@ -277,14 +294,27 @@ export function sectionByKey(key: SectionKey): Section {
 }
 
 /** The trail to where somebody is, for the line above the page. */
-export function breadcrumbFor(pathname: string): Array<{ label: string; href: string }> {
-  const section = sectionByKey(sectionFor(pathname));
+export function breadcrumbFor(pathname: string, search?: string): Array<{ label: string; href: string }> {
+  const section = sectionByKey(sectionFor(pathname, search));
   const trail: Array<{ label: string; href: string }> = [{ label: section.label, href: section.href }];
-  const item = section.groups
-    .flatMap((group) => group.items)
-    .find((entry) => entry.href.split("?")[0] === pathname);
+  const full = pathname + (search && search !== "?" ? (search.startsWith("?") ? search : "?" + search) : "");
+  const items = section.groups.flatMap((group) => group.items);
+  // The exact link first, so "Deadlines" is named rather than whatever else lives at /tasks.
+  const item = items.find((entry) => entry.href === full) ?? items.find((entry) => entry.href.split("?")[0] === pathname);
   if (item && item.href !== section.href) trail.push({ label: item.label, href: item.href });
   return trail;
+}
+
+/**
+ * What a task view is called, and whose work it shows.
+ *
+ * "All tasks" and "My tasks" are different questions and must not quietly be the same page. Arriving from
+ * All tasks shows everybody's work and says so; arriving at /tasks on its own is still your own.
+ */
+export function taskScope(search?: string): { all: boolean } {
+  if (!search) return { all: false };
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  return { all: params.get("scope") === "all" };
 }
 
 // Kept so older imports keep working while the shell is moved across.

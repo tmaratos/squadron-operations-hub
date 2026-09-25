@@ -52,8 +52,8 @@ type RailKey = SectionKey;
 
 const railItems = sections.map((section) => ({ key: section.key, label: section.label, href: section.href, icon: section.icon }));
 
-function railFor(pathname: string): RailKey {
-  return sectionFor(pathname);
+function railFor(pathname: string, search?: string): RailKey {
+  return sectionFor(pathname, search);
 }
 
 export function AppShell({ children, user, workspaces, spaces, agents }: {
@@ -207,7 +207,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
       window.setTimeout(() => setMoveNote(null), 4000);
     }
   }
-  const [rail, setRail] = useState<RailKey>(railFor(pathname));
+  const [rail, setRail] = useState<RailKey>(railFor(pathname, search));
   // Folded unless somebody opens it: a dozen agents must not push the squadron's lists off the screen.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ agents: true });
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -733,25 +733,33 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         {railItems.map((item) => {
           const Icon = item.icon;
           return (
-            <Link key={item.key} href={item.href} className={"cu-rail-item" + (rail === item.key ? " is-active" : "")} onClick={() => setRail(item.key)}>
+            <Link
+              key={item.key}
+              href={item.href}
+              className={"cu-rail-item" + (rail === item.key ? " is-active" : "")}
+              aria-current={rail === item.key ? "page" : undefined}
+              onClick={() => setRail(item.key)}
+            >
               <span className="cu-rail-icon"><Icon size={18} /></span>
               <span>{item.label}</span>
             </Link>
           );
         })}
-        <div className="cu-rail-spacer" />
-        <Link href="/connections" className={"cu-rail-item" + (active("/connections") ? " is-active" : "")} title="Connect your email, files and AI">
-          <span className="cu-rail-icon"><Plug size={18} /></span><span>Connect</span>
-        </Link>
-        <Link href="/settings" className={"cu-rail-item" + (active("/settings") ? " is-active" : "")}>
-          <span className="cu-rail-icon"><Settings size={18} /></span><span>Settings</span>
-        </Link>
       </nav>
 
       <aside className={"cu-sidebar" + (mobileOpen ? " is-open" : "")}>
         <div className="cu-sidebar-head">
           <h2>{railTitle}</h2>
-          <Link href="/spaces" className="cu-new" aria-label="Create"><Plus size={14} /></Link>
+          {sectionByKey(rail).create ? (
+            <Link
+              href={sectionByKey(rail).create!.href}
+              className="cu-new"
+              aria-label={sectionByKey(rail).create!.label}
+              title={sectionByKey(rail).create!.label}
+            >
+              <Plus size={14} />
+            </Link>
+          ) : null}
           <button className="cu-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={16} /></button>
         </div>
         <div className="cu-sidebar-body">
@@ -785,7 +793,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         {/* Where you are, and the way back to the part of the app it belongs to. */}
         {pathname !== "/" ? (
           <nav className="cu-crumbs" aria-label="Breadcrumb">
-            {breadcrumbFor(pathname).map((crumb, index, all) => (
+            {breadcrumbFor(pathname, search).map((crumb, index, all) => (
               <span key={crumb.href + crumb.label}>
                 {index < all.length - 1
                   ? <><Link href={crumb.href}>{crumb.label}</Link><i aria-hidden="true">/</i></>
@@ -798,13 +806,29 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
       </main>
 
       {/* Phone navigation: the four places members actually go, always within thumb reach. */}
-      <nav className="cu-bottom" aria-label="Main sections">
-        <Link href="/" className={"cu-bottom-item" + (pathname === "/" ? " is-active" : "")}><Home size={20} /><span>Home</span></Link>
-        <Link href="/tasks" className={"cu-bottom-item" + (active("/tasks") ? " is-active" : "")}><ClipboardCheck size={20} /><span>My Tasks</span></Link>
-        <Link href="/spaces" className={"cu-bottom-item" + (active("/spaces") || active("/lists") ? " is-active" : "")}><Grid3x3 size={20} /><span>Lists</span></Link>
-        <Link href="/dashboards" className={"cu-bottom-item" + (active("/dashboards") ? " is-active" : "")}><LayoutDashboard size={20} /><span>Dashboard</span></Link>
-        {/* On a phone the avatar is pushed off the end of the topbar by the search box, so this is the
-            only way to reach the account. It opens the same menu. */}
+      {/* Personal quick access, not a second set of sections.
+          It used to be Home / My Tasks / Lists / Dashboard, which put "Dashboard" back on screen beside
+          the clearer "Command" and gave a phone three navigations at once: this bar, the section chips in
+          the drawer, and the drawer's own menu. Sections live in the drawer; this is only yours. */}
+      <nav className="cu-bottom" aria-label="Your quick access">
+        <span className="cu-bottom-label">You</span>
+        <Link href="/" className={"cu-bottom-item" + (pathname === "/" ? " is-active" : "")} aria-current={pathname === "/" ? "page" : undefined}>
+          <Home size={20} /><span>Home</span>
+        </Link>
+        <Link href="/tasks" className={"cu-bottom-item" + (pathname === "/tasks" && !search.includes("scope=all") ? " is-active" : "")} aria-current={pathname === "/tasks" ? "page" : undefined}>
+          <ClipboardCheck size={20} /><span>My tasks</span>
+        </Link>
+        <Link href="/notifications" className={"cu-bottom-item" + (active("/notifications") ? " is-active" : "")} aria-current={active("/notifications") ? "page" : undefined}>
+          <Inbox size={20} /><span>Alerts</span>
+        </Link>
+        <button
+          type="button"
+          className={"cu-bottom-item" + (mobileOpen ? " is-active" : "")}
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open sections"
+        >
+          <Menu size={20} /><span>Sections</span>
+        </button>
         <button
           type="button"
           className={"cu-bottom-item" + (meOpen ? " is-active" : "")}
@@ -950,6 +974,7 @@ const shellCss = [
   ".cu-bottom{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:70;background:var(--cu-side);border-top:1px solid var(--cu-border);padding:6px 4px calc(6px + env(safe-area-inset-bottom));}",
   ".cu-bottom-item{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:10px;color:var(--cu-muted);text-decoration:none;font-size:11px;font-weight:600;min-height:52px;justify-content:center}",
   ".cu-bottom-item.is-active{color:#7b68ee;background:var(--cu-active)}",
+  ".cu-bottom-label{display:none}",
   ".cu-sections{display:flex;gap:6px;overflow-x:auto;padding:4px 10px 10px;margin-bottom:6px;border-bottom:1px solid var(--cu-border);scrollbar-width:none}",
   ".cu-sections::-webkit-scrollbar{display:none}",
   ".cu-section-chip{display:flex;align-items:center;gap:6px;flex:0 0 auto;border:1px solid var(--cu-border);background:none;color:var(--cu-muted);font:inherit;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:999px;cursor:pointer;min-height:38px}",

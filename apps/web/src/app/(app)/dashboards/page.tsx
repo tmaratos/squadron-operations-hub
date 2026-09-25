@@ -56,7 +56,9 @@ function widgetLink(config: { filters?: { due?: string; tags?: string[]; statusN
   if (filters.tags?.length) query.set("tag", filters.tags[0]);
   if (filters.priorities?.length) query.set("priority", filters.priorities[0]);
   const text = query.toString();
-  return "/tasks" + (text ? "?" + text : "");
+  // The section travels with the link, so pressing a number does not drop somebody out of Command.
+  query.set("from", "command");
+  return "/tasks?" + query.toString();
 }
 
 function ItemRows({ items, total, empty }: { items: DashboardItem[]; total: number; empty: string }) {
@@ -211,7 +213,7 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
               <strong>{weekCount}</strong> due this week.
             </p>
             <p className="cd-summary cd-summary--health">
-              <Link className="cd-stat-link" href="/tasks?owner=none">
+              <Link className="cd-stat-link" href="/tasks?owner=none&from=command">
                 <strong className={unowned ? "cd-text-late" : ""}>{unowned}</strong> dated {unowned === 1 ? "task has" : "tasks have"} no owner
               </Link> ·{" "}
               <Link className="cd-stat-link" href="/staff">
@@ -301,7 +303,7 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
                 return (
                   <Link
                     key={entry.day}
-                    href={"/tasks?date=" + entry.day}
+                    href={"/tasks?date=" + entry.day + "&from=command"}
                     className={"cd-strip-day" + (index === 0 ? " is-today" : "") + (date.getDay() === 0 || date.getDay() === 6 ? " is-weekend" : "")}
                     title={entry.count ? entry.titles.join("\n") : "Nothing due"}
                   >

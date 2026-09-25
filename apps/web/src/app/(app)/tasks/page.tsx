@@ -54,16 +54,30 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
   const filtered = described.length > 0;
   const mine = items.filter((item) => !item.closed && item.assigneeIds.includes(user.id)).length;
 
+  // "All tasks" and "My tasks" are different questions. Arriving from All tasks shows the squadron's work
+  // and says so, rather than quietly answering the narrower question under the wider title.
+  const everybody = one("scope") === "all";
+  const openCount = shown.filter((item) => !item.closed).length;
+
+  const title = filtered
+    ? "Tasks " + described.join(", ")
+    : everybody ? "All tasks" : "My tasks";
+
+  const description = filtered
+    ? openCount + " open, everybody's, not only yours."
+    : everybody
+      ? openCount + " open across the squadron, in every list."
+      : mine ? mine + " open and assigned to you, soonest first." : "Nothing is assigned to you at the moment.";
+
   return (
     <div className="page-stack">
-      <PageHeader
-        eyebrow="Work"
-        title={filtered ? "Tasks " + described.join(", ") : "My tasks"}
-        description={filtered
-          ? shown.filter((item) => !item.closed).length + " open, everybody's, not only yours."
-          : mine ? mine + " open and assigned to you, soonest first." : "Nothing is assigned to you at the moment."}
+      <PageHeader eyebrow="Work" title={title} description={description} />
+      <MyTasks
+        items={shown}
+        userId={user.id}
+        filterLabel={filtered ? described.join(", ") : undefined}
+        showEveryone={everybody}
       />
-      <MyTasks items={shown} userId={user.id} filterLabel={filtered ? described.join(", ") : undefined} />
     </div>
   );
 }
