@@ -16,6 +16,9 @@ export interface DiscordChannel {
   id: string;
   name: string;
   type: number;
+  /** The category it sits in, when it sits in one. */
+  parentId: string | null;
+  isCategory: boolean;
 }
 
 export interface DiscordMessage {
@@ -59,14 +62,25 @@ async function call<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-/** The text channels the bot can see. Voice and category entries are left out. */
+/**
+ * The channels the bot can see, and the categories they are grouped under.
+ *
+ * Categories are kept, because a squadron groups its channels for a reason - all the senior member ones
+ * together - and watching the group is what somebody actually means.
+ */
 export async function listChannels(): Promise<DiscordChannel[]> {
   const { guildId } = credentials();
-  const rows = await call<Array<{ id: string; name: string; type: number }>>("/guilds/" + guildId + "/channels");
-  // 0 is a text channel, 5 an announcement channel, 15 a forum. Nothing else holds a conversation.
+  const rows = await call<Array<{ id: string; name: string; type: number; parent_id?: string | null }>>("/guilds/" + guildId + "/channels");
+  // 0 is a text channel, 5 an announcement channel, 15 a forum, 4 a category. Nothing else holds talk.
   return rows
-    .filter((row) => [0, 5, 15].includes(row.type))
-    .map((row) => ({ id: row.id, name: row.name, type: row.type }))
+    .filter((row) => [0, 4, 5, 15].includes(row.type))
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      type: row.type,
+      parentId: row.parent_id ?? null,
+      isCategory: row.type === 4
+    }))
     .sort((left, right) => left.name.localeCompare(right.name));
 }
 

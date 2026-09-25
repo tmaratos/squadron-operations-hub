@@ -15,7 +15,9 @@ const schema = z.discriminatedUnion("action", [
     action: z.literal("watch"),
     channelId: z.string().trim().min(1).max(40),
     channelName: z.string().trim().min(1).max(120),
-    watching: z.boolean()
+    watching: z.boolean(),
+    isCategory: z.boolean().optional(),
+    parentId: z.string().trim().max(40).nullable().optional()
   }),
   z.object({ action: z.literal("read") }),
   z.object({
@@ -69,6 +71,8 @@ export async function POST(request: Request) {
         channelId: input.channelId,
         channelName: input.channelName,
         watching: input.watching,
+        isCategory: input.isCategory ?? false,
+        parentId: input.parentId ?? null,
         userId: user.id
       });
       await recordAuditEvent({
@@ -76,7 +80,7 @@ export async function POST(request: Request) {
         action: input.watching ? "DISCORD_CHANNEL_WATCHED" : "DISCORD_CHANNEL_UNWATCHED",
         entityType: "discord_channel",
         entityId: input.channelId,
-        summary: user.fullName + (input.watching ? " had the Hub start reading #" : " had the Hub stop reading #") + input.channelName,
+        summary: user.fullName + (input.watching ? " had the Hub start reading " : " had the Hub stop reading ") + (input.isCategory ? "everything in " : "#") + input.channelName,
         metadata: { channelName: input.channelName }
       });
       return NextResponse.json({ channels: await listWatchable(), message: input.watching ? "Reading #" + input.channelName + "." : "Stopped reading #" + input.channelName + "." });

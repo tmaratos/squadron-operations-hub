@@ -23,7 +23,17 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-export async function listWatchable(): Promise<Array<{ channelId: string; name: string; watching: boolean }>> {
+export interface WatchableGroup {
+  channelId: string;
+  name: string;
+  isCategory: boolean;
+  parentId: string | null;
+  watching: boolean;
+  /** True when this channel is read because the group it is in is watched, not on its own account. */
+  viaGroup: boolean;
+}
+
+export async function listWatchable(): Promise<WatchableGroup[]> {
   const db = getDatabase();
   const live = await listChannels();
   let held: Array<{ channel_id: string; watching: number }> = [];
@@ -33,19 +43,33 @@ export async function listWatchable(): Promise<Array<{ channelId: string; name: 
   } catch { /* the table is not there yet */ }
 
   const watching = new Map(held.map((row) => [row.channel_id, Boolean(row.watching)]));
-  return live.map((channel) => ({ channelId: channel.id, name: channel.name, watching: watching.get(channel.id) ?? false }));
+  return live.map((channel) => {
+    const own = watching.get(channel.id) ?? false;
+    const viaGroup = !channel.isCategory && Boolean(channel.parentId && watching.get(channel.parentId));
+    return {
+      channelId: channel.id,
+      name: channel.name,
+      isCategory: channel.isCategory,
+      parentId: channel.parentId,
+      watching: own || viaGroup,
+      viaGroup
+    };
+  });
 }
 
-export async function setWatching(input: { guildId: string; channelId: string; channelName: string; watching: boolean; userId: string }): Promise<void> {
+export async function setWatching(input: { guildId: string; channelId: string; channelName: string; watching: boolean; userId: string; isCategory?: boolean; parentId?: string | null }): Promise<void> {
   const db = getDatabase();
   const now = nowIso();
   await db
     .prepare(
-      "INSERT INTO discord_channels (id, guild_id, channel_id, channel_name, watching, added_by, created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?) " +
-      "ON CONFLICT(channel_id) DO UPDATE SET watching = excluded.watching, channel_name = excluded.channel_name, updated_at = excluded.updated_at"
+      "INSERT INTO discord_channels (id, guild_id, channel_id, channel_name, watching, kind, parent_id, added_by, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) " +
+      "ON CONFLICT(channel_id) DO UPDATE SET watching = excluded.watching, channel_name = excluded.channel_name, kind = excluded.kind, parent_id = excluded.parent_id, updated_at = excluded.updated_at"
     )
-    .bind(crypto.randomUUID(), input.guildId, input.channelId, input.channelName, input.watching ? 1 : 0, input.userId, now, now)
+    .bind(
+      crypto.randomUUID(), input.guildId, input.channelId, input.channelName, input.watching ? 1 : 0,
+      input.isCategory ? "CATEGORY" : "CHANNEL", input.parentId ?? null, input.userId, now, now
+    )
     .run();
 }
 
@@ -57,15 +81,53 @@ export async function setWatching(input: { guildId: string; channelId: string; c
  */
 export async function readDiscord(userId: string): Promise<number> {
   const db = getDatabase();
-  let channels: Array<{ channel_id: string; channel_name: string; last_message_id: string | null }> = [];
+  let watched: Array<{ channel_id: string; channel_name: string; last_message_id: string | null; kind: string }> = [];
   try {
     const rows = await db
-      .prepare("SELECT channel_id, channel_name, last_message_id FROM discord_channels WHERE watching = 1")
-      .all<{ channel_id: string; channel_name: string; last_message_id: string | null }>();
-    channels = rows.results;
+      .prepare("SELECT channel_id, channel_name, last_message_id, kind FROM discord_channels WHERE watching = 1")
+      .all<{ channel_id: string; channel_name: string; last_message_id: string | null; kind: string }>();
+    watched = rows.results;
   } catch {
     return 0;
   }
+  if (!watched.length) return 0;
+
+  // A watched group means whatever is inside it right now, so a channel added to the senior member
+  // category next month is read without anybody remembering to switch it on.
+  const groups = watched.filter((row) => row.kind === "CATEGORY").map((row) => row.channel_id);
+  const channels: Array<{ channel_id: string; channel_name: string; last_message_id: string | null }> =
+    watched.filter((row) => row.kind !== "CATEGORY");
+
+  if (groups.length) {
+    const live = await listChannels().catch(() => []);
+    const already = new Set(channels.map((row) => row.channel_id));
+
+    // A channel switched off by hand stays off, even when the group around it is watched. Otherwise
+    // there would be no way to keep one channel out, and somebody would turn the whole group off instead.
+    const excluded = new Set<string>();
+    try {
+      const rows = await db
+        .prepare("SELECT channel_id FROM discord_channels WHERE watching = 0 AND kind = 'CHANNEL'")
+        .all<{ channel_id: string }>();
+      rows.results.forEach((row) => excluded.add(row.channel_id));
+    } catch { /* first run */ }
+
+    const marks = new Map<string, string | null>();
+    try {
+      const rows = await db.prepare("SELECT channel_id, last_message_id FROM discord_channels").all<{ channel_id: string; last_message_id: string | null }>();
+      rows.results.forEach((row) => marks.set(row.channel_id, row.last_message_id));
+    } catch { /* first run */ }
+
+    live
+      .filter((channel) => !channel.isCategory && channel.parentId && groups.includes(channel.parentId))
+      .filter((channel) => !already.has(channel.id) && !excluded.has(channel.id))
+      .forEach((channel) => channels.push({
+        channel_id: channel.id,
+        channel_name: channel.name,
+        last_message_id: marks.get(channel.id) ?? null
+      }));
+  }
+
   if (!channels.length) return 0;
 
   let kept = 0;
