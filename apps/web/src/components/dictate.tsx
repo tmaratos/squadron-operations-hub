@@ -85,7 +85,10 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
       } else if (event.error === "no-speech") {
         setProblem("Nothing was heard.");
       } else if (event.error === "network") {
-        setProblem("Speech recognition needs a connection and could not reach it.");
+        // Not usually the squadron's connection. The recogniser is a service the browser calls, and several
+        // Chromium browsers that are not Chrome itself ship without the key for it, so it fails here and
+        // nowhere else. Saying "check your connection" sends somebody to debug the wrong thing entirely.
+        setProblem("This browser cannot reach its speech service. Chrome, Edge or Safari will work.");
       } else if (event.error !== "aborted") {
         setProblem("That did not work.");
       }

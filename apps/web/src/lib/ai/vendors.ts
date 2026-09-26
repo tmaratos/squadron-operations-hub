@@ -12,6 +12,27 @@ export const VENDOR_MODELS: Record<string, string> = {
   "openai-compatible": "gpt-4o-mini"
 };
 
+/**
+ * What to call whichever AI actually answered.
+ *
+ * Every screen was saying "runs on the squadron's own server" whether it did or not, which is worse than
+ * saying nothing: a member who connected their own Claude account was being told their task summary had
+ * stayed inside the squadron when it had gone to Anthropic on their own key. Where the work went is not a
+ * detail, so the label is now derived from the same value that decides it.
+ */
+export function providerLabel(providerId: string | null | undefined): string {
+  switch (providerId) {
+    case "anthropic": return "your Claude account";
+    case "openai": return "your OpenAI account";
+    case "google-gemini": return "your Gemini account";
+    case "mistral": return "your Mistral account";
+    case "openrouter": return "your OpenRouter account";
+    case "openai-compatible": return "your own AI service";
+    case "squadron-server": return "the squadron's own server";
+    default: return "the assistant";
+  }
+}
+
 export function isVendorProvider(providerId: string): boolean {
   return Object.prototype.hasOwnProperty.call(VENDOR_MODELS, providerId);
 }

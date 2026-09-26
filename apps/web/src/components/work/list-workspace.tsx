@@ -5,6 +5,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
 import { MentionBox, renderMentions, toStored } from "./mention-box";
 import { Dictate } from "@/components/dictate";
+import { providerLabel } from "@/lib/ai/vendors";
 import { LinkPanel } from "./link-panel";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
@@ -1546,6 +1547,8 @@ function AssistBox({ itemId, canEdit, onAddTag, onAddSubtasks, onComment }: {
   onComment: (body: string) => Promise<void>;
 }) {
   const [available, setAvailable] = useState<boolean | null>(null);
+  // Which AI is actually answering for this member, so the panel can say so rather than assume.
+  const [source, setSource] = useState<string | null>(null);
   const [busy, setBusy] = useState<"" | AssistAction>("");
   const [note, setNote] = useState("");
   const [summary, setSummary] = useState("");
@@ -1555,9 +1558,12 @@ function AssistBox({ itemId, canEdit, onAddTag, onAddSubtasks, onComment }: {
   useEffect(() => {
     let active = true;
     fetch("/api/work/items/" + itemId + "/assist")
-      .then((response) => response.json() as Promise<{ available?: boolean }>)
+      .then((response) => response.json() as Promise<{ available?: boolean; source?: string }>)
       .then((data) => {
-        if (active) setAvailable(Boolean(data.available));
+        if (active) {
+          setAvailable(Boolean(data.available));
+          setSource(typeof data.source === "string" ? data.source : null);
+        }
       })
       .catch(() => {
         if (active) setAvailable(false);
@@ -1573,7 +1579,7 @@ function AssistBox({ itemId, canEdit, onAddTag, onAddSubtasks, onComment }: {
     try {
       const response = await fetch("/api/work/items/" + itemId + "/assist", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
       const data = (await response.json().catch(() => ({}))) as { message?: string; summary?: string; tags?: string[]; subtasks?: string[] };
-      if (!response.ok) throw new Error(data.message || "Squadron AI couldn't answer right now. Try again in a minute.");
+      if (!response.ok) throw new Error(data.message || "The assistant couldn't answer right now. Try again in a minute.");
       if (action === "summarize") setSummary(data.summary || "No summary came back. Try again.");
       if (action === "tags") {
         setTags(data.tags ?? []);
@@ -1584,7 +1590,7 @@ function AssistBox({ itemId, canEdit, onAddTag, onAddSubtasks, onComment }: {
         if (!(data.subtasks ?? []).length) setNote("No next steps came back. Try again.");
       }
     } catch (caught) {
-      setNote(caught instanceof Error ? caught.message : "Squadron AI couldn't answer right now.");
+      setNote(caught instanceof Error ? caught.message : "The assistant couldn't answer right now.");
     } finally {
       setBusy("");
     }
@@ -1592,17 +1598,24 @@ function AssistBox({ itemId, canEdit, onAddTag, onAddSubtasks, onComment }: {
 
   if (available === null) return null;
 
+  const sourceText = available ? "answers with " + providerLabel(source) : "not set up";
+
   return (
-    <section className="tp-section tp-ai" aria-label="Squadron AI">
-      <h3 className="tp-h">✨ Squadron AI <span className="tp-count">runs on the squadron's own server</span></h3>
-      {!available ? <p className="tp-empty">Squadron AI isn't set up yet.</p> : (
+    <section className="tp-section tp-ai" aria-label="Assistant">
+      <h3 className="tp-h">✨ Assistant <span className="tp-count">{sourceText}</span></h3>
+      {!available ? (
+        <p className="tp-empty">
+          No assistant is switched on for you yet. Pick one in <a href="/connections#ai">My connections</a> — the
+          squadron&rsquo;s own server, or your own account.
+        </p>
+      ) : (
         <>
           <div className="tp-ai-buttons">
             <button type="button" className="tp-ai-btn" disabled={Boolean(busy)} onClick={() => ask("summarize")}>{busy === "summarize" ? "Working…" : "Summarize"}</button>
             {canEdit ? <button type="button" className="tp-ai-btn" disabled={Boolean(busy)} onClick={() => ask("tags")}>{busy === "tags" ? "Working…" : "Suggest tags"}</button> : null}
             {canEdit ? <button type="button" className="tp-ai-btn" disabled={Boolean(busy)} onClick={() => ask("subtasks")}>{busy === "subtasks" ? "Working…" : "Suggest next steps"}</button> : null}
           </div>
-          {busy ? <p className="tp-ai-wait" role="status">Squadron AI is working. This can take up to a minute.</p> : null}
+          {busy ? <p className="tp-ai-wait" role="status">Working. This can take up to a minute.</p> : null}
           {note ? <p className="tp-ai-note" role="status">{note}</p> : null}
 
           {summary ? (

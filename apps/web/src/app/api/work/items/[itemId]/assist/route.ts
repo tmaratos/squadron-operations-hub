@@ -71,6 +71,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ ite
     if (error instanceof z.ZodError) return NextResponse.json({ message: "That request was invalid." }, { status: 400 });
     if (error instanceof AiUnavailableError) return NextResponse.json({ message: error.message }, { status: 503 });
     console.error(error);
-    return NextResponse.json({ message: error instanceof Error && /timed out|abort/i.test(error.message) ? "Squadron AI took too long to answer. Try again in a minute." : "Squadron AI couldn't answer right now. Try again in a minute." }, { status: 502 });
+    return NextResponse.json({ message: error instanceof Error && /timed out|abort/i.test(error.message) ? "The assistant took too long to answer. Try again in a minute." : "The assistant couldn't answer right now. Try again in a minute." }, { status: 502 });
   }
 }

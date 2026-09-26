@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       documents: await listDocuments(),
       started: true,
-      message: "Reading it now. This takes a few minutes on the squadron's own server — the list updates by itself."
+      message: "Reading it now. This takes a few minutes — the list updates by itself."
     });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ message: "That request was invalid." }, { status: 400 });

@@ -1,6 +1,8 @@
 import { getDatabase } from "@/lib/cloudflare";
 import { isLocalAiConfigured, localChat, type ChatMessage } from "./local";
-import { isVendorProvider, vendorChat } from "./vendors";
+import { isVendorProvider, providerLabel, vendorChat } from "./vendors";
+
+export { providerLabel };
 
 // Where the Hub's intelligence comes from:
 // 1. The squadron's own AI server (Ollama on hp-server) - always free and private. This is the default for everyone.
