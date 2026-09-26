@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canApproveAccounts } from "@/lib/auth/types";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { addPositionAssistant, createPosition, listPersonnelMembers, listPersonnelPositions, removePosition, removePositionAssistant, setMemberStatus, setPositionHolder } from "@/lib/operations/personnel";
+import { addPersonnelMember, addPositionAssistant, createPosition, listPersonnelMembers, listPersonnelPositions, removePosition, removePositionAssistant, setMemberStatus, setPositionHolder } from "@/lib/operations/personnel";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 // Changing the organisation chart from inside the app.
@@ -43,6 +43,12 @@ const schema = z.discriminatedUnion("action", [
     roleTitle: z.string().trim().max(80).nullable().optional()
   }),
   z.object({ action: z.literal("removeAssistant"), assistantId: z.string().trim().min(1).max(80) }),
+  z.object({
+    action: z.literal("addMember"),
+    rank: z.string().trim().min(1).max(40),
+    fullName: z.string().trim().min(2).max(120),
+    memberType: z.enum(["SENIOR", "CADET"]).default("CADET")
+  }),
   z.object({
     action: z.literal("member"),
     memberId: z.string().trim().min(1).max(80),
@@ -84,6 +90,39 @@ export async function POST(request: Request) {
           : (position?.title ?? "That position") + " is vacant. Its recurring work will have no owner until somebody holds it."
       });
     }
+
+    if (input.action === "addMember") {
+
+      const id = await addPersonnelMember(input);
+
+      await recordAuditEvent({
+
+        actorUserId: user.id,
+
+        action: "PERSONNEL_MEMBER_ADDED",
+
+        entityType: "personnel_member",
+
+        entityId: id,
+
+        summary: user.fullName + " added " + input.rank + " " + input.fullName + " to the roster as a " + input.memberType.toLowerCase(),
+
+        metadata: { memberType: input.memberType }
+
+      });
+
+      return NextResponse.json({
+
+        positions: await listPersonnelPositions(),
+
+        members: await listPersonnelMembers(),
+
+        message: input.fullName + " added."
+
+      });
+
+    }
+
 
     if (input.action === "addAssistant") {
 

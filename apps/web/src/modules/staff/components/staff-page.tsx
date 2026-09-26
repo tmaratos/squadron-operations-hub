@@ -227,7 +227,12 @@ export function StaffPage({
       />
 
       <section className="metric-grid metric-grid--four">
-        <MetricCard label="Personnel" value={personnelMembers.length} detail={`${users.length} linked Hub account${users.length === 1 ? "" : "s"}`} tone="info" />
+        <MetricCard
+          label="Personnel"
+          value={personnelMembers.length}
+          detail={`${personnelMembers.filter((member) => member.memberType !== "CADET").length} senior · ${personnelMembers.filter((member) => member.memberType === "CADET").length} cadets · ${users.length} with Hub accounts`}
+          tone="info"
+        />
         <MetricCard label="Filled Positions" value={filledPositions.length} detail={`${actingPositions.length} currently acting`} tone="success" />
         <MetricCard label="Vacancies" value={vacantPositions.length} detail="Positions needing assignment" tone={vacantPositions.length ? "warning" : "success"} />
         <MetricCard label="On Leave" value={membersOnLeave.length} detail={membersOnLeave.map((member) => member.fullName).join(", ") || "No members on leave"} tone={membersOnLeave.length ? "warning" : "success"} />
@@ -279,7 +284,7 @@ export function StaffPage({
                         <option value="">Nobody — leave it vacant</option>
                         {/* Somebody on leave or inactive stays listed, so it is clear why they cannot be
                             chosen, but a post cannot be handed to them while they are away. */}
-                        {personnelMembers.map((member) => (
+                        {personnelMembers.filter((member) => member.memberType !== "CADET").map((member) => (
                           <option key={member.id} value={member.id} disabled={member.status !== "ACTIVE"}>
                             {member.rank} {member.fullName}
                             {member.status === "LEAVE" ? " — on leave" : member.status === "INACTIVE" ? " — inactive" : ""}
@@ -340,7 +345,9 @@ export function StaffPage({
                           && member.id !== position.incumbentId
                           && !position.assistants.some((assistant) => assistant.memberId === member.id))
                         .map((member) => (
-                          <option key={member.id} value={member.id}>{member.rank} {member.fullName}</option>
+                          <option key={member.id} value={member.id}>
+                            {member.rank} {member.fullName}{member.memberType === "CADET" ? " · cadet" : ""}
+                          </option>
                         ))}
                     </select>
                   ) : null}

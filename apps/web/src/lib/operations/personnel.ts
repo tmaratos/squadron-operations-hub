@@ -1,10 +1,21 @@
 import { getDatabase } from "@/lib/cloudflare";
 
+export type MemberType = "SENIOR" | "CADET";
+
 export interface PersonnelMemberRecord {
   id: string;
   userId: string | null;
   rank: string;
   fullName: string;
+  /**
+   * Senior member or cadet.
+   *
+   * Cadets do not get Hub accounts and are not meant to. They are here because a senior member running a
+   * functional area needs to see who is helping them, and a cadet assisting the Aerospace Education Officer
+   * is a real part of how the squadron works. Nothing is ever routed to them - routing needs an account and
+   * they have none - so they appear on the chart and receive nothing, which is exactly right.
+   */
+  memberType: MemberType;
   status: "ACTIVE" | "LEAVE" | "INACTIVE";
   statusNote: string | null;
   sourceDate: string;
@@ -50,6 +61,7 @@ export interface PersonnelCommitteeRecord {
 }
 
 interface MemberRow {
+  member_type: MemberType;
   id: string;
   user_id: string | null;
   rank: string;
@@ -88,13 +100,14 @@ interface CommitteeRow {
 
 export async function listPersonnelMembers(): Promise<PersonnelMemberRecord[]> {
   const result = await getDatabase()
-    .prepare("SELECT id, user_id, rank, full_name, status, status_note, source_date FROM personnel_members ORDER BY full_name COLLATE NOCASE")
+    .prepare("SELECT id, user_id, rank, full_name, status, status_note, source_date, member_type FROM personnel_members ORDER BY full_name COLLATE NOCASE")
     .all<MemberRow>();
   return result.results.map((row) => ({
     id: row.id,
     userId: row.user_id,
     rank: row.rank,
     fullName: row.full_name,
+    memberType: row.member_type === "CADET" ? "CADET" : "SENIOR",
     status: row.status,
     statusNote: row.status_note,
     sourceDate: row.source_date
@@ -297,4 +310,32 @@ export async function addPositionAssistant(input: { positionId: string; memberId
 export async function removePositionAssistant(id: string): Promise<void> {
   // The assistant stops holding the position. Nothing happens to the person, or to the position.
   await getDatabase().prepare("DELETE FROM position_assistants WHERE id = ?").bind(id).run();
+}
+
+/**
+ * Puts somebody on the roster who is not in CAP's own export - most often a cadet.
+ *
+ * The roster is otherwise loaded from the squadron's membership data, which is senior members. A cadet
+ * helping run a functional area is still part of how the squadron works and has to be nameable, so they are
+ * added here by hand. No account, and none implied.
+ */
+export async function addPersonnelMember(input: {
+  rank: string;
+  fullName: string;
+  memberType: MemberType;
+  capid?: string | null;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await getDatabase()
+    .prepare(
+      "INSERT INTO personnel_members (id, rank, full_name, status, member_type, capid, source_date, created_at, updated_at) " +
+      "VALUES (?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?)"
+    )
+    .bind(
+      id, input.rank.trim().slice(0, 40), input.fullName.trim().slice(0, 120), input.memberType,
+      input.capid?.trim() || null, now.slice(0, 10), now, now
+    )
+    .run();
+  return id;
 }
