@@ -71,7 +71,7 @@ function GoogleMark() {
 
 function errorMessage(error: string): string {
   if (error === "unverified") return "Google could not verify this account's email address.";
-  if (error === "drive_access") return "Google denied access to the squadron Shared Drive. Ask squadron command staff to grant access through Google Drive.";
+  if (error === "drive_access") return "This account is neither a CAP address nor a member of the squadron Shared Drive. Sign in with your CAP address, or ask command staff to grant you Drive access.";
   if (error === "google_denied") return "Google sign-in was canceled or denied.";
   if (error === "configuration") return "Google sign-in is not configured.";
   return "Google sign-in could not be completed. Please try again.";

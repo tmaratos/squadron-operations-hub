@@ -140,6 +140,30 @@ export function isVerifiedGoogleProfile(profile: GoogleProfile): boolean {
   return profile.emailVerified && profile.email.length > 0;
 }
 
+/**
+ * A CAP address is its own proof of membership.
+ *
+ * Access used to rest entirely on being a member of the squadron's Shared Drive, which is correct for the
+ * people who are on it and a dead end for everybody else: a new senior member has a CAP address on their
+ * first day and Drive access whenever somebody gets round to it. That gap is exactly the window in which
+ * the Hub is no use to the person who most needs showing round it.
+ *
+ * So there are two doors, and either is enough. This one is a domain match, which is a weaker claim than
+ * Drive membership - it says "CAP issued this person an address", not "this squadron gave this person the
+ * files". It is deliberately not a way in for anyone: a link on its own still gets the login page, and
+ * whoever arrives this way lands as an ordinary staff member with no administrative rights.
+ */
+export function isAllowedEmailDomain(email: string): boolean {
+  const configured = getCloudflareEnv().ALLOWED_EMAIL_DOMAINS ?? "cap.gov";
+  const domains = configured.split(",").map((value) => value.trim().toLowerCase()).filter(Boolean);
+  const address = email.trim().toLowerCase();
+  const at = address.lastIndexOf("@");
+  if (at < 1) return false;
+  const host = address.slice(at + 1);
+  // A wing or region subdomain is still CAP: tnwg.cap.gov matches cap.gov, notcap.gov does not.
+  return domains.some((domain) => host === domain || host.endsWith("." + domain));
+}
+
 export async function canAccessSharedDrive(accessToken: string): Promise<boolean> {
   const driveId = getCloudflareEnv().GOOGLE_SHARED_DRIVE_ID;
   if (!driveId) throw new Error("GOOGLE_SHARED_DRIVE_ID is not configured.");

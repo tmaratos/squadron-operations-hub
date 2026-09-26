@@ -9,6 +9,8 @@ interface CloudflareEnv {
   GOOGLE_CLIENT_SECRET?: string;
   GOOGLE_REDIRECT_URI?: string;
   GOOGLE_SHARED_DRIVE_ID?: string;
+  /** Comma separated. An address on one of these may sign in without Shared Drive membership. */
+  ALLOWED_EMAIL_DOMAINS?: string;
   GOOGLE_TOKEN_ENCRYPTION_KEY?: string;
   GOOGLE_ROOT_FOLDER_ID?: string;
   GOOGLE_DRIVE_MAX_UPLOAD_MB?: string;

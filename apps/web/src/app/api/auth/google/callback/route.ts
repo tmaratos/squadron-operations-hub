@@ -3,6 +3,7 @@ import {
   canAccessSharedDrive,
   exchangeGoogleCode,
   getGoogleProfile,
+  isAllowedEmailDomain,
   isVerifiedGoogleProfile,
   storeGoogleTokens
 } from "@/lib/auth/google-oauth";
@@ -22,7 +23,11 @@ export async function GET(request: Request) {
     const tokens = await exchangeGoogleCode(code, state);
     const profile = await getGoogleProfile(tokens.access_token);
     if (!isVerifiedGoogleProfile(profile)) return loginRedirect(request, "unverified");
-    if (!(await canAccessSharedDrive(tokens.access_token))) return loginRedirect(request, "drive_access");
+    // Either door: on the squadron's Shared Drive, or holding a CAP address.
+    const byDomain = isAllowedEmailDomain(profile.email);
+    if (!byDomain && !(await canAccessSharedDrive(tokens.access_token))) {
+      return loginRedirect(request, "drive_access");
+    }
 
     const user = await upsertGoogleUser({ email: profile.email, fullName: profile.name });
     // Somebody has to be able to reach the admin pages, or the Hub cannot be administered at all.
