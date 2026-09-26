@@ -63,7 +63,7 @@ export function MailSuggestions() {
   }
 
   return (
-    <section className="ms">
+    <section className="ms" id="mail">
       <style>{msCss}</style>
       <div className="ms-head">
         <div>

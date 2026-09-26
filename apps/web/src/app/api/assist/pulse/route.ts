@@ -23,8 +23,12 @@ interface Noticed {
   title: string;
   detail: string | null;
   href: string | null;
+  /** Opening this would leave the Hub, so it opens in its own tab instead. */
+  external?: boolean;
   /** Only offers can be acted on from the widget; the rest lead somewhere. */
   actionable: boolean;
+  /** Everything the offers API needs to actually make the thing. Without it, "Do it" did nothing. */
+  accept?: { id: string; listId?: string; title?: string; dueOn?: string | null; suggestionId?: string };
 }
 
 export async function GET(request: Request) {
@@ -59,7 +63,13 @@ export async function GET(request: Request) {
     title: offer.title,
     detail: offer.because ?? null,
     href: offer.listId ? "/lists/" + offer.listId : null,
-    actionable: true
+    // Only offer to do it when there is something to make. An offer to look at a list is a Look, not a Do.
+    actionable: Boolean(offer.create),
+    accept: {
+      id: offer.id,
+      ...(offer.create ? { listId: offer.listId, title: offer.create.title, dueOn: offer.create.dueOn } : {}),
+      ...(offer.suggestionId ? { suggestionId: offer.suggestionId } : {})
+    }
   }));
 
   // Say where it came from and when. "I found this in your mail" is only useful if it says which mail.
@@ -75,7 +85,8 @@ export async function GET(request: Request) {
         suggestion.subject ? "about “" + suggestion.subject.slice(0, 60) + "”" : null,
         suggestion.dueOn ? "· due " + suggestion.dueOn : null
       ].filter(Boolean).join(" ") + (said ? " — it says " + said : ""),
-      href: "/connections",
+      // Where the suggestion actually is, rather than the settings page it happens to live under.
+      href: "/connections#mail",
       actionable: false
     });
   });
@@ -113,6 +124,7 @@ export async function GET(request: Request) {
           title: file.name + " changed in the drive",
           detail: "Nothing in the Hub refers to it. Worth a task?",
           href: file.webViewLink ?? "/documents",
+          external: Boolean(file.webViewLink),
           actionable: false
         }));
     } catch {

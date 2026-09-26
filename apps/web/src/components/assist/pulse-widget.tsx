@@ -23,7 +23,9 @@ interface Noticed {
   title: string;
   detail: string | null;
   href: string | null;
+  external?: boolean;
   actionable: boolean;
+  accept?: { id: string; listId?: string; title?: string; dueOn?: string | null; suggestionId?: string };
 }
 
 const ICON: Record<Noticed["kind"], string> = { offer: "✦", mail: "✉", agent: "🤖", drive: "📄" };
@@ -45,6 +47,7 @@ export function PulseWidget() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [gone, setGone] = useState<string[]>([]);
+  const [failed, setFailed] = useState<string | null>(null);
   const [spot, setSpot] = useState<Spot | null>(null);
   const dragging = useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
   const router = useRouter();
@@ -114,15 +117,38 @@ export function PulseWidget() {
 
   async function act(item: Noticed, accept: boolean) {
     setBusy(item.id);
+    setFailed(null);
     try {
-      await fetch("/api/offers", {
+      // Everything the offers API needs, and named the way it names it. Sending the wrong field meant the
+      // request was rejected, the item was crossed off anyway, and nothing was ever created.
+      const body = accept
+        ? { action: "accept", ...(item.accept ?? { id: item.id.replace(/^offer:/, "") }) }
+        : { action: "dismiss", id: item.accept?.id ?? item.id.replace(/^offer:/, "") };
+
+      const response = await fetch("/api/offers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: accept ? "accept" : "dismiss", offerId: item.id.replace(/^offer:/, "") })
+        body: JSON.stringify(body)
       });
+      const data = (await response.json().catch(() => ({}))) as { message?: string; created?: { id: string; listId: string } };
+
+      if (!response.ok) {
+        // Say so, rather than crossing it off and pretending.
+        setFailed(data.message || "That could not be done.");
+        return;
+      }
+
       setGone((current) => [...current, item.id]);
       await look(false);
+      // Land on the thing that was just made, not on a page that has nothing to do with it.
+      if (accept && data.created) {
+        setOpen(false);
+        router.push("/lists/" + data.created.listId + "?item=" + data.created.id);
+        return;
+      }
       if (accept) router.refresh();
+    } catch {
+      setFailed("That could not be done.");
     } finally {
       setBusy(null);
     }
@@ -187,12 +213,18 @@ export function PulseWidget() {
                       <button type="button" className="pw-no" disabled={busy === item.id} onClick={() => act(item, false)}>Not now</button>
                     </>
                   ) : item.href ? (
-                    <Link className="pw-yes" href={item.href} onClick={() => setOpen(false)}>Look</Link>
+                    item.external ? (
+                      // A document lives in Drive. Open it beside the Hub rather than replacing it.
+                      <a className="pw-yes" href={item.href} target="_blank" rel="noopener noreferrer">Open</a>
+                    ) : (
+                      <Link className="pw-yes" href={item.href} onClick={() => setOpen(false)}>Look</Link>
+                    )
                   ) : null}
                 </div>
               </article>
             ))}
-            {showing.length > 5 ? <p className="pw-more">and {showing.length - 5} more</p> : null}
+            {failed ? <p className="pw-failed" role="alert">{failed}</p> : null}
+          {showing.length > 5 ? <p className="pw-more">and {showing.length - 5} more</p> : null}
           </div>
 
           <p className="pw-foot">It looks on its own. It never does anything without being told.</p>
@@ -227,6 +259,8 @@ const pwCss = [
   ".pw-no{border:0;background:none;color:var(--cu-muted,#656f7d);font:inherit;font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:6px;cursor:pointer;white-space:nowrap}",
   ".pw-no:hover{color:var(--cu-text,#292d34)}",
   ".pw-more{margin:0;padding:8px 13px;font-size:11.5px;opacity:.6}",
+  ".pw-failed{margin:0;padding:9px 13px;font-size:12px;background:rgba(229,72,77,.12);color:#c0392b}",
+  "html[data-theme=dark] .pw-failed{color:#f0a0a0}",
   ".pw-foot{margin:0;padding:9px 13px;font-size:11px;opacity:.5;border-top:1px solid var(--cu-border,#eef0f3)}",
   "html[data-theme=dark] .pw-foot{border-color:#2c2e33}"
 ].join("");
