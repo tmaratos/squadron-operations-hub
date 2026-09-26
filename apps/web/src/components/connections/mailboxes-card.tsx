@@ -14,7 +14,12 @@ import type { MailAccount } from "@/lib/google/mail-accounts";
 // The account somebody signed in with is listed but cannot be removed here - that one is how they get in,
 // and taking it away from this page would be a surprising way to lose access.
 
-export function MailboxesCard({ signedInAs, accounts: initial }: { signedInAs: string; accounts: MailAccount[] }) {
+export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = false }: {
+  signedInAs: string;
+  accounts: MailAccount[];
+  /** False until an administrator has registered the Hub with Microsoft once. */
+  microsoftReady?: boolean;
+}) {
   const [accounts, setAccounts] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -46,8 +51,9 @@ export function MailboxesCard({ signedInAs, accounts: initial }: { signedInAs: s
         <div>
           <h2 id="mb-title">Which mailboxes are read</h2>
           <p>
-            Add any Gmail account you keep squadron business in. Each one is read the same way, and only for
-            suggesting work &mdash; nothing is ever sent from them.
+            Add any mailbox you keep squadron business in &mdash; Gmail, or Outlook, Hotmail and Office 365,
+            which is what a CAP address runs on. Each one is read the same way, and only for suggesting work:
+            nothing is ever sent from them, and nothing is deleted or moved.
           </p>
         </div>
       </div>
@@ -64,7 +70,10 @@ export function MailboxesCard({ signedInAs, accounts: initial }: { signedInAs: s
           <li key={account.id}>
             <span className="mb-text">
               <strong>{account.email}</strong>
-              <small>Added {new Date(account.addedOn).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</small>
+              <small>
+                {account.provider === "MICROSOFT" ? "Outlook or Microsoft 365" : "Gmail"}
+                {" · added " + new Date(account.addedOn).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+              </small>
             </span>
             <ConfirmButton
               className="mb-btn mb-btn--danger"
@@ -80,10 +89,19 @@ export function MailboxesCard({ signedInAs, accounts: initial }: { signedInAs: s
 
       {note ? <p className="mb-note" role="status">{note}</p> : null}
 
-      {/* A plain link, not a fetch: this leaves for Google and comes back to the same page. */}
-      <a className="mb-btn mb-btn--primary" href="/api/auth/google/start?add=mailbox">Connect another mailbox</a>
+      {/* Plain links, not fetches: these leave for the provider and come back to this page. */}
+      <div className="mb-add">
+        <a className="mb-btn mb-btn--primary" href="/api/auth/google/start?add=mailbox">Connect a Gmail mailbox</a>
+        {microsoftReady ? (
+          <a className="mb-btn mb-btn--primary" href="/api/auth/microsoft/start">Connect an Outlook or CAP mailbox</a>
+        ) : (
+          <span className="mb-fine">
+            Outlook, Hotmail and CAP mailboxes need setting up once by an administrator before anybody can connect one.
+          </span>
+        )}
+      </div>
       <p className="mb-fine">
-        Google will ask which account to use. Pick a different one from the list &mdash; choosing the account you are
+        You will be asked which account to use. Pick a different one from the list &mdash; choosing the account you are
         already signed in with simply re-confirms the one you have.
       </p>
 
@@ -109,5 +127,6 @@ const mbCss = [
   ".mb-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}",
   ".mb-btn--danger{color:#d03b3b}.mb-btn--danger:hover{border-color:#d03b3b}",
   ".mb-note{margin:0;font-size:12.5px;padding:8px 11px;border-radius:8px;background:rgba(123,104,238,.12)}",
+  ".mb-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
   ".mb-fine{margin:0;font-size:11.5px;opacity:.6;line-height:1.5}"
 ].join("");

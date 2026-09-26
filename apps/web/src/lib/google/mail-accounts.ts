@@ -1,5 +1,6 @@
 import { getDatabase, getCloudflareEnv } from "@/lib/cloudflare";
 import { decryptToken, encryptToken } from "@/lib/auth/token-encryption";
+import { refreshMicrosoftToken } from "@/lib/microsoft/graph";
 
 // The other mailboxes a member wants the Hub to read.
 //
@@ -9,9 +10,12 @@ import { decryptToken, encryptToken } from "@/lib/auth/token-encryption";
 
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 
+export type MailProvider = "GOOGLE" | "MICROSOFT";
+
 export interface MailAccount {
   id: string;
   email: string;
+  provider: MailProvider;
   scopes: string | null;
   addedOn: string;
 }
@@ -29,12 +33,13 @@ interface AccountRow {
 export async function listMailAccounts(userId: string): Promise<MailAccount[]> {
   try {
     const rows = await getDatabase()
-      .prepare("SELECT id, email, scopes, created_at FROM user_mail_accounts WHERE user_id = ? ORDER BY created_at")
+      .prepare("SELECT id, email, scopes, created_at, COALESCE(provider, 'GOOGLE') AS provider FROM user_mail_accounts WHERE user_id = ? ORDER BY created_at")
       .bind(userId)
-      .all<{ id: string; email: string; scopes: string | null; created_at: string }>();
+      .all<{ id: string; email: string; scopes: string | null; created_at: string; provider: string }>();
     return rows.results.map((row) => ({
       id: row.id,
       email: row.email,
+      provider: row.provider === "MICROSOFT" ? "MICROSOFT" : "GOOGLE",
       scopes: row.scopes,
       addedOn: row.created_at
     }));
@@ -53,6 +58,8 @@ export async function listMailAccounts(userId: string): Promise<MailAccount[]> {
 export async function saveMailAccount(input: {
   userId: string;
   email: string;
+  /** Google or Microsoft. The column is named for Google because it was there first. */
+  provider?: MailProvider;
   googleSubject: string;
   accessToken: string;
   refreshToken?: string;
@@ -79,9 +86,9 @@ export async function saveMailAccount(input: {
     await db
       .prepare(
         "UPDATE user_mail_accounts SET email = ?, access_token_encrypted = ?, refresh_token_encrypted = ?, " +
-        "token_expires_at = ?, scopes = ?, updated_at = ? WHERE id = ?"
+        "token_expires_at = ?, scopes = ?, provider = ?, updated_at = ? WHERE id = ?"
       )
-      .bind(input.email, access, refresh, expiresAt, input.scopes ?? null, now.toISOString(), existing.id)
+      .bind(input.email, access, refresh, expiresAt, input.scopes ?? null, input.provider ?? "GOOGLE", now.toISOString(), existing.id)
       .run();
     return;
   }
@@ -89,11 +96,11 @@ export async function saveMailAccount(input: {
   await db
     .prepare(
       "INSERT INTO user_mail_accounts (id, user_id, email, google_subject, access_token_encrypted, " +
-      "refresh_token_encrypted, token_expires_at, scopes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "refresh_token_encrypted, token_expires_at, scopes, provider, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
       crypto.randomUUID(), input.userId, input.email, input.googleSubject, access, refresh,
-      expiresAt, input.scopes ?? null, now.toISOString(), now.toISOString()
+      expiresAt, input.scopes ?? null, input.provider ?? "GOOGLE", now.toISOString(), now.toISOString()
     )
     .run();
 }
@@ -110,15 +117,28 @@ export async function removeMailAccount(userId: string, id: string): Promise<voi
 export async function accessTokenFor(userId: string, id: string): Promise<string | null> {
   const db = getDatabase();
   const row = await db
-    .prepare("SELECT * FROM user_mail_accounts WHERE id = ? AND user_id = ?")
+    .prepare("SELECT *, COALESCE(provider, 'GOOGLE') AS provider FROM user_mail_accounts WHERE id = ? AND user_id = ?")
     .bind(id, userId)
-    .first<AccountRow>();
+    .first<AccountRow & { provider: string }>();
   if (!row) return null;
 
   if (new Date(row.token_expires_at).getTime() > Date.now() + 60_000) {
     return decryptToken(row.access_token_encrypted);
   }
   if (!row.refresh_token_encrypted) return null;
+
+  // Each provider renews its own way. Microsoft's endpoint will not accept a Google refresh token and the
+  // other way round, so this has to branch rather than share one call.
+  if (row.provider === "MICROSOFT") {
+    const renewed = await refreshMicrosoftToken(await decryptToken(row.refresh_token_encrypted));
+    if (!renewed) return null;
+    const expiresAt = new Date(Date.now() + renewed.expires_in * 1000).toISOString();
+    await db
+      .prepare("UPDATE user_mail_accounts SET access_token_encrypted = ?, token_expires_at = ?, updated_at = ? WHERE id = ?")
+      .bind(await encryptToken(renewed.access_token), expiresAt, new Date().toISOString(), row.id)
+      .run();
+    return renewed.access_token;
+  }
 
   const env = getCloudflareEnv();
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return null;

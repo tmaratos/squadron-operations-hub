@@ -3,6 +3,7 @@ import { aiChatFor } from "@/lib/ai/provider";
 import { canRead, listMailForToken, type MailMessage, type ScanMode } from "./gmail";
 import { getUserGoogleAccessToken } from "@/lib/auth/google-oauth";
 import { accessTokenFor, listMailAccounts } from "@/lib/google/mail-accounts";
+import { listMicrosoftMail } from "@/lib/microsoft/graph";
 import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 
 // Reading squadron mail and saying what it thinks needs doing. Suggestions only: nothing is created until
@@ -97,7 +98,10 @@ async function everyMailbox(userId: string, mode: ScanMode): Promise<MailMessage
     try {
       const token = await accessTokenFor(userId, account.id);
       if (!token) continue;
-      messages.push(...await listMailForToken(token, mode, perMailbox));
+      // Same three settings either way; only the service behind them differs.
+      messages.push(...(account.provider === "MICROSOFT"
+        ? await listMicrosoftMail(token, mode, perMailbox)
+        : await listMailForToken(token, mode, perMailbox)));
     } catch {
       continue;
     }

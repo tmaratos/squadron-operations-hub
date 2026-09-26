@@ -2,6 +2,12 @@ interface CloudflareEnv {
   DB: D1Database;
   /** Workers AI, used only for transcribing dictation, inside a budget the Hub enforces itself. */
   AI?: { run: (model: string, input: Record<string, unknown>) => Promise<{ text?: string }> };
+  // Reading mail from Outlook, Hotmail, Office 365 and @cap.gov, which is Microsoft rather than Google.
+  // Registered once as an application; each member then connects their own mailbox to it.
+  MICROSOFT_CLIENT_ID?: string;
+  MICROSOFT_CLIENT_SECRET?: string;
+  MICROSOFT_REDIRECT_URI?: string;
+
   /** A transcription service on the squadron's own hardware, preferred over Workers AI when it exists. */
   LOCAL_TRANSCRIBE_URL?: string;
   APP_NAME: string;
