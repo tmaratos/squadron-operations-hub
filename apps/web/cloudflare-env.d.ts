@@ -1,6 +1,8 @@
 interface CloudflareEnv {
   DB: D1Database;
-  /** A transcription service on the squadron's own hardware, if one is ever set up. Never a paid one. */
+  /** Workers AI, used only for transcribing dictation, inside a budget the Hub enforces itself. */
+  AI?: { run: (model: string, input: Record<string, unknown>) => Promise<{ text?: string }> };
+  /** A transcription service on the squadron's own hardware, preferred over Workers AI when it exists. */
   LOCAL_TRANSCRIBE_URL?: string;
   APP_NAME: string;
   APP_URL: string;

@@ -165,6 +165,7 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const instance = new MediaRecorder(stream);
       chunks.current = [];
+      const began = Date.now();
 
       instance.ondataavailable = (event) => {
         if (event.data.size) chunks.current.push(event.data);
@@ -184,7 +185,11 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
         try {
           const response = await fetch("/api/dictate", {
             method: "POST",
-            headers: { "Content-Type": blob.type || "audio/webm" },
+            headers: {
+              "Content-Type": blob.type || "audio/webm",
+              // So the squadron's daily transcription budget is counted from what was actually recorded.
+              "X-Clip-Seconds": String(Math.ceil((Date.now() - began) / 1000))
+            },
             body: blob
           });
           const data = (await response.json().catch(() => ({}))) as { text?: string; message?: string; unavailable?: boolean };
