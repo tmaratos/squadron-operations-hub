@@ -1,6 +1,7 @@
 import { parseJsonReply } from "@/lib/ai/local";
 import { aiChatFor } from "@/lib/ai/provider";
 import { listLabelledMail, type MailMessage } from "./gmail";
+import { getCloudflareEnv } from "@/lib/cloudflare";
 
 // Reading squadron mail and saying what it thinks needs doing. Suggestions only: nothing is created until
 // a member presses Add. The email it came from is always shown alongside, so a wrong reading is obvious
@@ -23,9 +24,27 @@ function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Mail the Hub sent, which it must not read back.
+ *
+ * It was reading its own deadline reminders and offering to make a task of the thing the reminder was
+ * about - work that already exists, which is what the reminder was reminding somebody of. An assistant
+ * listening to its own echo.
+ */
+function fromTheHub(message: MailMessage): boolean {
+  const env = getCloudflareEnv() as unknown as { NOTIFY_FROM?: string };
+  const sender = (message.from ?? "").toLowerCase();
+  const ours = (env.NOTIFY_FROM ?? "").toLowerCase();
+  const address = ours.includes("<") ? ours.slice(ours.indexOf("<") + 1, ours.indexOf(">")) : ours;
+  if (address && sender.includes(address)) return true;
+  // Whatever it is called, mail from the Hub about the Hub is the Hub talking to itself.
+  return sender.includes("hub@") && sender.includes("tristanmaratos.com");
+}
+
 export async function suggestFromMail(userId: string, label?: string): Promise<{ suggestions: MailSuggestion[]; read: number }> {
-  const messages = await listLabelledMail(userId, label);
-  if (!messages.length) return { suggestions: [], read: 0 };
+  const all = await listLabelledMail(userId, label);
+  const messages = all.filter((message) => !fromTheHub(message));
+  if (!messages.length) return { suggestions: [], read: all.length };
 
   const suggestions: MailSuggestion[] = [];
   for (const message of messages) {

@@ -130,6 +130,13 @@ export async function readDiscord(userId: string): Promise<number> {
 
   if (!channels.length) return 0;
 
+  // The same job, suggested once - as with mail. A conversation circles a thing several times.
+  const seen = new Set<string>();
+  try {
+    const held = await db.prepare("SELECT title FROM discord_suggestions").all<{ title: string }>();
+    held.results.forEach((row) => seen.add(row.title.trim().toLowerCase()));
+  } catch { /* nothing kept yet */ }
+
   let kept = 0;
   for (const channel of channels) {
     let messages: DiscordMessage[] = [];
@@ -142,7 +149,8 @@ export async function readDiscord(userId: string): Promise<number> {
 
     for (const message of messages) {
       const suggestion = await judge(userId, message, channel.channel_name);
-      if (suggestion) {
+      if (suggestion && !seen.has(suggestion.title.trim().toLowerCase())) {
+        seen.add(suggestion.title.trim().toLowerCase());
         try {
           await db
             .prepare(

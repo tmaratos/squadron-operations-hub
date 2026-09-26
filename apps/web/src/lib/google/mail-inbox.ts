@@ -57,8 +57,28 @@ export async function checkMail(userId: string): Promise<number> {
   const now = new Date().toISOString();
   let kept = 0;
 
+  // The same job, suggested once.
+  //
+  // A thread produces a suggestion per message, so a mail and three replies about the same thing offered
+  // four near-identical tasks. Dedupe on what a member would have to DO, not on which message said it -
+  // including against suggestions already waiting, and ones already turned into a task or dismissed,
+  // because offering again something somebody has just said no to is how a feature gets switched off.
+  const seen = new Set<string>();
+  try {
+    const held = await db
+      .prepare("SELECT title FROM mail_suggestions WHERE user_id = ?")
+      .bind(userId)
+      .all<{ title: string }>();
+    held.results.forEach((row) => seen.add(row.title.trim().toLowerCase()));
+  } catch {
+    // Nothing kept yet.
+  }
+
   for (const suggestion of suggestions) {
     if (!suggestion.actionable) continue;
+    const job = suggestion.title.trim().toLowerCase();
+    if (seen.has(job)) continue;
+    seen.add(job);
     try {
       await db
         .prepare(
