@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import type { DraftEntry } from "@/lib/finance/draft";
+import { Dictate } from "@/components/dictate";
 import { CATEGORIES, type BudgetLine, type Direction, type Meeting, type Obligation, type Transaction, type TxStatus } from "@/lib/finance/finance";
 import type { Finding, Summary } from "@/lib/finance/findings";
 
@@ -97,6 +99,34 @@ export function FinanceTracker({ initial, years, canEdit, people, lists, initial
   const [adding, setAdding] = useState(false);
   const [showVoid, setShowVoid] = useState(false);
   const [opening, setOpening] = useState("");
+  // Saying where the money is, rather than filling in a form five times.
+  const [said, setSaid] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [draft, setDraft] = useState<DraftEntry[] | null>(null);
+  const [draftChecks, setDraftChecks] = useState<Array<{ tone: "OK" | "WARN"; says: string }>>([]);
+  const [draftOpening, setDraftOpening] = useState<number | null>(null);
+
+  async function describe() {
+    if (said.trim().length < 8) return setNote("Say what moved: the amounts, what each was for, and roughly when.");
+    setDrafting(true);
+    setNote(null);
+    try {
+      const response = await fetch("/api/finance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "describe", said, fiscalYear: state.fiscalYear })
+      });
+      const data = (await response.json()) as { entries?: DraftEntry[]; checks?: Array<{ tone: "OK" | "WARN"; says: string }>; openingCents?: number | null; message?: string };
+      if (!response.ok) throw new Error(data.message || "That could not be read.");
+      setDraft(data.entries ?? []);
+      setDraftChecks(data.checks ?? []);
+      setDraftOpening(data.openingCents ?? null);
+    } catch (caught) {
+      setNote(caught instanceof Error ? caught.message : "That could not be read.");
+    } finally {
+      setDrafting(false);
+    }
+  }
   const [openingSource, setOpeningSource] = useState("");
   const [open, setOpen] = useState<string | null>(null);
   const router = useRouter();
@@ -291,6 +321,133 @@ export function FinanceTracker({ initial, years, canEdit, people, lists, initial
             overdrawn.
           </p>
         </div>
+      ) : null}
+
+      {/* Say it once, check it, keep it. The form underneath is still there for a single entry. */}
+      {canEdit ? (
+        <section className="fin-say">
+          <h2>Tell it where you are</h2>
+          <p className="fin-faint">
+            Say or type what has moved &mdash; &ldquo;took 90 in dues at the September meeting, paid 42.50 for rocketry
+            kits on the 14th, the Warthans still owe 60 for encampment&rdquo;. Nothing is recorded until you have read it
+            back.
+          </p>
+          <textarea
+            value={said}
+            onChange={(event) => setSaid(event.target.value)}
+            rows={3}
+            maxLength={3000}
+            placeholder="What came in, what went out, who still owes what"
+          />
+          <div className="fin-say-actions">
+            <Dictate onText={(text) => setSaid((current) => (current ? current + " " + text : text))} label="Say it" />
+            <button className="fin-btn fin-btn--primary" disabled={drafting || busy} onClick={describe}>
+              {drafting ? "Reading\u2026" : "Work it out"}
+            </button>
+          </div>
+
+          {draft ? (
+            <div className="fin-draft">
+              <h3>Check this before it goes in</h3>
+              {draftChecks.length ? (
+                <ul className="fin-checks">
+                  {draftChecks.map((check) => (
+                    <li key={check.says} className={check.tone === "WARN" ? "is-warn" : ""}>{check.says}</li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {draftOpening !== null ? (
+                <p className="fin-faint">Opening balance for FY{state.fiscalYear} will be set to {money(draftOpening)}.</p>
+              ) : null}
+
+              {draft.length ? (
+                <ul className="fin-draft-rows">
+                  {draft.map((entry, index) => (
+                    <li key={index}>
+                      <select
+                        value={entry.kind}
+                        onChange={(event) => setDraft(draft.map((row, i) => i === index ? { ...row, kind: event.target.value as DraftEntry["kind"] } : row))}
+                        aria-label={"What kind of entry line " + (index + 1) + " is"}
+                      >
+                        <option value="TRANSACTION">Moved</option>
+                        <option value="OWED">Owed</option>
+                      </select>
+                      <input
+                        className="fin-num"
+                        defaultValue={(entry.amountCents / 100).toFixed(2)}
+                        inputMode="decimal"
+                        aria-label={"Amount for line " + (index + 1)}
+                        onBlur={(event) => {
+                          const value = toCents(event.target.value);
+                          if (value) setDraft(draft.map((row, i) => i === index ? { ...row, amountCents: value } : row));
+                        }}
+                      />
+                      <input
+                        type="date"
+                        value={entry.occurredOn}
+                        onChange={(event) => setDraft(draft.map((row, i) => i === index ? { ...row, occurredOn: event.target.value } : row))}
+                        aria-label={"Date for line " + (index + 1)}
+                      />
+                      <select
+                        value={entry.category}
+                        onChange={(event) => setDraft(draft.map((row, i) => i === index ? { ...row, category: event.target.value } : row))}
+                        aria-label={"Category for line " + (index + 1)}
+                      >
+                        {CATEGORIES.filter((option) => option.direction === entry.direction).map((option) => (
+                          <option key={option.code} value={option.code}>{option.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        value={entry.purpose}
+                        onChange={(event) => setDraft(draft.map((row, i) => i === index ? { ...row, purpose: event.target.value } : row))}
+                        aria-label={"What line " + (index + 1) + " was for"}
+                      />
+                      <span className={"fin-draft-dir" + (entry.direction === "INCOME" ? " is-in" : "")}>
+                        {entry.direction === "INCOME" ? (entry.inKind ? "gift" : "in") : "out"}
+                      </span>
+                      <button className="fin-x" aria-label={"Drop line " + (index + 1)} onClick={() => setDraft(draft.filter((_, i) => i !== index))}>&times;</button>
+                      {entry.because
+                        ? <small className="fin-draft-quote">&ldquo;{entry.because}&rdquo;</small>
+                        : <small className="fin-draft-quote is-warn">no quote behind this one &mdash; check it</small>}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              <div className="fin-form-actions">
+                <button className="fin-btn" onClick={() => { setDraft(null); setDraftChecks([]); setDraftOpening(null); }}>Throw away</button>
+                <button
+                  className="fin-btn fin-btn--primary"
+                  disabled={busy || !draft.length}
+                  onClick={async () => {
+                    await send({
+                      action: "applyDraft",
+                      fiscalYear: state.fiscalYear,
+                      openingCents: draftOpening,
+                      entries: draft.map((entry) => ({
+                        kind: entry.kind,
+                        direction: entry.direction,
+                        amountCents: entry.amountCents,
+                        occurredOn: entry.occurredOn,
+                        category: entry.category,
+                        purpose: entry.purpose,
+                        counterparty: entry.counterparty,
+                        inKind: entry.inKind
+                      }))
+                    });
+                    setDraft(null);
+                    setDraftChecks([]);
+                    setDraftOpening(null);
+                    setSaid("");
+                  }}
+                >
+                  Record {draft.length === 1 ? "it" : "them"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </section>
       ) : null}
 
       <div className="fin-tiles">
@@ -1000,6 +1157,26 @@ const finCss = [
   ".fin-tab.is-active{background:#7b68ee;border-color:#7b68ee;color:#fff}",
   ".fin-year{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600}",
   ".fin-year select,.fin-form select,.fin-form input,.fin-num{font:inherit;font-size:13.5px;padding:6px 9px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-height:34px;min-width:0}",
+  ".fin-say{border:1px solid var(--border,#e4e6eb);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:9px;min-width:0}",
+  "html[data-theme=dark] .fin-say{background:#222326;border-color:#34363b}",
+  ".fin-say h2{margin:0;font-size:15.5px}",
+  ".fin-say h3{margin:0;font-size:13.5px}",
+  ".fin-say textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;resize:vertical;min-width:0}",
+  ".fin-say-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
+  ".fin-draft{display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--border,#e4e6eb);padding-top:12px}",
+  ".fin-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}",
+  ".fin-checks li{font-size:12.5px;padding:7px 10px;border-radius:7px;background:rgba(46,160,96,.1);border-left:3px solid #2ea060}",
+  ".fin-checks li.is-warn{background:rgba(217,147,43,.12);border-left-color:#d9932b}",
+  ".fin-draft-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}",
+  ".fin-draft-rows li{display:grid;grid-template-columns:96px 92px 140px minmax(0,1fr) minmax(0,1.2fr) auto auto;gap:6px;align-items:center}",
+  ".fin-draft-rows input,.fin-draft-rows select{font:inherit;font-size:12.5px;padding:5px 7px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-width:0}",
+  ".fin-draft-dir{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.6;white-space:nowrap}",
+  ".fin-draft-dir.is-in{color:#2ea060;opacity:1}",
+  ".fin-draft-quote{grid-column:1/-1;font-size:11.5px;opacity:.6;font-style:italic}",
+  ".fin-draft-quote.is-warn{color:#d9932b;opacity:1;font-style:normal}",
+  ".fin-x{border:0;background:none;color:inherit;opacity:.45;cursor:pointer;font-size:15px;line-height:1;padding:0 4px}",
+  ".fin-x:hover{opacity:1;color:#d03b3b}",
+  "@media (max-width:760px){.fin-draft-rows li{grid-template-columns:minmax(0,1fr) auto;row-gap:5px}}",
   ".fin-tiles{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr))}",
   ".fin-tile,.fin-quarter{border:1px solid var(--border,#e4e6eb);border-radius:10px;padding:11px 13px;display:flex;flex-direction:column;gap:2px;min-width:0}",
   "html[data-theme=dark] .fin-tile,html[data-theme=dark] .fin-quarter,html[data-theme=dark] .fin-form,html[data-theme=dark] .fin-row{background:#222326;border-color:#34363b}",

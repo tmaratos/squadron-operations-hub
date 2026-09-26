@@ -21,6 +21,7 @@ import {
   writeOffObligation
 } from "@/lib/finance/finance";
 import { findings, summarise } from "@/lib/finance/findings";
+import { draftFinance } from "@/lib/finance/draft";
 import { createItem, updateItem } from "@/lib/work/items";
 
 // The ledger's one endpoint.
@@ -90,6 +91,24 @@ const schema = z.discriminatedUnion("action", [
   }),
   z.object({ action: z.literal("settle"), id: z.string().trim().min(1).max(80), occurredOn: date }),
   z.object({ action: z.literal("writeOff"), id: z.string().trim().min(1).max(80), reason: z.string().trim().min(3).max(300) }),
+  // Reads a description and proposes. Writes nothing, whatever comes back.
+  z.object({ action: z.literal("describe"), said: z.string().trim().min(8).max(3000), fiscalYear: z.number().int().min(2000).max(2100) }),
+  // What the person confirmed after looking, which need not be what was proposed.
+  z.object({
+    action: z.literal("applyDraft"),
+    openingCents: z.number().int().min(0).max(10_000_000_00).nullable().optional(),
+    fiscalYear: z.number().int().min(2000).max(2100),
+    entries: z.array(z.object({
+      kind: z.enum(["TRANSACTION", "OWED"]),
+      direction,
+      amountCents: cents,
+      occurredOn: date,
+      category: z.string().trim().min(2).max(40),
+      purpose: z.string().trim().min(3).max(300),
+      counterparty: z.string().trim().max(160).nullable().optional(),
+      inKind: z.boolean().optional()
+    })).max(25)
+  }),
   z.object({
     action: z.literal("opening"),
     fiscalYear: z.number().int().min(2000).max(2100),
@@ -154,6 +173,64 @@ export async function POST(request: Request) {
     }
 
     const input = schema.parse(await request.json());
+
+    if (input.action === "describe") {
+      const draft = await draftFinance({ userId: user.id, said: input.said, fiscalYear: input.fiscalYear });
+      return NextResponse.json(draft);
+    }
+
+    if (input.action === "applyDraft") {
+      let recorded = 0;
+      let owed = 0;
+      for (const entry of input.entries) {
+        if (entry.kind === "OWED") {
+          await recordObligation({
+            direction: entry.direction,
+            amountCents: entry.amountCents,
+            counterparty: entry.counterparty || "Not said",
+            purpose: entry.purpose,
+            category: entry.category,
+            dueOn: entry.occurredOn,
+            userId: user.id
+          });
+          owed += 1;
+          continue;
+        }
+        await recordTransaction({
+          direction: entry.direction,
+          amountCents: entry.amountCents,
+          occurredOn: entry.occurredOn,
+          category: entry.category,
+          purpose: entry.purpose,
+          counterparty: entry.counterparty ?? null,
+          inKind: entry.inKind ?? false,
+          notes: "Recorded from a description.",
+          userId: user.id
+        });
+        recorded += 1;
+      }
+
+      if (input.openingCents !== null && input.openingCents !== undefined) {
+        await setOpeningBalance({ fiscalYear: input.fiscalYear, cents: input.openingCents, source: "Said by " + user.fullName, userId: user.id });
+      }
+
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "FINANCE_DESCRIBED",
+        entityType: "finance_transaction",
+        entityId: String(input.fiscalYear),
+        summary: user.fullName + " recorded " + recorded + " entries and " + owed + " outstanding amounts by describing them",
+        metadata: { recorded, owed }
+      });
+
+      return NextResponse.json({
+        ...(await state(input.fiscalYear)),
+        message: [
+          recorded ? recorded + (recorded === 1 ? " entry" : " entries") + " recorded" : null,
+          owed ? owed + (owed === 1 ? " amount" : " amounts") + " marked outstanding" : null
+        ].filter(Boolean).join(", ") + "."
+      });
+    }
 
     if (input.action === "record") {
       const id = await recordTransaction({ ...input, userId: user.id });
