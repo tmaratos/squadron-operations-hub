@@ -242,7 +242,8 @@ export const sections: Section[] = [
         items: [
           { label: "Settings", href: "/settings", icon: Settings, hint: "Preferences and behaviour" },
           { label: "Members and access", href: "/admin/users", icon: UserCog, hint: "Who may sign in, and as what" },
-          { label: "History", href: "/audit", icon: History, hint: "What changed, and who changed it" }
+          { label: "History", href: "/audit", icon: History, hint: "What changed, and who changed it" },
+          { label: "Security controls", href: "/settings/security", icon: ShieldCheck, hint: "What was attested to CAP, checked nightly" }
         ]
       }
     ]

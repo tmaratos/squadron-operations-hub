@@ -53,8 +53,11 @@ async function run(event, env) {
   const generated = digest ? await generateDutyWork(env) : 0;
   const routines = digest ? await generateRecurringWork(env) : 0;
   const raised = digest ? await raiseDeadlineNotices(env) : 0;
+  // Once a day, in the evening pass. The security controls the squadron attested to CAP are tested against
+  // the running system, and nothing is said unless one has stopped holding.
+  const security = digest === "EVENING" ? await checkSecurityControls(env, new Date().toISOString()) : 0;
   const sent = await deliver(env, digest);
-  return { generated, routines, raised, sent, digest, squadronHour: hour, cron: event.cron ?? null };
+  return { generated, routines, raised, security, sent, digest, squadronHour: hour, cron: event.cron ?? null };
 }
 
 // ---------------------------------------------------------------- deadlines
@@ -116,6 +119,97 @@ async function positionHolders(env) {
     // No organisation chart yet. Assignees still get their own notices.
   }
   return byArea;
+}
+
+/**
+ * The security controls the squadron attested to CAP, tested nightly against the running system.
+ *
+ * Kept here rather than in the app because it has to happen whether or not anybody opens a page. It speaks
+ * only when something has stopped holding: a nightly "all is well" trains people to ignore it, and the one
+ * night it matters it would be ignored too.
+ *
+ * Deliberately a small set of hard facts. Anything that needs a person to confirm - a laptop's disk
+ * encryption, MFA on a Google account - is not tested here and is never reported as passing.
+ */
+async function checkSecurityControls(env, now) {
+  const failures = [];
+  const ask = async (sql, ...binds) => {
+    try {
+      const row = await env.DB.prepare(sql).bind(...binds).first();
+      return row ? Number(Object.values(row)[0]) : 0;
+    } catch {
+      return null; // a missing table is not a breach; it is reported by its absence elsewhere
+    }
+  };
+
+  // A credential readable in the database. The one that would matter most.
+  const plain = await ask(
+    "SELECT COUNT(*) AS n FROM user_google_oauth WHERE access_token_encrypted LIKE 'ya29.%' OR access_token_encrypted LIKE '1//%' OR refresh_token_encrypted LIKE '1//%'"
+  );
+  if (plain > 0) {
+    failures.push(plain + " stored credential" + (plain === 1 ? " is" : "s are") + " readable in plain text.");
+  }
+
+  // Suspension that did not take effect.
+  const suspended = await ask(
+    "SELECT COUNT(*) AS n FROM sessions s JOIN users u ON u.id = s.user_id WHERE u.status IN ('SUSPENDED','ARCHIVED') AND s.revoked_at IS NULL AND s.expires_at > ?",
+    now
+  );
+  if (suspended > 0) {
+    failures.push(suspended + " suspended or archived account still holds a live session.");
+  }
+
+  // An account let in on a CAP address alone that can now change things.
+  const overReaching = await ask(
+    "SELECT COUNT(*) AS n FROM users WHERE access_basis = 'DOMAIN' AND global_role != 'READ_ONLY'"
+  );
+  if (overReaching > 0) {
+    failures.push(overReaching + " account admitted on a CAP address alone can change data.");
+  }
+
+  // A session that outlives the window the squadron attested to.
+  const ttl = Number(env.SESSION_TTL_HOURS || 12);
+  const beyond = await ask(
+    "SELECT COUNT(*) AS n FROM sessions WHERE revoked_at IS NULL AND expires_at > ?",
+    new Date(Date.now() + (ttl + 1) * 3600000).toISOString()
+  );
+  if (beyond > 0) {
+    failures.push(beyond + " session lasts longer than the " + ttl + " hour limit.");
+  }
+
+  // The audit log is how an incident would ever be reconstructed. Silence in it is itself a finding.
+  const audit = await ask("SELECT COUNT(*) AS n FROM audit_events WHERE created_at > ?", new Date(Date.now() - 7 * 86400000).toISOString());
+  if (audit === 0) {
+    failures.push("Nothing has been written to the audit log in seven days.");
+  }
+
+  if (!failures.length) return 0;
+
+  // Every system owner hears about it, once per day per distinct problem.
+  const owners = await env.DB.prepare(
+    "SELECT id FROM users WHERE global_role = 'SYSTEM_OWNER' AND status = 'APPROVED'"
+  ).all();
+  const statements = [];
+  const day = now.slice(0, 10);
+  for (const owner of owners.results || []) {
+    statements.push(
+      env.DB.prepare(
+        "INSERT INTO notifications (id, user_id, kind, title, body, item_id, list_id, url, actor_user_id, dedupe_key, email_state, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, NULL, ?, 'PENDING', ?) ON CONFLICT DO NOTHING"
+      ).bind(
+        crypto.randomUUID(),
+        owner.id,
+        "SYSTEM",
+        failures.length === 1 ? "A security control has stopped holding" : failures.length + " security controls have stopped holding",
+        failures.join(" ") + " These are controls the squadron attested to CAP.",
+        APP_URL + "/settings/security",
+        "SECCHECK:" + day + ":" + failures.length,
+        now
+      )
+    );
+  }
+  if (statements.length) await env.DB.batch(statements);
+  return failures.length;
 }
 
 async function raiseDeadlineNotices(env) {
