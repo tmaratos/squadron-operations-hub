@@ -1,0 +1,14 @@
+-- Why somebody is allowed in, so the Hub can tell its own decision from a person's.
+--
+-- Signing in has two doors: being a member of the squadron's Shared Drive, or holding a CAP address. The
+-- second one is a weaker claim - it says CAP issued this person an address, not that this squadron gave
+-- them the files - so it lets somebody look and not change anything.
+--
+-- That has to be revisited. The Drive is usually shared a few days later, and a member left reading their
+-- own squadron forever because of a gap in onboarding is worse than the gap. So a sign-in checks again and
+-- promotes when the Drive answers.
+--
+-- Which is only safe if the Hub knows the read-only setting was its own. An administrator who deliberately
+-- makes somebody read-only must not have it undone by the next sign-in, so any administrative role change
+-- clears this column and the account is left exactly as a person set it.
+ALTER TABLE users ADD COLUMN access_basis TEXT;

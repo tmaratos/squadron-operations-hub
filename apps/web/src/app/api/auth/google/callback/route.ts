@@ -23,13 +23,14 @@ export async function GET(request: Request) {
     const tokens = await exchangeGoogleCode(code, state);
     const profile = await getGoogleProfile(tokens.access_token);
     if (!isVerifiedGoogleProfile(profile)) return loginRedirect(request, "unverified");
-    // Either door: on the squadron's Shared Drive, or holding a CAP address.
-    const byDomain = isAllowedEmailDomain(profile.email);
-    if (!byDomain && !(await canAccessSharedDrive(tokens.access_token))) {
+    // Either door: on the squadron's Shared Drive, or holding a CAP address. The Drive is asked either
+    // way, because the answer decides what somebody may do once inside and not only whether they get in.
+    const driveAccess = await canAccessSharedDrive(tokens.access_token);
+    if (!driveAccess && !isAllowedEmailDomain(profile.email)) {
       return loginRedirect(request, "drive_access");
     }
 
-    const user = await upsertGoogleUser({ email: profile.email, fullName: profile.name });
+    const user = await upsertGoogleUser({ email: profile.email, fullName: profile.name, driveAccess });
     // Somebody has to be able to reach the admin pages, or the Hub cannot be administered at all.
     const ownership = await ensureOwnership(user.id, user.email);
     if (ownership) {

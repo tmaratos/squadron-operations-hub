@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  Eye,
   FileText,
   Grid3x3,
   HelpCircle,
@@ -790,6 +791,18 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
 
       {mobileOpen ? <button className="cu-backdrop" onClick={() => setMobileOpen(false)} aria-label="Close navigation" /> : null}
       <main className="cu-main">
+        {/* Say it, rather than letting somebody wonder why their buttons are missing.
+            A read-only account has every Add, Assign and Save quietly absent, which reads as the app being
+            broken on their device. One line, at the top of every page, naming the reason and the fix. */}
+        {user.globalRole === "READ_ONLY" ? (
+          <p className="cu-readonly" role="status">
+            <Eye size={14} aria-hidden="true" />
+            <span>
+              You can read everything here but not change it yet. Ask command staff to share the squadron
+              Google Drive with you, then sign in again.
+            </span>
+          </p>
+        ) : null}
         {/* Where you are, and the way back to the part of the app it belongs to. */}
         {pathname !== "/" ? (
           <nav className="cu-crumbs" aria-label="Breadcrumb">
@@ -925,6 +938,8 @@ const shellCss = [
   ".cu-nav-text{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}",
   ".cu-nav-text small{font-size:10.5px;line-height:1.35;color:var(--cu-muted);white-space:normal}",
   ".cu-nav-item.is-active .cu-nav-text small{color:inherit;opacity:.75}",
+  ".cu-readonly{display:flex;align-items:flex-start;gap:8px;margin:0 0 14px;padding:9px 12px;border:1px solid var(--cu-border);border-radius:8px;background:var(--cu-surface-2,transparent);font-size:12.5px;line-height:1.5;color:var(--cu-muted);min-width:0}",
+  ".cu-readonly svg{flex:0 0 auto;margin-top:2px}",
   ".cu-crumbs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 14px;font-size:12.5px;color:var(--cu-muted)}",
   ".cu-crumbs a{color:inherit;text-decoration:none}",
   ".cu-crumbs a:hover{color:#7b68ee;text-decoration:underline}",

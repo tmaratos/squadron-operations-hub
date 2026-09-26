@@ -46,7 +46,12 @@ export async function findUserById(id: string): Promise<UserRecord | null> {
   return row ? mapUser(row) : null;
 }
 
-export async function upsertGoogleUser(input: { email: string; fullName: string }): Promise<UserRecord> {
+export async function upsertGoogleUser(input: {
+  email: string;
+  fullName: string;
+  /** Whether this sign-in could see the squadron's Shared Drive. Undefined where it was not checked. */
+  driveAccess?: boolean;
+}): Promise<UserRecord> {
   const email = input.email.trim().toLowerCase();
   const now = new Date().toISOString();
   // The roster name wins over whatever Google calls someone today ("Maratos, Tristan" vs "Tristan Maratos").
@@ -76,6 +81,15 @@ export async function upsertGoogleUser(input: { email: string; fullName: string 
       )
       .bind(input.fullName.trim(), now, now, existing.id)
       .run();
+    // The Drive has since been shared with somebody the Hub had let in to read only. Checked again on every
+    // sign-in, and only for accounts the Hub itself limited: access_basis is cleared the moment an
+    // administrator sets a role, so a deliberate read-only account stays read-only.
+    if (input.driveAccess && existing.globalRole === "READ_ONLY") {
+      await getDatabase()
+        .prepare("UPDATE users SET global_role = 'STAFF_MEMBER', access_basis = 'DRIVE', updated_at = ? WHERE id = ? AND access_basis = 'DOMAIN'")
+        .bind(now, existing.id)
+        .run();
+    }
     const updated = await findUserById(existing.id);
     if (!updated) throw new Error("Google user profile could not be updated.");
     await linkPersonnelMemberToUser(updated.id, updated.fullName);
@@ -83,13 +97,18 @@ export async function upsertGoogleUser(input: { email: string; fullName: string 
   }
 
   const id = crypto.randomUUID();
+  // A CAP address with no Shared Drive access may look and not touch. They can read the squadron's work,
+  // its dates and who holds what, which is the point of being shown round; changing any of it waits until
+  // the squadron has actually given them the files.
+  const basis = input.driveAccess === false ? "DOMAIN" : "DRIVE";
+  const role: GlobalRole = basis === "DOMAIN" ? "READ_ONLY" : "STAFF_MEMBER";
   await getDatabase()
     .prepare(
       `INSERT INTO users (
-        id, email, full_name, status, global_role, created_at, updated_at, approved_at
-      ) VALUES (?, ?, ?, 'APPROVED', 'STAFF_MEMBER', ?, ?, ?)`
+        id, email, full_name, status, global_role, access_basis, created_at, updated_at, approved_at
+      ) VALUES (?, ?, ?, 'APPROVED', ?, ?, ?, ?, ?)`
     )
-    .bind(id, email, input.fullName.trim(), now, now, now)
+    .bind(id, email, input.fullName.trim(), role, basis, now, now, now)
     .run();
   const created = await findUserById(id);
   if (!created) throw new Error("Google user profile could not be created.");
@@ -277,8 +296,10 @@ export async function rejectAccessRequest(id: string, reviewerId: string, note?:
 }
 
 export async function updateUserRole(userId: string, role: GlobalRole): Promise<void> {
+  // A person has decided this, so the Hub stops deciding it: clearing access_basis is what stops a later
+  // sign-in promoting somebody an administrator deliberately held at read only.
   await getDatabase()
-    .prepare("UPDATE users SET global_role = ?, updated_at = ? WHERE id = ?")
+    .prepare("UPDATE users SET global_role = ?, access_basis = NULL, updated_at = ? WHERE id = ?")
     .bind(role, new Date().toISOString(), userId)
     .run();
 }
