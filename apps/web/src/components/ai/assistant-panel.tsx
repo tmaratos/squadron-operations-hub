@@ -1,4 +1,5 @@
 "use client";
+import { Dictate } from "@/components/dictate";
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -239,6 +240,7 @@ export function AssistantPanel() {
                       onChange={(event) => setPrompt(event.target.value)}
                       onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); ask(); } }}
                     />
+                    <Dictate onText={(text) => setPrompt((current) => (current ? current + " " + text : text))} label="Say it" compact />
                     <button type="submit" className="ap-primary" disabled={busy || !prompt.trim()}>{busy ? "Working…" : "Ask"}</button>
                   </form>
                 </div>

@@ -3,7 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmButton } from "@/components/confirm-button";
-import type { Goal, Horizon } from "@/lib/goals/goals";
+import { Dictate } from "@/components/dictate";
+import type { Goal, GoalStep, Horizon } from "@/lib/goals/goals";
+
+interface DraftStep { title: string; dueOn: string | null; listId: string | null; listName: string | null }
+interface Draft { name: string; detail: string | null; horizon: Horizon; targetDate: string | null; steps: DraftStep[] }
+interface Check { tone: "OK" | "WARN"; says: string }
 
 // Long term and short term, kept apart, because they are read at different moments.
 //
@@ -33,7 +38,35 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState<{ horizon: Horizon; name?: string; detail?: string } | null>(null);
   const [targetFor, setTargetFor] = useState<string | null>(null);
+  // Describing a goal out loud. The draft sits here, edited freely, until somebody presses the button.
+  const [said, setSaid] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [checks, setChecks] = useState<Check[]>([]);
+  const [stepFor, setStepFor] = useState<string | null>(null);
+  const [showTargets, setShowTargets] = useState<string | null>(null);
   const router = useRouter();
+
+  async function describe() {
+    if (said.trim().length < 8) return setNote("Say a bit more about what you are trying to achieve.");
+    setDrafting(true);
+    setNote(null);
+    try {
+      const response = await fetch("/api/goals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "draft", prompt: said })
+      });
+      const data = (await response.json()) as { draft?: Draft; checks?: Check[]; message?: string };
+      if (!response.ok || !data.draft) throw new Error(data.message || "That could not be drafted.");
+      setDraft(data.draft);
+      setChecks(data.checks ?? []);
+    } catch (caught) {
+      setNote(caught instanceof Error ? caught.message : "That could not be drafted.");
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   async function send(body: Record<string, unknown>) {
     setBusy(true);
@@ -83,7 +116,57 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
       <div className="gl-bar"><span style={{ width: pct(goal.progress) + "%" }} /></div>
       {goal.detail ? <p className="gl-detail">{goal.detail}</p> : null}
 
-      {goal.targets.length ? (
+      {/* The steps are the honest measure: a goal made of eight jobs is however many of those are done. */}
+      {goal.steps.length ? (
+        <ul className="gl-steps">
+          {goal.steps.map((step: GoalStep) => (
+            <li key={step.id} className={step.done ? "is-done" : ""}>
+              <span className="gl-step-mark" aria-hidden="true">{step.done ? "\u2713" : "\u25cb"}</span>
+              <span className="gl-step-label">
+                {step.itemId && step.listId
+                  ? <a href={"/lists/" + step.listId + "?item=" + step.itemId}>{step.title}</a>
+                  : step.title}
+                {step.unattached ? <em className="gl-step-note"> no task yet</em> : null}
+                {step.dueOn ? <em className="gl-step-note"> {step.dueOn}</em> : null}
+              </span>
+              {canEdit ? (
+                <button type="button" className="gl-x" aria-label={"Remove step " + step.title} onClick={() => send({ action: "removeStep", stepId: step.id })}>&times;</button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {canEdit ? (
+        stepFor === goal.id ? (
+          <form
+            className="gl-target-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              send({
+                action: "addStep",
+                goalId: goal.id,
+                title: String(form.get("title") ?? "").trim(),
+                listId: String(form.get("listId") ?? "") || null,
+                dueOn: String(form.get("dueOn") ?? "") || null
+              });
+              setStepFor(null);
+            }}
+          >
+            <input name="title" placeholder="What has to be done" maxLength={200} required autoFocus />
+            <select name="listId" defaultValue="">
+              <option value="">No task, just a line</option>
+              {lists.map((list) => <option key={list.id} value={list.id}>{list.spaceName} &middot; {list.name}</option>)}
+            </select>
+            <input name="dueOn" type="date" aria-label="Due date for this step" />
+            <button type="submit" className="gl-btn gl-btn--primary" disabled={busy}>Add step</button>
+            <button type="button" className="gl-btn" onClick={() => setStepFor(null)}>Cancel</button>
+          </form>
+        ) : null
+      ) : null}
+
+      {showTargets === goal.id && goal.targets.length ? (
         <ul className="gl-targets">
           {goal.targets.map((target) => (
             <li key={target.id}>
@@ -112,9 +195,7 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
             </li>
           ))}
         </ul>
-      ) : (
-        <p className="gl-faint">No targets yet, so nothing is being measured.</p>
-      )}
+      ) : null}
 
       {canEdit ? (
         targetFor === goal.id ? (
@@ -152,7 +233,17 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
           </form>
         ) : (
           <div className="gl-actions">
-            <button type="button" className="gl-btn" onClick={() => setTargetFor(goal.id)}>+ Add a target</button>
+            <button type="button" className="gl-btn" onClick={() => setStepFor(stepFor === goal.id ? null : goal.id)}>+ Add a step</button>
+            {/* Targets are the older, fiddlier way of measuring a goal and are no longer the front door.
+                They still work, and a goal that uses one still shows it - it is just not the first thing
+                somebody is asked to understand. */}
+            {goal.targets.length || showTargets === goal.id ? (
+              <button type="button" className="gl-btn" onClick={() => setShowTargets(showTargets === goal.id ? null : goal.id)}>
+                {showTargets === goal.id ? "Hide measures" : "Measures (" + goal.targets.length + ")"}
+              </button>
+            ) : (
+              <button type="button" className="gl-btn" onClick={() => { setShowTargets(goal.id); setTargetFor(goal.id); }}>+ Measure a number</button>
+            )}
             {goal.status === "OPEN" ? (
               <button type="button" className="gl-btn" disabled={busy} onClick={() => send({ action: "update", id: goal.id, status: "MET" })}>Mark met</button>
             ) : (
@@ -230,10 +321,135 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
     );
   };
 
+  const composer = canEdit ? (
+    <section className="gl-composer">
+      <h2>Set up a goal by describing it</h2>
+      <p className="gl-faint">
+        Say what you are trying to achieve and roughly what has to happen. The assistant turns it into a goal with
+        steps, shows you what it came up with, and changes nothing until you say so.
+      </p>
+      <div className="gl-say">
+        <textarea
+          value={said}
+          onChange={(event) => setSaid(event.target.value)}
+          rows={2}
+          maxLength={2000}
+          placeholder="We want every senior member to finish Level 1 before the end of the fiscal year"
+        />
+        <div className="gl-say-actions">
+          <Dictate onText={(text) => setSaid((current) => (current ? current + " " + text : text))} label="Say it" />
+          <button type="button" className="gl-btn gl-btn--primary" disabled={drafting || busy} onClick={describe}>
+            {drafting ? "Working\u2026" : "Draft it"}
+          </button>
+        </div>
+      </div>
+
+      {draft ? (
+        <div className="gl-draft">
+          <h3>Check this over</h3>
+          {checks.length ? (
+            <ul className="gl-checks">
+              {checks.map((check) => (
+                <li key={check.says} className={check.tone === "WARN" ? "is-warn" : ""}>{check.says}</li>
+              ))}
+            </ul>
+          ) : null}
+
+          <label className="gl-field">
+            <span>Goal</span>
+            <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} maxLength={160} />
+          </label>
+          <label className="gl-field">
+            <span>What counts as done</span>
+            <textarea value={draft.detail ?? ""} onChange={(event) => setDraft({ ...draft, detail: event.target.value })} rows={2} maxLength={2000} />
+          </label>
+          <div className="gl-form-row">
+            <label>
+              When
+              <select value={draft.horizon} onChange={(event) => setDraft({ ...draft, horizon: event.target.value as Horizon })}>
+                <option value="SHORT">This year</option>
+                <option value="LONG">Beyond this year</option>
+              </select>
+            </label>
+            <label>
+              By when
+              <input type="date" value={draft.targetDate ?? ""} onChange={(event) => setDraft({ ...draft, targetDate: event.target.value || null })} />
+            </label>
+          </div>
+
+          <p className="gl-faint">
+            The steps. Each one with a list chosen becomes a real task you can assign; leave the list empty and it
+            stays a line on the goal until you decide where it belongs.
+          </p>
+          <ul className="gl-draft-steps">
+            {draft.steps.map((step, index) => (
+              <li key={index}>
+                <input
+                  value={step.title}
+                  onChange={(event) => setDraft({ ...draft, steps: draft.steps.map((entry, i) => i === index ? { ...entry, title: event.target.value } : entry) })}
+                  maxLength={200}
+                  aria-label={"Step " + (index + 1)}
+                />
+                <select
+                  value={step.listId ?? ""}
+                  onChange={(event) => setDraft({ ...draft, steps: draft.steps.map((entry, i) => i === index ? { ...entry, listId: event.target.value || null } : entry) })}
+                  aria-label={"Which list step " + (index + 1) + " goes in"}
+                >
+                  <option value="">No task yet</option>
+                  {lists.map((list) => <option key={list.id} value={list.id}>{list.spaceName} &middot; {list.name}</option>)}
+                </select>
+                <input
+                  type="date"
+                  value={step.dueOn ?? ""}
+                  onChange={(event) => setDraft({ ...draft, steps: draft.steps.map((entry, i) => i === index ? { ...entry, dueOn: event.target.value || null } : entry) })}
+                  aria-label={"Due date for step " + (index + 1)}
+                />
+                <button type="button" className="gl-x" aria-label={"Remove step " + (index + 1)} onClick={() => setDraft({ ...draft, steps: draft.steps.filter((_, i) => i !== index) })}>&times;</button>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className="gl-btn"
+            onClick={() => setDraft({ ...draft, steps: [...draft.steps, { title: "", dueOn: null, listId: null, listName: null }] })}
+          >
+            + Another step
+          </button>
+
+          <div className="gl-form-actions">
+            <button type="button" className="gl-btn" onClick={() => { setDraft(null); setChecks([]); }}>Throw it away</button>
+            <button
+              type="button"
+              className="gl-btn gl-btn--primary"
+              disabled={busy}
+              onClick={() => {
+                const steps = draft.steps.filter((step) => step.title.trim().length >= 3);
+                send({
+                  action: "createFromDraft",
+                  name: draft.name,
+                  detail: draft.detail,
+                  horizon: draft.horizon,
+                  targetDate: draft.targetDate,
+                  steps: steps.map((step) => ({ title: step.title, dueOn: step.dueOn, listId: step.listId }))
+                });
+                setDraft(null);
+                setChecks([]);
+                setSaid("");
+              }}
+            >
+              Create it
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
+  ) : null;
+
   return (
     <div className="gl">
       <style>{glCss}</style>
       {note ? <p className="gl-note" role="status">{note}</p> : null}
+      {composer}
       {section("SHORT", "This year", "What has to be true by the end of the award or fiscal year. The things a staff meeting is about.")}
       {section("LONG", "Beyond this year", "Where the squadron is going. Read less often, and worth being honest about.")}
     </div>
@@ -277,5 +493,29 @@ const glCss = [
   ".gl-empty{padding:14px;border:1px dashed var(--border,#d5d8de);border-radius:10px}",
   ".gl-suggest{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}",
   ".gl-note{margin:0;font-size:13px;padding:10px 13px;border-radius:9px;background:rgba(123,104,238,.12)}",
-  ".gl-faint{font-size:12.5px;color:var(--muted,#656f7d);margin:0}"
+  ".gl-faint{font-size:12.5px;color:var(--muted,#656f7d);margin:0}",
+  ".gl-composer{border:1px solid var(--border,#e4e6eb);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:9px;min-width:0}",
+  "html[data-theme=dark] .gl-composer{background:#222326;border-color:#34363b}",
+  ".gl-composer h2{margin:0;font-size:15.5px}",
+  ".gl-composer h3{margin:0;font-size:14px}",
+  ".gl-say{display:flex;flex-direction:column;gap:8px}",
+  ".gl-say textarea{font:inherit;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;resize:vertical;min-width:0}",
+  ".gl-say-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
+  ".gl-draft{display:flex;flex-direction:column;gap:9px;border-top:1px solid var(--border,#e4e6eb);padding-top:12px;margin-top:3px}",
+  ".gl-checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}",
+  ".gl-checks li{font-size:12.5px;padding:7px 10px;border-radius:7px;background:rgba(46,160,96,.1);border-left:3px solid #2ea060}",
+  ".gl-checks li.is-warn{background:rgba(217,147,43,.12);border-left-color:#d9932b}",
+  ".gl-field{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600}",
+  ".gl-field input,.gl-field textarea{font:inherit;font-size:13.5px;font-weight:400;padding:7px 9px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-width:0}",
+  ".gl-draft-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
+  ".gl-draft-steps li{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,150px) 140px auto;gap:6px;align-items:center}",
+  ".gl-draft-steps input,.gl-draft-steps select{font:inherit;font-size:13px;padding:6px 8px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-width:0}",
+  ".gl-steps{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}",
+  ".gl-steps li{display:flex;align-items:flex-start;gap:7px;font-size:12.5px}",
+  ".gl-steps li.is-done .gl-step-label{opacity:.55;text-decoration:line-through}",
+  ".gl-step-mark{flex:0 0 auto;opacity:.6}",
+  ".gl-step-label{flex:1;min-width:0}",
+  ".gl-step-label a{color:inherit}",
+  ".gl-step-note{opacity:.55;font-style:normal;font-size:11.5px}",
+  "@media (max-width:640px){.gl-draft-steps li{grid-template-columns:minmax(0,1fr) auto;row-gap:5px}}"
 ].join("");

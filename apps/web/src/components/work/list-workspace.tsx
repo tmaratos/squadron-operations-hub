@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
 import { MentionBox, renderMentions, toStored } from "./mention-box";
+import { Dictate } from "@/components/dictate";
 import { LinkPanel } from "./link-panel";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
 import type { Automation, AutomationAction, AutomationCondition, AutomationTrigger, CustomField, ItemDetail, ItemPriority, ListDetail, ListStatus, WorkItem } from "@/lib/work/types";
@@ -2057,7 +2058,11 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                   onNamed={(person) => setNamed((current) => (current.some((entry) => entry.id === person.id) ? current : [...current, person]))}
                   onSend={postComment}
                 />
-                <div className="tp-compose-row"><span>Type @ to name somebody · Ctrl + Enter to send</span><button type="submit" className="lw-primary" disabled={!comment.trim()}>Comment</button></div>
+                <div className="tp-compose-row">
+                  <span>Type @ to name somebody · Ctrl + Enter to send</span>
+                  <Dictate onText={(text) => setComment((current) => (current ? current + " " + text : text))} label="Say it" />
+                  <button type="submit" className="lw-primary" disabled={!comment.trim()}>Comment</button>
+                </div>
               </form>
             ) : null}
           </aside>

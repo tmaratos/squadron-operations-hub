@@ -27,6 +27,24 @@ export interface GoalTarget {
   readout: string;
 }
 
+/**
+ * One step of a goal, which is a task in a list and not a checkbox of its own.
+ *
+ * The point is that a goal cannot drift away from the work. Ticking the task off where the work actually
+ * happens is what moves the goal; there is no second place to remember to update.
+ */
+export interface GoalStep {
+  id: string;
+  title: string;
+  itemId: string | null;
+  listId: string | null;
+  listName: string | null;
+  dueOn: string | null;
+  done: boolean;
+  /** True while the step is still just a line somebody wrote and has no task behind it. */
+  unattached: boolean;
+}
+
 export interface Goal {
   id: string;
   name: string;
@@ -37,6 +55,7 @@ export interface Goal {
   ownerName: string | null;
   status: GoalStatus;
   targets: GoalTarget[];
+  steps: GoalStep[];
   /** The mean of its targets, 0..1. A goal with no targets sits at zero rather than pretending. */
   progress: number;
   daysLeft: number | null;
@@ -61,6 +80,36 @@ export async function listGoals(): Promise<Goal[]> {
       ).bind(WORKSPACE_ID).all<Record<string, unknown>>(),
       db.prepare("SELECT * FROM goal_targets ORDER BY display_order, rowid").all<Record<string, unknown>>()
     ]);
+
+    // The steps, with the task behind each one. A step whose task was deleted goes back to being a line.
+    const stepsByGoal = new Map<string, GoalStep[]>();
+    try {
+      const stepRows = await db
+        .prepare(
+          "SELECT s.id, s.goal_id, s.title, s.item_id, i.title AS item_title, i.due_on, i.list_id, l.name AS list_name, " +
+          "st.category AS status_category " +
+          "FROM goal_steps s " +
+          "LEFT JOIN items i ON i.id = s.item_id " +
+          "LEFT JOIN lists l ON l.id = i.list_id " +
+          "LEFT JOIN statuses st ON st.id = i.status_id " +
+          "ORDER BY s.display_order, s.rowid"
+        )
+        .all<Record<string, unknown>>();
+      stepRows.results.forEach((row) => {
+        const goalId = row.goal_id as string;
+        stepsByGoal.set(goalId, [...(stepsByGoal.get(goalId) ?? []), {
+          id: row.id as string,
+          // The task's own title wins, so renaming the task renames the step rather than leaving two names.
+          title: (row.item_title as string | null) ?? (row.title as string),
+          itemId: (row.item_id as string | null) ?? null,
+          listId: (row.list_id as string | null) ?? null,
+          listName: (row.list_name as string | null) ?? null,
+          dueOn: (row.due_on as string | null) ?? null,
+          done: row.status_category === "CLOSED",
+          unattached: !row.item_id
+        }]);
+      });
+    } catch { /* the table arrives with a migration */ }
 
     // Only read the work if something actually depends on it.
     const needsWork = targetRows.results.some((row) => row.kind === "TASKS");
@@ -121,6 +170,11 @@ export async function listGoals(): Promise<Goal[]> {
 
     return goalRows.results.map((row) => {
       const targets = byGoal.get(row.id as string) ?? [];
+      const steps = stepsByGoal.get(row.id as string) ?? [];
+      const attached = steps.filter((step) => !step.unattached);
+      // Steps are the measure where a goal has them: a goal made of eight jobs is however many of those
+      // eight are done, and no amount of separate numbers changes that. Targets are the fallback.
+      const stepProgress = attached.length ? attached.filter((step) => step.done).length / attached.length : null;
       const targetDate = (row.target_date as string | null) ?? null;
       return {
         id: row.id as string,
@@ -132,7 +186,10 @@ export async function listGoals(): Promise<Goal[]> {
         ownerName: (row.owner_name as string | null) ?? null,
         status: row.status as GoalStatus,
         targets,
-        progress: targets.length ? targets.reduce((sum, entry) => sum + entry.progress, 0) / targets.length : 0,
+        steps,
+        progress: stepProgress !== null
+          ? stepProgress
+          : targets.length ? targets.reduce((sum, entry) => sum + entry.progress, 0) / targets.length : 0,
         daysLeft: targetDate
           ? Math.round((new Date(targetDate + "T12:00:00Z").getTime() - new Date(today + "T12:00:00Z").getTime()) / 86400000)
           : null
@@ -222,4 +279,34 @@ export async function setTargetValue(targetId: string, current: number): Promise
 
 export async function removeTarget(targetId: string): Promise<void> {
   await getDatabase().prepare("DELETE FROM goal_targets WHERE id = ?").bind(targetId).run();
+}
+
+export async function addStep(input: { goalId: string; title: string; itemId?: string | null }): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = nowIso();
+  await getDatabase()
+    .prepare(
+      "INSERT INTO goal_steps (id, goal_id, title, item_id, display_order, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(display_order), 0) + 1 FROM goal_steps WHERE goal_id = ?), ?, ?)"
+    )
+    .bind(id, input.goalId, input.title.trim().slice(0, 200), input.itemId ?? null, input.goalId, now, now)
+    .run();
+  return id;
+}
+
+export async function updateStep(id: string, input: { title?: string; itemId?: string | null }): Promise<void> {
+  const sets: string[] = [];
+  const values: unknown[] = [];
+  if (input.title !== undefined) { sets.push("title = ?"); values.push(input.title.trim().slice(0, 200)); }
+  if (input.itemId !== undefined) { sets.push("item_id = ?"); values.push(input.itemId); }
+  if (!sets.length) return;
+  sets.push("updated_at = ?");
+  values.push(nowIso(), id);
+  await getDatabase().prepare("UPDATE goal_steps SET " + sets.join(", ") + " WHERE id = ?").bind(...values).run();
+}
+
+export async function removeStep(id: string): Promise<void> {
+  // The step goes; the task it pointed at stays exactly where it was. Removing something from a goal is not
+  // a reason to destroy work somebody may be part way through.
+  await getDatabase().prepare("DELETE FROM goal_steps WHERE id = ?").bind(id).run();
 }
