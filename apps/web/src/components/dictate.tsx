@@ -72,6 +72,9 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
   const [listening, setListening] = useState(false);
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  /** What is being heard right now, before the recogniser has settled on it. */
+  const [preview, setPreview] = useState("");
+  const [unsupported, setUnsupported] = useState(false);
 
   const engine = useRef<Recognition | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -99,15 +102,24 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
     const instance = new Engine();
     instance.lang = typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
     instance.continuous = true;
-    instance.interimResults = false;
+    // Words as they are spoken, rather than only when a phrase settles. Interim results get revised as the
+    // recogniser hears more, so they are shown beside the button and never written into the field - only the
+    // final version of a phrase goes in, or every correction would be appended as a fresh sentence.
+    instance.interimResults = true;
 
     instance.onresult = (event) => {
       let said = "";
+      let hearing = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         const result = event.results[index];
         if (result.isFinal) said += result[0].transcript;
+        else hearing += result[0].transcript;
       }
-      if (said.trim()) sink.current(said.trim());
+      setPreview(hearing.trim());
+      if (said.trim()) {
+        sink.current(said.trim());
+        setPreview("");
+      }
     };
 
     instance.onerror = (event) => {
@@ -130,7 +142,7 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
       setListening(false);
     };
 
-    instance.onend = () => setListening(false);
+    instance.onend = () => { setListening(false); setPreview(""); };
 
     try {
       instance.start();
@@ -175,7 +187,14 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
             headers: { "Content-Type": blob.type || "audio/webm" },
             body: blob
           });
-          const data = (await response.json().catch(() => ({}))) as { text?: string; message?: string };
+          const data = (await response.json().catch(() => ({}))) as { text?: string; message?: string; unavailable?: boolean };
+          if (data.unavailable) {
+            // Nothing is wrong and nothing is broken: this browser cannot, and the squadron has not set up
+            // anything of its own. Say where it does work and stop offering it here.
+            setUnsupported(true);
+            setProblem(data.message ?? "Chrome, Edge or Safari will work.");
+            return;
+          }
           if (!response.ok) throw new Error(data.message || "That could not be transcribed.");
           if (data.text) sink.current(data.text);
           else setProblem(data.message ?? "Nothing could be made out of that.");
@@ -214,6 +233,10 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
 
   if (!usable) return null;
 
+  // Tried, and this browser genuinely cannot. The button stops being offered and the reason stays, because
+  // a control that has already failed once is just a thing to press twice.
+  if (unsupported) return <span className="dictate-problem" role="status">{problem}</span>;
+
   return (
     <>
       <button
@@ -228,6 +251,7 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
         {listening ? <MicOff size={15} aria-hidden="true" /> : <Mic size={15} aria-hidden="true" />}
         {compact ? null : <span>{working ? "Writing it down…" : listening ? "Listening…" : label}</span>}
       </button>
+      {preview ? <span className="dictate-preview" role="status">{preview}</span> : null}
       {problem ? <span className="dictate-problem" role="status">{problem}</span> : null}
       <style>{dictateCss}</style>
     </>
@@ -243,5 +267,6 @@ const dictateCss = [
   ".dictate.is-live{background:#d03b3b;border-color:#d03b3b;color:#fff;animation:dictate-pulse 1.6s ease-in-out infinite}",
   "@keyframes dictate-pulse{0%,100%{opacity:1}50%{opacity:.72}}",
   "@media (prefers-reduced-motion:reduce){.dictate.is-live{animation:none}}",
-  ".dictate-problem{font-size:12px;color:#d03b3b}"
+  ".dictate-problem{font-size:12px;color:#d03b3b}",
+  ".dictate-preview{font-size:12.5px;opacity:.7;font-style:italic;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}"
 ].join("");

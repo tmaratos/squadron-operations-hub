@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Dictate } from "@/components/dictate";
 
 // Sending one message to the members who need it. Pick people, write it, send. The default is quiet: it
 // waits for their usual daily email. "Send it now" is there for the times that cannot wait.
@@ -95,6 +96,7 @@ export function AlertComposer() {
           <label className="ac2-field">
             <span>Message</span>
             <textarea value={body} rows={5} maxLength={5000} placeholder="Say what changed, and what they need to do about it." onChange={(event) => setBody(event.target.value)} />
+            <Dictate onText={(text) => setBody((current) => (current ? current + " " + text : text))} label="Say it" />
           </label>
 
           <label className="ac2-urgent">

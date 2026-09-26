@@ -12,11 +12,6 @@
     "enabled": true
   },
   // Private link to the squadron AI server (Ollama on hp-server) through the hp-server Cloudflare Tunnel.
-  // Whisper, for dictating in a browser whose own speech service will not answer. Only ever reached when
-  // the browser cannot do it itself, because this one is billed to the squadron and that one is not.
-  "ai": {
-    "binding": "AI"
-  },
   "vpc_services": [
     {
       "binding": "SQUADRON_AI",

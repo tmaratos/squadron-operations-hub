@@ -1,7 +1,7 @@
 interface CloudflareEnv {
   DB: D1Database;
-  /** Workers AI. Used for one thing only: transcribing dictation a browser could not transcribe itself. */
-  AI?: { run: (model: string, input: Record<string, unknown>) => Promise<{ text?: string }> };
+  /** A transcription service on the squadron's own hardware, if one is ever set up. Never a paid one. */
+  LOCAL_TRANSCRIBE_URL?: string;
   APP_NAME: string;
   APP_URL: string;
   SESSION_TTL_HOURS?: string;

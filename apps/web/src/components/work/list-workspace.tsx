@@ -1530,6 +1530,7 @@ function QuickAdd({ onAdd, onCancel, autoOpen = false, label = "+ Add Task" }: {
       setValue("");
     }}>
       <input autoFocus value={value} placeholder="Task Name" onChange={(event) => setValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape") close(); }} />
+      <Dictate onText={(text) => setValue((current) => (current ? current + " " + text : text))} compact label="Say the task" />
       <button type="button" className="lw-ghost" onClick={close}>Cancel</button>
       <button type="submit" className="lw-primary">Save</button>
     </form>
@@ -1972,7 +1973,20 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
             ) : null}
 
             <section className="tp-section">
-              <h3 className="tp-h">Description</h3>
+              <h3 className="tp-h">
+                Description
+                {canEdit ? (
+                  <Dictate
+                    onText={(text) => setDescription((current) => {
+                      const next = current ? current + " " + text : text;
+                      save({ description: next });
+                      return next;
+                    })}
+                    compact
+                    label="Say the description"
+                  />
+                ) : null}
+              </h3>
               <textarea
                 ref={grow}
                 className="tp-desc"
@@ -2127,7 +2141,7 @@ const tpCss = [
   ".tp-tag{display:inline-flex;align-items:center;gap:2px;height:24px;padding:0 2px 0 8px;border-radius:4px;font-size:12px}",
   ".tp-tag-input{border:0;outline:0;background:transparent;color:inherit;font:inherit;font-size:12px;width:110px;height:26px;padding:0 6px;border-radius:4px;box-shadow:none}.tp-tag-input:hover,.tp-tag-input:focus{background:var(--tp-hover)}",
   ".tp-section{display:flex;flex-direction:column;gap:10px}",
-  ".tp-h{margin:0;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--tp-muted);display:flex;align-items:center;gap:10px}",
+  ".tp-h{margin:0;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--tp-muted);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}",
   ".tp-count{font-weight:500;letter-spacing:0;text-transform:none;font-size:12px;color:var(--tp-muted)}",
   ".tp-field{padding:2px 0}",
   ".tp-field input,.tp-field select,.tp-field textarea{border:1px solid transparent;outline:0;background:transparent;color:inherit;font:inherit;font-size:13px;border-radius:6px;padding:4px 8px;min-height:30px;box-shadow:none;max-width:100%}",
