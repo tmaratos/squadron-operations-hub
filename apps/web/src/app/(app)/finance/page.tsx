@@ -8,6 +8,7 @@ import {
   currentFiscalYear,
   fiscalYearsWithActivity,
   listMeetings,
+  listObligations,
   listTransactions,
   openingBalance
 } from "@/lib/finance/finance";
@@ -19,10 +20,11 @@ export default async function FinancePage() {
   const user = await requireUser();
   const fiscalYear = currentFiscalYear();
   const transactions = await listTransactions(fiscalYear);
-  const [budget, meetings, opening, years, spaces, users] = await Promise.all([
+  const [budget, meetings, opening, obligations, years, spaces, users] = await Promise.all([
     budgetFor(fiscalYear, transactions),
     listMeetings(fiscalYear),
     openingBalance(fiscalYear),
+    listObligations(),
     fiscalYearsWithActivity(),
     getWorkspaceTree().catch(() => []),
     listUsers().catch(() => [])
@@ -41,9 +43,10 @@ export default async function FinancePage() {
           transactions,
           budget,
           meetings,
+          obligations,
           openingSource: opening?.source ?? null,
-          summary: summarise(transactions, budget, fiscalYear, opening?.cents ?? null),
-          findings: findings({ transactions, budget, meetings, fiscalYear, openingCents: opening?.cents ?? null })
+          summary: summarise(transactions, budget, fiscalYear, opening?.cents ?? null, obligations),
+          findings: findings({ transactions, budget, meetings, fiscalYear, openingCents: opening?.cents ?? null, obligations })
         }}
         years={years}
         canEdit={user.globalRole !== "READ_ONLY"}

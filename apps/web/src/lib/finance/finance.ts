@@ -107,6 +107,12 @@ export interface Transaction {
   itemId: string | null;
   itemTitle: string | null;
   notes: string | null;
+  /** A gift of goods or services rather than money. Never counted in any cash figure. */
+  inKind: boolean;
+  /** What was actually given. */
+  itemDetail: string | null;
+  /** How the worth was arrived at, because a value nobody can justify is not a value. */
+  valueBasis: string | null;
   fiscalYear: number;
   fiscalQuarter: number;
 }
@@ -131,6 +137,9 @@ interface TxRow {
   item_id: string | null;
   item_title: string | null;
   notes: string | null;
+  in_kind: number | null;
+  item_detail: string | null;
+  value_basis: string | null;
 }
 
 function mapTx(row: TxRow): Transaction {
@@ -155,6 +164,9 @@ function mapTx(row: TxRow): Transaction {
     itemId: row.item_id,
     itemTitle: row.item_title,
     notes: row.notes,
+    inKind: Boolean(row.in_kind),
+    itemDetail: row.item_detail,
+    valueBasis: row.value_basis,
     fiscalYear: fiscalYearOf(row.occurred_on),
     fiscalQuarter: fiscalQuarterOf(row.occurred_on)
   };
@@ -203,19 +215,23 @@ export async function recordTransaction(input: {
   counterparty?: string | null;
   notes?: string | null;
   itemId?: string | null;
+  inKind?: boolean;
+  itemDetail?: string | null;
+  valueBasis?: string | null;
   userId: string;
 }): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   await getDatabase()
     .prepare(
-      "INSERT INTO finance_transactions (id, workspace_id, direction, amount_cents, occurred_on, category, purpose, counterparty, notes, item_id, created_by, created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+      "INSERT INTO finance_transactions (id, workspace_id, direction, amount_cents, occurred_on, category, purpose, counterparty, notes, item_id, in_kind, item_detail, value_basis, created_by, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     )
     .bind(
       id, WORKSPACE_ID, input.direction, Math.round(input.amountCents), input.occurredOn, input.category,
       input.purpose.trim(), input.counterparty?.trim() || null, input.notes?.trim() || null,
-      input.itemId ?? null, input.userId, now, now
+      input.itemId ?? null, input.inKind ? 1 : 0, input.itemDetail?.trim() || null,
+      input.valueBasis?.trim() || null, input.userId, now, now
     )
     .run();
   return id;
@@ -232,6 +248,8 @@ export async function updateTransaction(id: string, patch: {
   wingReference?: string | null;
   notes?: string | null;
   approvedBy?: string | null;
+  itemDetail?: string | null;
+  valueBasis?: string | null;
   receipt?: { fileId: string; name: string } | null;
 }): Promise<void> {
   const now = new Date().toISOString();
@@ -246,6 +264,8 @@ export async function updateTransaction(id: string, patch: {
   if (patch.counterparty !== undefined) put("counterparty", patch.counterparty?.trim() || null);
   if (patch.wingReference !== undefined) put("wing_reference", patch.wingReference?.trim() || null);
   if (patch.notes !== undefined) put("notes", patch.notes?.trim() || null);
+  if (patch.itemDetail !== undefined) put("item_detail", patch.itemDetail?.trim() || null);
+  if (patch.valueBasis !== undefined) put("value_basis", patch.valueBasis?.trim() || null);
   if (patch.approvedBy !== undefined) {
     put("approved_by", patch.approvedBy || null);
     put("approved_on", patch.approvedBy ? now.slice(0, 10) : null);
@@ -310,7 +330,8 @@ export async function budgetFor(fiscalYear: number, transactions?: Transaction[]
   const planned = new Map(rows.map((row) => [row.category, row]));
   const actual = new Map<string, number>();
   ledger
-    .filter((entry) => entry.status !== "VOID")
+    // Gifts are not spending and not cash income, so a budget line is not met by one.
+    .filter((entry) => entry.status !== "VOID" && !entry.inKind)
     .forEach((entry) => actual.set(entry.category, (actual.get(entry.category) ?? 0) + entry.amountCents));
 
   return CATEGORIES
@@ -344,6 +365,136 @@ export async function setBudgetLine(input: { fiscalYear: number; category: strin
       crypto.randomUUID(), WORKSPACE_ID, input.fiscalYear, input.category, categoryDirection(input.category),
       Math.max(0, Math.round(input.plannedCents)), input.note?.trim() || null, now, now
     )
+    .run();
+}
+
+/**
+ * Money promised and not yet moved, in either direction.
+ *
+ * Deliberately not part of the ledger. An obligation is not a transaction: counting money somebody has said
+ * they will pay as though it were in the account is how a unit talks itself into a balance it does not have.
+ * These sit beside the ledger, are never added to it, and become a real entry only when the money moves.
+ */
+export type ObligationStatus = "OPEN" | "SETTLED" | "WRITTEN_OFF";
+
+export interface Obligation {
+  id: string;
+  direction: Direction;
+  amountCents: number;
+  counterparty: string;
+  purpose: string;
+  category: string;
+  categoryLabel: string;
+  dueOn: string | null;
+  status: ObligationStatus;
+  transactionId: string | null;
+  settledOn: string | null;
+  notes: string | null;
+  /** Negative once it is past its date. Null where there is no date to be late against. */
+  daysLeft: number | null;
+}
+
+export async function listObligations(includeSettled = false): Promise<Obligation[]> {
+  try {
+    const rows = await getDatabase()
+      .prepare(
+        "SELECT * FROM finance_obligations WHERE workspace_id = ?" +
+        (includeSettled ? "" : " AND status = 'OPEN'") +
+        " ORDER BY status, due_on IS NULL, due_on, created_at"
+      )
+      .bind(WORKSPACE_ID)
+      .all<{
+        id: string; direction: Direction; amount_cents: number; counterparty: string; purpose: string;
+        category: string; due_on: string | null; status: ObligationStatus; transaction_id: string | null;
+        settled_on: string | null; notes: string | null;
+      }>();
+    const today = new Date();
+    return rows.results.map((row) => ({
+      id: row.id,
+      direction: row.direction,
+      amountCents: row.amount_cents,
+      counterparty: row.counterparty,
+      purpose: row.purpose,
+      category: row.category,
+      categoryLabel: categoryLabel(row.category),
+      dueOn: row.due_on,
+      status: row.status,
+      transactionId: row.transaction_id,
+      settledOn: row.settled_on,
+      notes: row.notes,
+      daysLeft: row.due_on
+        ? Math.round((new Date(row.due_on + "T12:00:00Z").getTime() - today.getTime()) / 86400000)
+        : null
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function recordObligation(input: {
+  direction: Direction;
+  amountCents: number;
+  counterparty: string;
+  purpose: string;
+  category: string;
+  dueOn?: string | null;
+  notes?: string | null;
+  userId: string;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await getDatabase()
+    .prepare(
+      "INSERT INTO finance_obligations (id, workspace_id, direction, amount_cents, counterparty, purpose, category, due_on, notes, created_by, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    .bind(
+      id, WORKSPACE_ID, input.direction, Math.round(input.amountCents), input.counterparty.trim(),
+      input.purpose.trim(), input.category, input.dueOn ?? null, input.notes?.trim() || null, input.userId, now, now
+    )
+    .run();
+  return id;
+}
+
+/**
+ * The money arrived. One step, because two would be one step too many.
+ *
+ * Settling writes the ledger entry and links it back, so the obligation stops being outstanding and the
+ * money appears where money is counted - rather than somebody recording it twice, or once, in the wrong
+ * place, a fortnight later.
+ */
+export async function settleObligation(id: string, input: { occurredOn: string; userId: string }): Promise<string | null> {
+  const db = getDatabase();
+  const row = await db
+    .prepare("SELECT * FROM finance_obligations WHERE id = ? AND status = 'OPEN'")
+    .bind(id)
+    .first<{ direction: Direction; amount_cents: number; counterparty: string; purpose: string; category: string }>();
+  if (!row) return null;
+
+  const transactionId = await recordTransaction({
+    direction: row.direction,
+    amountCents: row.amount_cents,
+    occurredOn: input.occurredOn,
+    category: row.category,
+    purpose: row.purpose,
+    counterparty: row.counterparty,
+    notes: "Settles an amount that was outstanding.",
+    userId: input.userId
+  });
+
+  await db
+    .prepare("UPDATE finance_obligations SET status = 'SETTLED', transaction_id = ?, settled_on = ?, updated_at = ? WHERE id = ?")
+    .bind(transactionId, input.occurredOn, new Date().toISOString(), id)
+    .run();
+  return transactionId;
+}
+
+/** Given up on, rather than paid. It stays visible and never becomes a ledger entry. */
+export async function writeOffObligation(id: string, reason: string): Promise<void> {
+  const now = new Date().toISOString();
+  await getDatabase()
+    .prepare("UPDATE finance_obligations SET status = 'WRITTEN_OFF', notes = COALESCE(notes || ' | ', '') || ?, updated_at = ? WHERE id = ?")
+    .bind("Written off: " + reason.trim(), now, id)
     .run();
 }
 

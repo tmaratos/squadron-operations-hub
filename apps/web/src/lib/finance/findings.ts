@@ -1,4 +1,4 @@
-import { CATEGORIES, fiscalQuarterOf, fiscalYearRange, type BudgetLine, type Meeting, type Transaction } from "@/lib/finance/finance";
+import { CATEGORIES, fiscalQuarterOf, fiscalYearRange, type BudgetLine, type Meeting, type Obligation, type Transaction } from "@/lib/finance/finance";
 
 // What the ledger says about itself.
 //
@@ -23,7 +23,10 @@ export interface Finding {
     | "UNBUDGETED"
     | "NO_MEETING"
     | "POSSIBLE_DUPLICATE"
-    | "NEGATIVE_BALANCE";
+    | "NEGATIVE_BALANCE"
+    | "OWED_OVERDUE"
+    | "OWED_STALE"
+    | "GIFT_UNVALUED";
   severity: Severity;
   /** One sentence, stating what is the case. Never advice. */
   says: string;
@@ -56,6 +59,13 @@ function plural(count: number, one: string, many: string): string {
   return count + " " + (count === 1 ? one : many);
 }
 
+/** A list the way a person writes one: "Q1, Q2, Q3 and Q4", not three ands in a row. */
+function listOf(parts: string[]): string {
+  if (parts.length <= 1) return parts[0] ?? "";
+  if (parts.length === 2) return parts[0] + " and " + parts[1];
+  return parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+}
+
 export function findings(input: {
   transactions: Transaction[];
   budget: BudgetLine[];
@@ -63,10 +73,15 @@ export function findings(input: {
   fiscalYear: number;
   /** What the unit held on 1 October, or null where nobody has entered it. Null means no claim is made. */
   openingCents?: number | null;
+  /** Money promised and not yet moved. Never counted as income or spending. */
+  obligations?: Obligation[];
   today?: Date;
 }): Finding[] {
   const today = input.today ?? new Date();
-  const live = input.transactions.filter((entry) => entry.status !== "VOID");
+  // Gifts of goods are income and are not money. They are kept out of everything below that concerns cash:
+  // an unsent deposit, a check request, a balance. There is no deposit advice to file for a projector.
+  const live = input.transactions.filter((entry) => entry.status !== "VOID" && !entry.inKind);
+  const gifts = input.transactions.filter((entry) => entry.status !== "VOID" && entry.inKind);
   const found: Finding[] = [];
 
   // Recorded and never sent onward. Under the wing banker arrangement the unit's money physically moves, and
@@ -103,6 +118,19 @@ export function findings(input: {
       because: "Submitted and not yet cleared. " + money(waiting.reduce((sum, entry) => sum + entry.amountCents, 0)) + " is unreconciled, the oldest submitted " + Math.max(...waiting.map((entry) => daysSince(entry.submittedOn!, today))) + " days ago.",
       transactionIds: waiting.map((entry) => entry.id),
       suggestedTask: "Ask wing about " + plural(waiting.length, "unreconciled entry", "unreconciled entries")
+    });
+  }
+
+  // A gift with no note of how it was valued. The number is somebody's estimate and has to be defensible.
+  const unvalued = gifts.filter((entry) => !entry.valueBasis);
+  if (unvalued.length) {
+    found.push({
+      code: "GIFT_UNVALUED",
+      severity: "WATCH",
+      says: plural(unvalued.length, "donated item has", "donated items have") + " no note of how the worth was worked out.",
+      because: money(unvalued.reduce((sum, entry) => sum + entry.amountCents, 0)) + " of goods and services. A value nobody can account for is one an inspector will ask about.",
+      transactionIds: unvalued.map((entry) => entry.id),
+      suggestedTask: "Record how the donated items were valued"
     });
   }
 
@@ -184,12 +212,12 @@ export function findings(input: {
     found.push({
       code: "NO_MEETING",
       severity: closed.length ? "ATTENTION" : "WATCH",
-      says: "No finance committee meeting is recorded for " + quarters.join(" and ") + " of FY" + input.fiscalYear + ".",
+      says: "No finance committee meeting is recorded for " + listOf(quarters) + " of FY" + input.fiscalYear + ".",
       because: "Quarterly is the minimum under CAPR 173-1 para 9.c.(8), and the squadron meets in the first month of each fiscal quarter. " +
         (closed.length ? closed.length + " of these " + (closed.length === 1 ? "quarter has" : "quarters have") + " closed entirely. " : "That month has passed. ") +
         "The Hub does not hold the minutes, only whether a meeting was recorded.",
       transactionIds: [],
-      suggestedTask: "Record the finance committee meeting for " + quarters.join(" and ")
+      suggestedTask: "Record the finance committee meeting for " + listOf(quarters)
     });
   }
 
@@ -243,12 +271,50 @@ export function findings(input: {
     }
   }
 
+  // Money that was promised and has not arrived. Past its date is a fact, not a judgement about the person.
+  const owed = (input.obligations ?? []).filter((entry) => entry.status === "OPEN");
+  const late = owed.filter((entry) => entry.daysLeft !== null && entry.daysLeft < 0);
+  if (late.length) {
+    const toUs = late.filter((entry) => entry.direction === "INCOME");
+    const byUs = late.filter((entry) => entry.direction === "EXPENSE");
+    found.push({
+      code: "OWED_OVERDUE",
+      severity: "ATTENTION",
+      says: [
+        toUs.length ? money(toUs.reduce((sum, entry) => sum + entry.amountCents, 0)) + " owed to the squadron is past its date" : null,
+        byUs.length ? money(byUs.reduce((sum, entry) => sum + entry.amountCents, 0)) + " the squadron owes is past its date" : null
+      ].filter(Boolean).join(", and ") + ".",
+      because: listOf(late.slice(0, 4).map((entry) => entry.counterparty + " " + money(entry.amountCents) + ", " + Math.abs(entry.daysLeft ?? 0) + " days")) +
+        (late.length > 4 ? ", and " + (late.length - 4) + " more" : "") + ". None of this is in the balance: it has not moved.",
+      transactionIds: [],
+      suggestedTask: toUs.length ? "Chase " + plural(toUs.length, "outstanding amount", "outstanding amounts") : "Pay " + plural(byUs.length, "amount", "amounts") + " the squadron owes"
+    });
+  }
+
+  // Outstanding with no date at all, which is how an amount quietly stops being chased by anybody.
+  const undated = owed.filter((entry) => entry.dueOn === null);
+  if (undated.length) {
+    found.push({
+      code: "OWED_STALE",
+      severity: "WATCH",
+      says: plural(undated.length, "outstanding amount has", "outstanding amounts have") + " no date on them.",
+      because: money(undated.reduce((sum, entry) => sum + entry.amountCents, 0)) + " in total. Nothing without a date is ever late, so nothing without a date is ever chased.",
+      transactionIds: [],
+      suggestedTask: null
+    });
+  }
+
   const order: Record<Severity, number> = { ATTENTION: 0, WATCH: 1, SETTLED: 2 };
   return found.sort((left, right) => order[left.severity] - order[right.severity]);
 }
 
 export interface Summary {
   fiscalYear: number;
+  /** Goods and services given to the squadron, valued. Reported, and in no cash figure. */
+  inKindCents: number;
+  /** Promised and not yet moved. Reported beside the balance and never inside it. */
+  owedToUsCents: number;
+  owedByUsCents: number;
   /** Null where nobody has entered it, and shown as unknown rather than as zero. */
   openingCents: number | null;
   /** Opening plus cleared movement. Null while the opening figure is unknown. */
@@ -267,8 +333,11 @@ export interface Summary {
   plannedExpenseCents: number;
 }
 
-export function summarise(transactions: Transaction[], budget: BudgetLine[], fiscalYear: number, openingCents?: number | null): Summary {
-  const live = transactions.filter((entry) => entry.status !== "VOID");
+export function summarise(transactions: Transaction[], budget: BudgetLine[], fiscalYear: number, openingCents?: number | null, obligations?: Obligation[]): Summary {
+  const live = transactions.filter((entry) => entry.status !== "VOID" && !entry.inKind);
+  const inKindCents = transactions
+    .filter((entry) => entry.status !== "VOID" && entry.inKind)
+    .reduce((total, entry) => total + entry.amountCents, 0);
   const sum = (rows: Transaction[]) => rows.reduce((total, entry) => total + entry.amountCents, 0);
   const income = live.filter((entry) => entry.direction === "INCOME");
   const expense = live.filter((entry) => entry.direction === "EXPENSE");
@@ -276,8 +345,13 @@ export function summarise(transactions: Transaction[], budget: BudgetLine[], fis
   const clearedNetCents = sum(income.filter((entry) => entry.status === "CLEARED")) - sum(expense.filter((entry) => entry.status === "CLEARED"));
   const opening = openingCents ?? null;
 
+  const owed = (obligations ?? []).filter((entry) => entry.status === "OPEN");
+
   return {
     fiscalYear,
+    inKindCents,
+    owedToUsCents: owed.filter((entry) => entry.direction === "INCOME").reduce((total, entry) => total + entry.amountCents, 0),
+    owedByUsCents: owed.filter((entry) => entry.direction === "EXPENSE").reduce((total, entry) => total + entry.amountCents, 0),
     openingCents: opening,
     balanceCents: opening === null ? null : opening + clearedNetCents,
     incomeCents: sum(income),

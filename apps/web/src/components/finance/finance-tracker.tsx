@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CATEGORIES, type BudgetLine, type Direction, type Meeting, type Transaction, type TxStatus } from "@/lib/finance/finance";
+import { CATEGORIES, type BudgetLine, type Direction, type Meeting, type Obligation, type Transaction, type TxStatus } from "@/lib/finance/finance";
 import type { Finding, Summary } from "@/lib/finance/findings";
 
 // The squadron's money on one page.
@@ -13,7 +13,7 @@ import type { Finding, Summary } from "@/lib/finance/findings";
 // at the top as findings, computed from the numbers - the point being that a finance officer should never be
 // the mechanism by which the squadron remembers that a deposit has not gone to wing.
 
-type Tab = "ledger" | "budget" | "committee";
+type Tab = "ledger" | "owed" | "budget" | "committee";
 
 interface State {
   fiscalYear: number;
@@ -22,6 +22,7 @@ interface State {
   meetings: Meeting[];
   summary: Summary;
   findings: Finding[];
+  obligations: Obligation[];
   openingSource: string | null;
 }
 
@@ -91,8 +92,15 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
     occurredOn: today(),
     category: "SUPPLIES",
     purpose: "",
-    counterparty: ""
+    counterparty: "",
+    inKind: false,
+    itemDetail: "",
+    valueBasis: ""
   });
+  // What the ledger is filtered to. Plain state, because a finance officer looking for one payment should
+  // not have to scroll a year to find it.
+  const [filter, setFilter] = useState({ text: "", category: "", status: "", quarter: "" });
+  const [editing, setEditing] = useState<string | null>(null);
 
   async function send(body: Record<string, unknown>) {
     setBusy(true);
@@ -113,6 +121,7 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
           meetings: data.meetings,
           summary: data.summary,
           findings: data.findings,
+          obligations: data.obligations ?? [],
           openingSource: data.openingSource ?? null
         });
       }
@@ -149,16 +158,31 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
       occurredOn: form.occurredOn,
       category: form.category,
       purpose: form.purpose,
-      counterparty: form.counterparty || null
+      counterparty: form.counterparty || null,
+      inKind: form.inKind,
+      itemDetail: form.itemDetail || null,
+      valueBasis: form.valueBasis || null
     });
-    setForm({ ...form, amount: "", purpose: "", counterparty: "" });
+    setForm({ ...form, amount: "", purpose: "", counterparty: "", itemDetail: "", valueBasis: "" });
     setAdding(false);
   }
 
-  const visible = useMemo(
-    () => state.transactions.filter((entry) => showVoid || entry.status !== "VOID"),
-    [state.transactions, showVoid]
-  );
+  const visible = useMemo(() => {
+    const text = filter.text.trim().toLowerCase();
+    return state.transactions.filter((entry) => {
+      if (!showVoid && entry.status === "VOID") return false;
+      if (filter.category && entry.category !== filter.category) return false;
+      if (filter.status && entry.status !== filter.status) return false;
+      if (filter.quarter && String(entry.fiscalQuarter) !== filter.quarter) return false;
+      if (!text) return true;
+      return (entry.purpose + " " + (entry.counterparty ?? "") + " " + entry.categoryLabel + " " + (entry.itemDetail ?? ""))
+        .toLowerCase()
+        .includes(text);
+    });
+  }, [state.transactions, showVoid, filter]);
+
+  const shownTotal = visible.filter((entry) => entry.status !== "VOID" && !entry.inKind);
+  const filtered = Boolean(filter.text || filter.category || filter.status || filter.quarter);
 
   const categoriesFor = (direction: "INCOME" | "EXPENSE") => CATEGORIES.filter((entry) => entry.direction === direction);
   const financeList = lists.find((list) => /finance/i.test(list.spaceName)) ?? lists[0];
@@ -176,6 +200,18 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
     { label: "In", value: money(state.summary.incomeCents), hint: state.summary.pendingInCents ? money(state.summary.pendingInCents) + " not yet cleared" : "All cleared" },
     { label: "Out", value: money(state.summary.expenseCents), hint: state.summary.pendingOutCents ? money(state.summary.pendingOutCents) + " not yet cleared" : "All cleared" },
     { label: "Net this year", value: money(state.summary.netCents), hint: "Cleared only: " + money(state.summary.clearedNetCents) },
+    {
+      label: "Donated goods",
+      value: money(state.summary.inKindCents),
+      hint: state.summary.inKindCents ? "Given, not banked \u2014 in no cash figure" : "Nothing recorded in kind"
+    },
+    {
+      label: "Outstanding",
+      value: money(state.summary.owedToUsCents - state.summary.owedByUsCents),
+      hint: state.summary.owedToUsCents || state.summary.owedByUsCents
+        ? money(state.summary.owedToUsCents) + " owed to us, " + money(state.summary.owedByUsCents) + " owed by us"
+        : "Nothing outstanding"
+    },
     { label: "Budgeted out", value: money(state.summary.plannedExpenseCents), hint: state.summary.plannedExpenseCents ? Math.round((state.summary.expenseCents / state.summary.plannedExpenseCents) * 100) + " per cent used" : "No budget set for this year" }
   ];
 
@@ -185,7 +221,7 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
 
       <div className="fin-bar">
         <div className="fin-tabs" role="tablist">
-          {([["ledger", "Ledger"], ["budget", "Budget"], ["committee", "Committee"]] as Array<[Tab, string]>).map(([key, label]) => (
+          {([["ledger", "Ledger"], ["owed", "Owed"], ["budget", "Budget"], ["committee", "Committee"]] as Array<[Tab, string]>).map(([key, label]) => (
             <button
               key={key}
               role="tab"
@@ -335,11 +371,70 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
                 <span>What for</span>
                 <input value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} placeholder="AEX rocketry kits for the January meeting" />
               </label>
+
+              {form.direction === "INCOME" ? (
+                <label className="fin-check fin-wide">
+                  <input
+                    type="checkbox"
+                    checked={form.inKind}
+                    onChange={(event) => setForm({ ...form, inKind: event.target.checked, category: event.target.checked ? "DONATION" : form.category })}
+                  />
+                  This was given as goods or services, not money
+                </label>
+              ) : null}
+
+              {form.inKind && form.direction === "INCOME" ? (
+                <div className="fin-form-row">
+                  <label>
+                    <span>What was given</span>
+                    <input value={form.itemDetail} onChange={(event) => setForm({ ...form, itemDetail: event.target.value })} placeholder="Projector, printing, 20 cases of water" />
+                  </label>
+                  <label>
+                    <span>How the worth was set</span>
+                    <input value={form.valueBasis} onChange={(event) => setForm({ ...form, valueBasis: event.target.value })} placeholder="Donor's receipt / retail price at the time" />
+                  </label>
+                </div>
+              ) : null}
               <p className="fin-faint">{CATEGORIES.find((entry) => entry.code === form.category)?.hint}</p>
               <div className="fin-form-actions">
                 <button className="fin-btn" onClick={() => setAdding(false)} disabled={busy}>Cancel</button>
                 <button className="fin-btn fin-btn--primary" onClick={record} disabled={busy}>Record it</button>
               </div>
+            </div>
+          ) : null}
+
+          {state.transactions.length ? (
+            <div className="fin-filters">
+              <input
+                className="fin-search"
+                value={filter.text}
+                onChange={(event) => setFilter({ ...filter, text: event.target.value })}
+                placeholder="Search what for, who, or what was given"
+                aria-label="Search the ledger"
+              />
+              <select value={filter.category} onChange={(event) => setFilter({ ...filter, category: event.target.value })} aria-label="Filter by category">
+                <option value="">Every category</option>
+                {CATEGORIES.filter((entry) => state.transactions.some((row) => row.category === entry.code)).map((entry) => (
+                  <option key={entry.code} value={entry.code}>{entry.label}</option>
+                ))}
+              </select>
+              <select value={filter.status} onChange={(event) => setFilter({ ...filter, status: event.target.value })} aria-label="Filter by state">
+                <option value="">Any state</option>
+                <option value="RECORDED">Recorded</option>
+                <option value="SUBMITTED">With wing</option>
+                <option value="CLEARED">Cleared</option>
+              </select>
+              <select value={filter.quarter} onChange={(event) => setFilter({ ...filter, quarter: event.target.value })} aria-label="Filter by quarter">
+                <option value="">Whole year</option>
+                {[1, 2, 3, 4].map((quarter) => <option key={quarter} value={String(quarter)}>Q{quarter}</option>)}
+              </select>
+              {filtered ? (
+                <button className="fin-btn" onClick={() => setFilter({ text: "", category: "", status: "", quarter: "" })}>Clear</button>
+              ) : null}
+              <span className="fin-faint">
+                {visible.length} of {state.transactions.length}
+                {shownTotal.length ? " \u00b7 " + money(shownTotal.reduce((sum, entry) => sum + (entry.direction === "INCOME" ? entry.amountCents : -entry.amountCents), 0)) + " net" : ""}
+              </span>
             </div>
           ) : null}
 
@@ -353,7 +448,10 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
                       <span className="fin-row-date">{dayText(entry.occurredOn)}</span>
                       <span className="fin-row-main">
                         <strong>{entry.purpose}</strong>
-                        <small>{entry.categoryLabel}{entry.counterparty ? " · " + entry.counterparty : ""}</small>
+                        <small>
+                          {entry.inKind ? "In kind · " : ""}
+                          {entry.categoryLabel}{entry.counterparty ? " · " + entry.counterparty : ""}
+                        </small>
                       </span>
                       <span className={"fin-row-amount" + (entry.direction === "INCOME" ? " is-in" : "")}>
                         {entry.direction === "INCOME" ? "+" : "−"}{money(entry.amountCents)}
@@ -366,6 +464,8 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
                         <dl>
                           <div><dt>Date</dt><dd>{entry.occurredOn}</dd></div>
                           <div><dt>Quarter</dt><dd>Q{entry.fiscalQuarter} FY{entry.fiscalYear}</dd></div>
+                          {entry.inKind ? <div><dt>What was given</dt><dd>{entry.itemDetail ?? "Not described"}</dd></div> : null}
+                          {entry.inKind ? <div><dt>Worth set by</dt><dd>{entry.valueBasis ?? "Not recorded"}</dd></div> : null}
                           <div><dt>Receipt</dt><dd>{entry.receiptName ?? "None attached"}</dd></div>
                           <div><dt>Approved by</dt><dd>{entry.approverName ?? "Nobody recorded"}</dd></div>
                           <div>
@@ -375,9 +475,21 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
                           {entry.itemTitle ? <div><dt>Task</dt><dd><Link href={"/tasks?item=" + entry.itemId}>{entry.itemTitle}</Link></dd></div> : null}
                         </dl>
                         {entry.notes ? <p className="fin-faint">{entry.notes}</p> : null}
+                        {canEdit && editing === entry.id ? (
+                          <EditEntry
+                            entry={entry}
+                            busy={busy}
+                            onCancel={() => setEditing(null)}
+                            onSave={(patch) => { send({ action: "update", id: entry.id, ...patch }); setEditing(null); }}
+                          />
+                        ) : null}
+
                         {canEdit && entry.status !== "VOID" ? (
                           <div className="fin-detail-actions">
-                            {next ? <button className="fin-btn" disabled={busy} onClick={() => send({ action: "update", id: entry.id, status: next.to })}>{next.label}</button> : null}
+                            <button className="fin-btn" disabled={busy} onClick={() => setEditing(editing === entry.id ? null : entry.id)}>
+                              {editing === entry.id ? "Stop editing" : "Edit"}
+                            </button>
+                            {next && !entry.inKind ? <button className="fin-btn" disabled={busy} onClick={() => send({ action: "update", id: entry.id, status: next.to })}>{next.label}</button> : null}
                             {!entry.approvedBy ? (
                               <label className="fin-inline">
                                 <span>Approved by</span>
@@ -408,6 +520,28 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
           ) : (
             <p className="fin-empty">Nothing recorded for FY{state.fiscalYear}. {canEdit ? "Record the first entry and the budget comparison starts working on its own." : ""}</p>
           )}
+        </section>
+      ) : null}
+
+      {tab === "owed" ? (
+        <section className="fin-section">
+          <header className="fin-section-head">
+            <h2>Money owed</h2>
+          </header>
+          <p className="fin-faint">
+            Promised and not yet moved, in either direction - a member who owes activity fees, an invoice the squadron
+            has not paid. None of it counts towards the balance, because it has not happened; treating money somebody
+            said they would pay as money in the account is how a unit talks itself into funds it does not have. Settling
+            one writes the ledger entry for you.
+          </p>
+          <OwedList
+            obligations={state.obligations}
+            canEdit={canEdit}
+            busy={busy}
+            onAdd={(body) => send({ action: "owe", ...body })}
+            onSettle={(id, occurredOn) => send({ action: "settle", id, occurredOn })}
+            onWriteOff={(id, reason) => send({ action: "writeOff", id, reason })}
+          />
         </section>
       ) : null}
 
@@ -461,6 +595,254 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
   );
 }
 
+/** Every field of an entry, changeable. A ledger you can only add to is a ledger that goes wrong once. */
+function EditEntry({ entry, busy, onCancel, onSave }: {
+  entry: Transaction;
+  busy: boolean;
+  onCancel: () => void;
+  onSave: (patch: Record<string, unknown>) => void;
+}) {
+  const [draft, setDraft] = useState({
+    amount: (entry.amountCents / 100).toFixed(2),
+    occurredOn: entry.occurredOn,
+    category: entry.category,
+    purpose: entry.purpose,
+    counterparty: entry.counterparty ?? "",
+    wingReference: entry.wingReference ?? "",
+    itemDetail: entry.itemDetail ?? "",
+    valueBasis: entry.valueBasis ?? "",
+    notes: entry.notes ?? ""
+  });
+
+  return (
+    <div className="fin-form">
+      <div className="fin-form-row">
+        <label>
+          <span>Amount</span>
+          <input value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} inputMode="decimal" />
+        </label>
+        <label>
+          <span>Date</span>
+          <input type="date" value={draft.occurredOn} onChange={(event) => setDraft({ ...draft, occurredOn: event.target.value })} />
+        </label>
+        <label>
+          <span>Category</span>
+          <select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })}>
+            {CATEGORIES.filter((option) => option.direction === entry.direction).map((option) => (
+              <option key={option.code} value={option.code}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="fin-form-row">
+        <label>
+          <span>{entry.direction === "INCOME" ? "From" : "Paid to"}</span>
+          <input value={draft.counterparty} onChange={(event) => setDraft({ ...draft, counterparty: event.target.value })} />
+        </label>
+        <label>
+          <span>{entry.direction === "INCOME" ? "Deposit advice" : "Check request"}</span>
+          <input value={draft.wingReference} onChange={(event) => setDraft({ ...draft, wingReference: event.target.value })} placeholder="Reference" />
+        </label>
+      </div>
+      <label className="fin-wide">
+        <span>What for</span>
+        <input value={draft.purpose} onChange={(event) => setDraft({ ...draft, purpose: event.target.value })} />
+      </label>
+      {entry.inKind ? (
+        <div className="fin-form-row">
+          <label>
+            <span>What was given</span>
+            <input value={draft.itemDetail} onChange={(event) => setDraft({ ...draft, itemDetail: event.target.value })} />
+          </label>
+          <label>
+            <span>How the worth was set</span>
+            <input value={draft.valueBasis} onChange={(event) => setDraft({ ...draft, valueBasis: event.target.value })} />
+          </label>
+        </div>
+      ) : null}
+      <label className="fin-wide">
+        <span>Notes</span>
+        <input value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
+      </label>
+      <div className="fin-form-actions">
+        <button className="fin-btn" onClick={onCancel} disabled={busy}>Cancel</button>
+        <button
+          className="fin-btn fin-btn--primary"
+          disabled={busy}
+          onClick={() => {
+            const amountCents = toCents(draft.amount);
+            if (!amountCents || draft.purpose.trim().length < 3) return;
+            onSave({
+              amountCents,
+              occurredOn: draft.occurredOn,
+              category: draft.category,
+              purpose: draft.purpose,
+              counterparty: draft.counterparty || null,
+              wingReference: draft.wingReference || null,
+              itemDetail: draft.itemDetail || null,
+              valueBasis: draft.valueBasis || null,
+              notes: draft.notes || null
+            });
+          }}
+        >
+          Save changes
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OwedList({ obligations, canEdit, busy, onAdd, onSettle, onWriteOff }: {
+  obligations: Obligation[];
+  canEdit: boolean;
+  busy: boolean;
+  onAdd: (body: Record<string, unknown>) => void;
+  onSettle: (id: string, occurredOn: string) => void;
+  onWriteOff: (id: string, reason: string) => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [form, setForm] = useState({
+    direction: "INCOME" as Direction,
+    amount: "",
+    counterparty: "",
+    purpose: "",
+    category: "ACTIVITY_INCOME",
+    dueOn: ""
+  });
+
+  const open = obligations.filter((entry) => entry.status === "OPEN");
+
+  return (
+    <>
+      {open.length ? (
+        <ul className="fin-rows">
+          {open.map((entry) => (
+            <li className="fin-row" key={entry.id}>
+              <div className="fin-owed">
+                <span className="fin-row-main">
+                  <strong>{entry.counterparty}</strong>
+                  <small>{entry.purpose} &middot; {entry.categoryLabel}</small>
+                </span>
+                <span className={"fin-row-amount" + (entry.direction === "INCOME" ? " is-in" : "")}>
+                  {entry.direction === "INCOME" ? "+" : "\u2212"}{money(entry.amountCents)}
+                </span>
+                <span className={"fin-pill" + (entry.daysLeft !== null && entry.daysLeft < 0 ? " fin-pill--late" : "")}>
+                  {entry.dueOn === null
+                    ? "No date"
+                    : entry.daysLeft === null
+                      ? entry.dueOn
+                      : entry.daysLeft < 0
+                        ? Math.abs(entry.daysLeft) + " days late"
+                        : entry.daysLeft === 0
+                          ? "Due today"
+                          : "in " + entry.daysLeft + " days"}
+                </span>
+                {canEdit ? (
+                  <span className="fin-owed-actions">
+                    <button
+                      className="fin-btn fin-btn--primary"
+                      disabled={busy}
+                      onClick={() => onSettle(entry.id, today())}
+                    >
+                      {entry.direction === "INCOME" ? "Received" : "Paid"}
+                    </button>
+                    <button
+                      className="fin-btn fin-btn--danger"
+                      disabled={busy}
+                      onClick={() => {
+                        const reason = window.prompt("Writing it off keeps the record and gives up on the money. Why?");
+                        if (reason && reason.trim().length > 2) onWriteOff(entry.id, reason);
+                      }}
+                    >
+                      Write off
+                    </button>
+                  </span>
+                ) : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="fin-empty">Nothing outstanding.</p>
+      )}
+
+      {canEdit ? (
+        adding ? (
+          <div className="fin-form">
+            <div className="fin-form-row">
+              <label>
+                <span>Which way</span>
+                <select
+                  value={form.direction}
+                  onChange={(event) => {
+                    const direction = event.target.value as Direction;
+                    setForm({ ...form, direction, category: CATEGORIES.filter((entry) => entry.direction === direction)[0].code });
+                  }}
+                >
+                  <option value="INCOME">Owed to the squadron</option>
+                  <option value="EXPENSE">The squadron owes</option>
+                </select>
+              </label>
+              <label>
+                <span>Amount</span>
+                <input value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} placeholder="45.00" inputMode="decimal" />
+              </label>
+              <label>
+                <span>Due by</span>
+                <input type="date" value={form.dueOn} onChange={(event) => setForm({ ...form, dueOn: event.target.value })} />
+              </label>
+            </div>
+            <div className="fin-form-row">
+              <label>
+                <span>{form.direction === "INCOME" ? "Who owes it" : "Who is owed"}</span>
+                <input value={form.counterparty} onChange={(event) => setForm({ ...form, counterparty: event.target.value })} placeholder="Name" />
+              </label>
+              <label>
+                <span>Category</span>
+                <select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>
+                  {CATEGORIES.filter((entry) => entry.direction === form.direction).map((entry) => (
+                    <option key={entry.code} value={entry.code}>{entry.label}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="fin-wide">
+              <span>What for</span>
+              <input value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} placeholder="Encampment deposit" />
+            </label>
+            <p className="fin-faint">A date is worth setting. Without one it can never be late, so it will never be chased.</p>
+            <div className="fin-form-actions">
+              <button className="fin-btn" onClick={() => setAdding(false)} disabled={busy}>Cancel</button>
+              <button
+                className="fin-btn fin-btn--primary"
+                disabled={busy}
+                onClick={() => {
+                  const amountCents = toCents(form.amount);
+                  if (!amountCents || !form.counterparty.trim() || form.purpose.trim().length < 3) return;
+                  onAdd({
+                    direction: form.direction,
+                    amountCents,
+                    counterparty: form.counterparty,
+                    purpose: form.purpose,
+                    category: form.category,
+                    dueOn: form.dueOn || null
+                  });
+                  setForm({ ...form, amount: "", counterparty: "", purpose: "", dueOn: "" });
+                  setAdding(false);
+                }}
+              >
+                Record it
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button className="fin-btn fin-btn--primary fin-add" onClick={() => setAdding(true)}>Record something owed</button>
+        )
+      ) : null}
+    </>
+  );
+}
+
 function BudgetTable({ lines, canEdit, busy, fiscalYear, onSet }: {
   lines: BudgetLine[];
   canEdit: boolean;
@@ -484,7 +866,7 @@ function BudgetTable({ lines, canEdit, busy, fiscalYear, onSet }: {
               {group.map((line) => (
                 <li key={line.category}>
                   <span className="fin-budget-label">{line.categoryLabel}</span>
-                  <span className="fin-bar" aria-hidden="true">
+                  <span className="fin-meter" aria-hidden="true">
                     <i style={{ width: Math.min(100, Math.round(line.used * 100)) + "%", background: line.used > 1 && direction === "EXPENSE" ? "#d03b3b" : undefined }} />
                   </span>
                   <span className="fin-budget-nums">
@@ -656,24 +1038,33 @@ const finCss = [
   ".fin-budget ul{list-style:none;margin:0 0 14px;padding:0;display:flex;flex-direction:column;gap:7px}",
   ".fin-budget li{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(60px,1fr) auto auto;gap:10px;align-items:center}",
   ".fin-budget-label{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis}",
-  ".fin-bar{height:6px;border-radius:999px;background:rgba(123,104,238,.16);overflow:hidden}",
-  ".fin-bar i{display:block;height:100%;background:#7b68ee;border-radius:999px}",
+  ".fin-meter{height:6px;border-radius:999px;background:rgba(123,104,238,.16);overflow:hidden}",
+  ".fin-meter i{display:block;height:100%;background:#7b68ee;border-radius:999px}",
   ".fin-budget-nums{display:flex;flex-direction:column;text-align:right;white-space:nowrap}",
   ".fin-budget-nums strong{font-size:13px;font-variant-numeric:tabular-nums}",
   ".fin-budget-nums small{font-size:11px;opacity:.6}",
   ".fin-num{width:92px}",
   ".fin-quarters{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr))}",
   ".fin-quarter.is-held{border-color:rgba(46,160,96,.5)}",
+  ".fin-filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
+  ".fin-filters select,.fin-search{font:inherit;font-size:13px;padding:6px 9px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-height:34px;min-width:0}",
+  ".fin-search{flex:1 1 220px}",
+  ".fin-owed{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:9px 11px}",
+  ".fin-owed-actions{display:flex;gap:6px;flex-wrap:wrap}",
+  ".fin-pill--late{background:rgba(208,59,59,.18);color:#d03b3b}",
+  ".fin-add{align-self:flex-start}",
   ".fin-empty{margin:0;padding:14px;border:1px dashed var(--border,#d5d8de);border-radius:10px;font-size:13px}",
   ".fin-faint{margin:0;font-size:12.5px;opacity:.7;line-height:1.5}",
   "@media (max-width:640px){",
+  ".fin-owed{grid-template-columns:minmax(0,1fr) auto;row-gap:6px}",
+  ".fin-owed-actions{grid-column:1/-1}",
   ".fin-row-open{grid-template-columns:minmax(0,1fr) auto;row-gap:4px}",
   ".fin-row-date{grid-column:1;font-size:11px}",
   ".fin-row-main{grid-column:1;grid-row:2}",
   ".fin-row-amount{grid-column:2;grid-row:2;text-align:right}",
   ".fin-pill{grid-column:2;grid-row:1;justify-self:end}",
   ".fin-budget li{grid-template-columns:minmax(0,1fr) auto;row-gap:5px}",
-  ".fin-bar{grid-column:1/-1;grid-row:2}",
+  ".fin-meter{grid-column:1/-1;grid-row:2}",
   ".fin-num{grid-column:2;grid-row:1;width:84px}",
   "}"
 ].join("");

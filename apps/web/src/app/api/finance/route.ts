@@ -7,14 +7,18 @@ import {
   budgetFor,
   currentFiscalYear,
   listMeetings,
+  listObligations,
   listTransactions,
   openingBalance,
+  recordObligation,
   recordMeeting,
   recordTransaction,
   setBudgetLine,
   setOpeningBalance,
+  settleObligation,
   updateTransaction,
-  voidTransaction
+  voidTransaction,
+  writeOffObligation
 } from "@/lib/finance/finance";
 import { findings, summarise } from "@/lib/finance/findings";
 import { createItem, updateItem } from "@/lib/work/items";
@@ -42,7 +46,10 @@ const schema = z.discriminatedUnion("action", [
     purpose: z.string().trim().min(3).max(300),
     counterparty: z.string().trim().max(160).nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
-    itemId: z.string().trim().max(80).nullable().optional()
+    itemId: z.string().trim().max(80).nullable().optional(),
+    inKind: z.boolean().optional(),
+    itemDetail: z.string().trim().max(300).nullable().optional(),
+    valueBasis: z.string().trim().max(300).nullable().optional()
   }),
   z.object({
     action: z.literal("update"),
@@ -55,7 +62,9 @@ const schema = z.discriminatedUnion("action", [
     status: status.optional(),
     wingReference: z.string().trim().max(80).nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
-    approvedBy: z.string().trim().max(80).nullable().optional()
+    approvedBy: z.string().trim().max(80).nullable().optional(),
+    itemDetail: z.string().trim().max(300).nullable().optional(),
+    valueBasis: z.string().trim().max(300).nullable().optional()
   }),
   z.object({
     action: z.literal("void"),
@@ -69,6 +78,18 @@ const schema = z.discriminatedUnion("action", [
     plannedCents: z.number().int().min(0).max(1_000_000_00),
     note: z.string().trim().max(300).nullable().optional()
   }),
+  z.object({
+    action: z.literal("owe"),
+    direction,
+    amountCents: cents,
+    counterparty: z.string().trim().min(1).max(160),
+    purpose: z.string().trim().min(3).max(300),
+    category: z.string().trim().min(2).max(40),
+    dueOn: date.nullable().optional(),
+    notes: z.string().trim().max(2000).nullable().optional()
+  }),
+  z.object({ action: z.literal("settle"), id: z.string().trim().min(1).max(80), occurredOn: date }),
+  z.object({ action: z.literal("writeOff"), id: z.string().trim().min(1).max(80), reason: z.string().trim().min(3).max(300) }),
   z.object({
     action: z.literal("opening"),
     fiscalYear: z.number().int().min(2000).max(2100),
@@ -96,10 +117,11 @@ function dollars(amountCents: number): string {
 
 async function state(fiscalYear: number) {
   const transactions = await listTransactions(fiscalYear);
-  const [budget, meetings, opening] = await Promise.all([
+  const [budget, meetings, opening, obligations] = await Promise.all([
     budgetFor(fiscalYear, transactions),
     listMeetings(fiscalYear),
-    openingBalance(fiscalYear)
+    openingBalance(fiscalYear),
+    listObligations()
   ]);
   const openingCents = opening?.cents ?? null;
   return {
@@ -107,9 +129,10 @@ async function state(fiscalYear: number) {
     transactions,
     budget,
     meetings,
+    obligations,
     openingSource: opening?.source ?? null,
-    summary: summarise(transactions, budget, fiscalYear, openingCents),
-    findings: findings({ transactions, budget, meetings, fiscalYear, openingCents })
+    summary: summarise(transactions, budget, fiscalYear, openingCents, obligations),
+    findings: findings({ transactions, budget, meetings, fiscalYear, openingCents, obligations })
   };
 }
 
@@ -183,6 +206,46 @@ export async function POST(request: Request) {
         metadata: { plannedCents: input.plannedCents }
       });
       return NextResponse.json({ ...(await state(input.fiscalYear)), message: "Budget set." });
+    }
+
+    if (input.action === "owe") {
+      const id = await recordObligation({ ...input, userId: user.id });
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "FINANCE_OWED_RECORDED",
+        entityType: "finance_obligation",
+        entityId: id,
+        summary: user.fullName + " recorded " + dollars(input.amountCents) + (input.direction === "INCOME" ? " owed to the squadron by " : " owed by the squadron to ") + input.counterparty,
+        metadata: { amountCents: input.amountCents, dueOn: input.dueOn ?? null }
+      });
+      return NextResponse.json({ ...(await state(currentFiscalYear())), message: "Recorded as outstanding. It is not in the balance until it moves." });
+    }
+
+    if (input.action === "settle") {
+      const transactionId = await settleObligation(input.id, { occurredOn: input.occurredOn, userId: user.id });
+      if (!transactionId) return NextResponse.json({ message: "That is already settled." }, { status: 404 });
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "FINANCE_OWED_SETTLED",
+        entityType: "finance_obligation",
+        entityId: input.id,
+        summary: user.fullName + " settled an outstanding amount, which is now on the ledger",
+        metadata: { transactionId, occurredOn: input.occurredOn }
+      });
+      return NextResponse.json({ ...(await state(currentFiscalYearOf(input.occurredOn))), message: "Settled, and on the ledger." });
+    }
+
+    if (input.action === "writeOff") {
+      await writeOffObligation(input.id, input.reason);
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "FINANCE_OWED_WRITTEN_OFF",
+        entityType: "finance_obligation",
+        entityId: input.id,
+        summary: user.fullName + " wrote off an outstanding amount: " + input.reason,
+        metadata: { reason: input.reason }
+      });
+      return NextResponse.json({ ...(await state(currentFiscalYear())), message: "Written off. It never becomes a ledger entry." });
     }
 
     if (input.action === "opening") {
