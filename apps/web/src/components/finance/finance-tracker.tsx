@@ -373,6 +373,20 @@ export function FinanceTracker({ initial, years, canEdit, people, lists, initial
                         <option value="TRANSACTION">Moved</option>
                         <option value="OWED">Owed</option>
                       </select>
+                      {/* Which way the money goes, in words rather than a sign. A model reading "the
+                          Warthans still owe 60" as the squadron owing them is a mistake nobody spots in a
+                          plus or a minus, and it turns money in into money out. */}
+                      <select
+                        value={entry.direction}
+                        onChange={(event) => setDraft(draft.map((row, i) => i === index
+                          ? { ...row, direction: event.target.value as DraftEntry["direction"],
+                              category: CATEGORIES.filter((option) => option.direction === event.target.value)[0].code }
+                          : row))}
+                        aria-label={"Which way the money goes on line " + (index + 1)}
+                      >
+                        <option value="INCOME">{entry.kind === "OWED" ? "owed to us" : "money in"}</option>
+                        <option value="EXPENSE">{entry.kind === "OWED" ? "we owe it" : "money out"}</option>
+                      </select>
                       <input
                         className="fin-num"
                         defaultValue={(entry.amountCents / 100).toFixed(2)}
@@ -1168,7 +1182,7 @@ const finCss = [
   ".fin-checks li{font-size:12.5px;padding:7px 10px;border-radius:7px;background:rgba(46,160,96,.1);border-left:3px solid #2ea060}",
   ".fin-checks li.is-warn{background:rgba(217,147,43,.12);border-left-color:#d9932b}",
   ".fin-draft-rows{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}",
-  ".fin-draft-rows li{display:grid;grid-template-columns:96px 92px 140px minmax(0,1fr) minmax(0,1.2fr) auto auto;gap:6px;align-items:center}",
+  ".fin-draft-rows li{display:grid;grid-template-columns:92px 104px 88px 132px minmax(0,1fr) minmax(0,1.1fr) auto auto;gap:6px;align-items:center}",
   ".fin-draft-rows input,.fin-draft-rows select{font:inherit;font-size:12.5px;padding:5px 7px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-width:0}",
   ".fin-draft-dir{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.6;white-space:nowrap}",
   ".fin-draft-dir.is-in{color:#2ea060;opacity:1}",

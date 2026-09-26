@@ -1717,6 +1717,34 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
   const [named, setNamed] = useState<Array<{ id: string; fullName: string }>>([]);
   const [saving, setSaving] = useState(false);
 
+  const [busyChild, setBusyChild] = useState<string | null>(null);
+
+  /**
+   * Ticks a subtask off, or puts it back, without opening it.
+   *
+   * Uses the parent list's own sections rather than a notion of "done" invented here: the first section of
+   * the Done or Closed kind, and the first that is neither for reopening. A list with no closed section at
+   * all cannot mark anything done, and says so rather than failing quietly.
+   */
+  async function toggleChild(childId: string, closed: boolean) {
+    const target = closed
+      ? statuses.find((entry) => entry.category !== "DONE" && entry.category !== "CLOSED")
+      : statuses.find((entry) => entry.category === "DONE" || entry.category === "CLOSED");
+    if (!target) return;
+    setBusyChild(childId);
+    try {
+      // The same path the list rows use, so the row behind the panel moves too rather than going stale.
+      await onPatch(childId, { statusId: target.id });
+      // Re-read the parent, so the counter and the bar above the subtasks move with it.
+      const data = await send("/api/work/items/" + itemId, "GET");
+      if (data.item) adopt(data.item);
+    } catch {
+      // Left as it was. The circle not moving is the honest signal that nothing changed.
+    } finally {
+      setBusyChild(null);
+    }
+  }
+
   function adopt(next: ItemDetail) {
     setItem(next);
     setTitle(next.title);
@@ -2040,13 +2068,31 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                 {item.children.length ? <span className="tp-progress"><span style={{ width: (childDone / item.children.length) * 100 + "%" }} /></span> : null}
               </h3>
               <div className="tp-list">
-                {item.children.map((child) => (
-                  <button key={child.id} className="tp-sub" onClick={() => onOpen(child.id)}>
-                    <StatusIcon status={statuses.find((entry) => entry.id === child.statusId)} />
-                    <span className="tp-sub-title">{child.title}</span>
-                    <span className="tp-sub-due">{formatDue(child.dueOn).text}</span>
-                  </button>
-                ))}
+                {item.children.map((child) => {
+                  const childStatus = statuses.find((entry) => entry.id === child.statusId);
+                  const childClosed = childStatus?.category === "DONE" || childStatus?.category === "CLOSED";
+                  return (
+                    /* Two controls, not one. The whole row used to be a single button that opened the
+                       subtask, so the circle was decoration - there was no way to tick a subtask off without
+                       opening it, going to its status, and coming back. */
+                    <div className={"tp-sub" + (childClosed ? " tp-sub--done" : "")} key={child.id}>
+                      <button
+                        type="button"
+                        className="tp-sub-tick"
+                        disabled={!canEdit || busyChild === child.id}
+                        aria-label={(childClosed ? "Reopen " : "Mark done: ") + child.title}
+                        title={childClosed ? "Reopen" : "Mark done"}
+                        onClick={() => toggleChild(child.id, childClosed)}
+                      >
+                        <StatusIcon status={childStatus} />
+                      </button>
+                      <button type="button" className="tp-sub-open" onClick={() => onOpen(child.id)}>
+                        <span className="tp-sub-title">{child.title}</span>
+                        <span className="tp-sub-due">{formatDue(child.dueOn).text}</span>
+                      </button>
+                    </div>
+                  );
+                })}
                 {canEdit ? <QuickAdd label="+ Add subtask" onAdd={async (value) => {
                   await onAddChild(value);
                   const data = await send("/api/work/items/" + itemId, "GET");
@@ -2192,8 +2238,14 @@ const tpCss = [
   ".tp-progress{flex:0 1 120px;height:4px;border-radius:2px;background:var(--tp-hover);overflow:hidden}.tp-progress span{display:block;height:100%;border-radius:2px;background:#0ca30c}",
   ".tp-list{border:1px solid var(--tp-border);border-radius:8px;overflow:hidden}",
   ".tp-list--ghost{border-style:dashed}",
-  ".tp-sub{display:flex;align-items:center;gap:10px;width:100%;border:0;border-bottom:1px solid var(--tp-border);background:none;color:inherit;font:inherit;font-size:13px;padding:10px 12px;cursor:pointer;text-align:left}",
-  ".tp-sub:hover{background:var(--tp-hover)}.tp-sub-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tp-sub-due{font-size:12px;color:var(--tp-muted)}",
+  // Two controls in the row now, so the wrapper is a container rather than the button itself.
+  ".tp-sub{display:flex;align-items:center;gap:2px;width:100%;border-bottom:1px solid var(--tp-border);font-size:13px}",
+  ".tp-sub-tick{flex:0 0 auto;border:0;background:none;padding:10px 4px 10px 12px;cursor:pointer;display:flex;align-items:center;border-radius:8px}",
+  ".tp-sub-tick:disabled{cursor:default;opacity:.6}",
+  ".tp-sub-tick:hover:not(:disabled){background:var(--tp-hover)}",
+  ".tp-sub-open{flex:1;min-width:0;display:flex;align-items:center;gap:10px;border:0;background:none;color:inherit;font:inherit;font-size:13px;text-align:left;padding:10px 12px 10px 4px;cursor:pointer}",
+  ".tp-sub--done .tp-sub-title{opacity:.55;text-decoration:line-through}",
+  ".tp-sub-open:hover{background:var(--tp-hover)}.tp-sub-title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tp-sub-due{font-size:12px;color:var(--tp-muted)}",
   ".tp-list .lw-add{padding:9px 12px}.tp-list .lw-addform{padding:6px 12px;border-bottom:0}",
   ".tp-check{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-bottom:1px solid var(--tp-border);font-size:13px;line-height:1.45;cursor:pointer}",
   ".tp-check:hover{background:var(--tp-hover)}",

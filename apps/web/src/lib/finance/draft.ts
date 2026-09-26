@@ -237,6 +237,41 @@ export async function draftFinance(input: {
     });
   }
 
+  // Which way round an owed amount goes.
+  //
+  // Tested against a real sentence, "the Warthans still owe 60 for encampment" came back as the squadron
+  // owing the Warthans. The words are unambiguous to a person and evidently not to a model, and getting it
+  // backwards turns money coming in into money going out. Every outstanding amount is therefore called out
+  // to be confirmed, with the reading stated in plain words so it can be disagreed with at a glance.
+  const owedEntries = entries.filter((entry) => entry.kind === "OWED");
+  if (owedEntries.length) {
+    checks.push({
+      tone: "WARN",
+      says: "Check which way round " + (owedEntries.length === 1 ? "the outstanding amount goes" : "the outstanding amounts go") + ": " +
+        owedEntries.map((entry) => (entry.counterparty ?? "somebody") + " " +
+          (entry.direction === "INCOME" ? "owes the squadron " : "is owed ") + "$" + (entry.amountCents / 100).toFixed(2)).join("; ") +
+        ". Change the direction on any that is backwards."
+    });
+  }
+
+  // Dates spread from one mention across everything.
+  //
+  // The same test put all three entries on the fourteenth, because that was the only day named and it was
+  // applied to all of them. A date nobody gave is not better than no date.
+  const MONTHS = "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
+  // Only what a person says as a date: an ordinal, a month, or a written date. A bare number is an
+  // amount far more often than a day, and counting those made this check never fire at all.
+  const datesSaid = new Set(
+    (input.said.match(new RegExp("\\b\\d{4}-\\d{2}-\\d{2}\\b|\\b\\d{1,2}(st|nd|rd|th)\\b|\\b(" + MONTHS + ")\\b", "gi")) ?? []).map((token) => token.toLowerCase())
+  );
+  const distinctDates = new Set(entries.map((entry) => entry.occurredOn));
+  if (entries.length > 1 && distinctDates.size < entries.length && datesSaid.size <= 1) {
+    checks.push({
+      tone: "WARN",
+      says: "Only one date was said and " + entries.length + " entries were given it. Put the right date on each before recording them."
+    });
+  }
+
   const unquoted = entries.filter((entry) => !entry.because).length;
   if (unquoted) {
     checks.push({
