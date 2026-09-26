@@ -198,13 +198,39 @@ export function PulseWidget() {
 
           <div className="pw-body">
             {showing.slice(0, 5).map((item) => (
-              <article key={item.id} className="pw-item">
-                <span className="pw-icon" aria-hidden="true">{ICON[item.kind]}</span>
-                <div className="pw-text">
-                  <strong>{item.title}</strong>
-                  {item.detail ? <span>{item.detail}</span> : null}
-                </div>
-                <div className="pw-do">
+              <article key={item.id} className={"pw-item" + (item.href ? " is-openable" : "")}>
+                {/* The whole row goes to the thing. Somebody who neither wants to do it nor dismiss it
+                    still wants to see what it is talking about, and pressing the words is how anybody
+                    would try. The buttons keep their own jobs. */}
+                {item.href ? (
+                  <button
+                    type="button"
+                    className="pw-open"
+                    onClick={() => {
+                      if (item.external) {
+                        window.open(item.href as string, "_blank", "noopener");
+                        return;
+                      }
+                      setOpen(false);
+                      router.push(item.href as string);
+                    }}
+                  >
+                    <span className="pw-icon" aria-hidden="true">{ICON[item.kind]}</span>
+                    <span className="pw-text">
+                      <strong>{item.title}</strong>
+                      {item.detail ? <span>{item.detail}</span> : null}
+                    </span>
+                  </button>
+                ) : (
+                  <>
+                    <span className="pw-icon" aria-hidden="true">{ICON[item.kind]}</span>
+                    <div className="pw-text">
+                      <strong>{item.title}</strong>
+                      {item.detail ? <span>{item.detail}</span> : null}
+                    </div>
+                  </>
+                )}
+                <div className="pw-do" onClick={(event) => event.stopPropagation()}>
                   {item.actionable ? (
                     <>
                       <button type="button" className="pw-yes" disabled={busy === item.id} onClick={() => act(item, true)}>
@@ -249,6 +275,8 @@ const pwCss = [
   ".pw-close:hover{opacity:1}",
   ".pw-body{display:flex;flex-direction:column;max-height:min(54vh,420px);overflow-y:auto}",
   ".pw-item{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-bottom:1px solid var(--cu-border,#eef0f3)}",
+  ".pw-item.is-openable:hover{background:rgba(123,104,238,.07)}",
+  ".pw-open{flex:1;min-width:0;display:flex;gap:10px;align-items:flex-start;border:0;background:none;color:inherit;font:inherit;text-align:left;padding:0;cursor:pointer}",
   "html[data-theme=dark] .pw-item{border-color:#2c2e33}",
   ".pw-icon{flex:none;width:24px;height:24px;display:grid;place-items:center;border-radius:7px;background:rgba(123,104,238,.14);font-size:12px}",
   ".pw-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}",
