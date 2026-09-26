@@ -74,13 +74,22 @@ export function findings(input: {
   const unsent = live.filter((entry) => entry.status === "RECORDED" && daysSince(entry.occurredOn, today) > SUBMIT_WITHIN_DAYS);
   if (unsent.length) {
     const oldest = Math.max(...unsent.map((entry) => daysSince(entry.occurredOn, today)));
+    const deposits = unsent.filter((entry) => entry.direction === "INCOME").length;
+    const checks = unsent.length - deposits;
     found.push({
       code: "NOT_SUBMITTED",
       severity: "ATTENTION",
-      says: plural(unsent.length, "entry", "entries") + " has not been marked as sent to wing.",
+      says: [
+        deposits ? plural(deposits, "deposit", "deposits") + " with no advice sent" : null,
+        checks ? plural(checks, "payment", "payments") + " with no check request" : null
+      ].filter(Boolean).join(", ") + ".",
       because: "Recorded more than " + SUBMIT_WITHIN_DAYS + " days ago and still at Recorded. The oldest is " + oldest + " days old, totalling " + money(unsent.reduce((sum, entry) => sum + entry.amountCents, 0)) + ".",
       transactionIds: unsent.map((entry) => entry.id),
-      suggestedTask: "Send " + plural(unsent.length, "finance entry", "finance entries") + " to wing and mark them submitted"
+      suggestedTask: deposits && checks
+        ? "Send " + deposits + " deposit advice and " + checks + " check request to wing"
+        : deposits
+          ? "Send " + plural(deposits, "deposit advice", "deposit advices") + " to wing"
+          : "Raise " + plural(checks, "check request", "check requests") + " with wing"
     });
   }
 

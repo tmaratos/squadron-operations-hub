@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CATEGORIES, type BudgetLine, type Meeting, type Transaction, type TxStatus } from "@/lib/finance/finance";
+import { CATEGORIES, type BudgetLine, type Direction, type Meeting, type Transaction, type TxStatus } from "@/lib/finance/finance";
 import type { Finding, Summary } from "@/lib/finance/findings";
 
 // The squadron's money on one page.
@@ -25,18 +25,25 @@ interface State {
   openingSource: string | null;
 }
 
-const STATUS_LABEL: Record<TxStatus, string> = {
-  RECORDED: "Recorded",
-  SUBMITTED: "With wing",
-  CLEARED: "Cleared",
-  VOID: "Void"
-};
+function statusLabel(status: TxStatus, direction: Direction): string {
+  if (status === "SUBMITTED") return direction === "INCOME" ? "Deposit advice in" : "Check requested";
+  return status === "RECORDED" ? "Recorded" : status === "CLEARED" ? "Cleared" : "Void";
+}
 
 /** What pressing the state button does next, and nothing beyond it. */
-const NEXT_STATUS: Partial<Record<TxStatus, { to: TxStatus; label: string }>> = {
-  RECORDED: { to: "SUBMITTED", label: "Mark sent to wing" },
-  SUBMITTED: { to: "CLEARED", label: "Mark cleared" }
-};
+function nextStatus(status: TxStatus, direction: Direction): { to: TxStatus; label: string } | null {
+  if (status === "RECORDED") {
+    return direction === "INCOME"
+      ? { to: "SUBMITTED", label: "Deposit advice sent" }
+      : { to: "SUBMITTED", label: "Check requested from wing" };
+  }
+  if (status === "SUBMITTED") {
+    return direction === "INCOME"
+      ? { to: "CLEARED", label: "Wing has it" }
+      : { to: "CLEARED", label: "Check received" };
+  }
+  return null;
+}
 
 function money(cents: number): string {
   const negative = cents < 0;
@@ -228,8 +235,9 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
             Set it
           </button>
           <p className="fin-faint fin-wide">
-            Taken from the wing statement, not worked out here. Without it the Hub can tell you what moved this year
-            but not what the unit holds, and it will not guess at a balance or claim the unit is overdrawn.
+            Taken from wing&rsquo;s QuickBooks report for the unit, not worked out here. Without it the Hub can tell you
+            what moved this year but not what the unit holds, and it will not guess at a balance or claim the unit is
+            overdrawn.
           </p>
         </div>
       ) : null}
@@ -338,7 +346,7 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
           {visible.length ? (
             <ul className="fin-rows">
               {visible.map((entry) => {
-                const next = NEXT_STATUS[entry.status];
+                const next = nextStatus(entry.status, entry.direction);
                 return (
                   <li key={entry.id} className={"fin-row" + (entry.status === "VOID" ? " is-void" : "")}>
                     <button className="fin-row-open" onClick={() => setOpen(open === entry.id ? null : entry.id)} aria-expanded={open === entry.id}>
@@ -350,7 +358,7 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
                       <span className={"fin-row-amount" + (entry.direction === "INCOME" ? " is-in" : "")}>
                         {entry.direction === "INCOME" ? "+" : "−"}{money(entry.amountCents)}
                       </span>
-                      <span className={"fin-pill fin-pill--" + entry.status.toLowerCase()}>{STATUS_LABEL[entry.status]}</span>
+                      <span className={"fin-pill fin-pill--" + entry.status.toLowerCase()}>{statusLabel(entry.status, entry.direction)}</span>
                     </button>
 
                     {open === entry.id ? (
@@ -360,7 +368,10 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
                           <div><dt>Quarter</dt><dd>Q{entry.fiscalQuarter} FY{entry.fiscalYear}</dd></div>
                           <div><dt>Receipt</dt><dd>{entry.receiptName ?? "None attached"}</dd></div>
                           <div><dt>Approved by</dt><dd>{entry.approverName ?? "Nobody recorded"}</dd></div>
-                          <div><dt>Wing reference</dt><dd>{entry.wingReference ?? "—"}</dd></div>
+                          <div>
+                            <dt>{entry.direction === "INCOME" ? "Deposit advice" : "Check request"}</dt>
+                            <dd>{entry.wingReference ?? "\u2014"}</dd>
+                          </div>
                           {entry.itemTitle ? <div><dt>Task</dt><dd><Link href={"/tasks?item=" + entry.itemId}>{entry.itemTitle}</Link></dd></div> : null}
                         </dl>
                         {entry.notes ? <p className="fin-faint">{entry.notes}</p> : null}
