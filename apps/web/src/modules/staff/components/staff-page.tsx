@@ -271,7 +271,7 @@ export function StaffPage({
         <SectionCard title="Current organization chart" description={canManage ? "Press Change on any position to say who holds it now. Whoever holds it gets that job's recurring work." : "Who holds which position in the squadron."}>
           <div className="org-position-list">
             {positions.map((position) => (
-              <article className={`org-position org-position--${position.assignmentStatus.toLowerCase()}`} key={position.id}>
+              <article className={`org-position org-position--${position.assignmentStatus.toLowerCase()}${editingPosition === position.id ? " org-position--editing" : ""}`} key={position.id}>
                 <div className="org-position__icon"><BriefcaseBusiness size={16} /></div>
                 <div className="org-position__body">
                   <strong>{position.title}</strong>
@@ -315,8 +315,8 @@ export function StaffPage({
                       {position.assistants.map((assistant) => (
                         <li key={assistant.id}>
                           <span>
-                            {assistant.rank} {assistant.name}
-                            {assistant.roleTitle ? <strong className="org-assist-role"> {assistant.roleTitle}</strong> : " · assistant"}
+                            <span className="org-assist-name">{assistant.rank} {assistant.name}</span>
+                            {assistant.roleTitle ? <strong className="org-assist-role">{assistant.roleTitle}</strong> : null}
                             {personnelMembers.find((member) => member.id === assistant.memberId)?.memberType === "CADET"
                               ? <em className="org-cadet">cadet</em>
                               : null}
@@ -343,7 +343,7 @@ export function StaffPage({
                         className="org-assist-title"
                         value={assistantTitle[position.id] ?? ""}
                         onChange={(event) => setAssistantTitle({ ...assistantTitle, [position.id]: event.target.value })}
-                        placeholder="Their title, e.g. CAEO, CAEA, Assistant"
+                        placeholder="Their title — CAEO, CAEA, Assistant…"
                         maxLength={80}
                         aria-label={"Title for the assistant being added to " + position.title}
                       />
