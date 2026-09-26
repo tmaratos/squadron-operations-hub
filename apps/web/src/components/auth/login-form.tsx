@@ -36,7 +36,7 @@ export function LoginForm({ error }: { error?: string }) {
         <div className="auth-heading">
           <p className="auth-eyebrow">Member access</p>
           <h2>Welcome to the Hub</h2>
-          <p className="auth-description">Sign in with the verified Google account that has access to the TN-170 Shared Drive.</p>
+          <p className="auth-description">Sign in with your CAP address, or with the Google account that can open the TN-170 Shared Drive.</p>
         </div>
 
         {error ? <div className="auth-message" role="alert">{errorMessage(error)}</div> : null}
@@ -49,7 +49,7 @@ export function LoginForm({ error }: { error?: string }) {
 
         <div className="auth-access-note">
           <ShieldCheck size={18} />
-          <p><strong>Access follows Google Drive.</strong><span>If your account cannot open the squadron Shared Drive, ask command staff to grant access there.</span></p>
+          <p><strong>Two ways in.</strong><span>A CAP address gets you in to read. Being on the squadron Shared Drive is what lets you change things — ask command staff to grant that, then sign in again.</span></p>
         </div>
 
         <p className="auth-footer-copy">By continuing, you agree to use this system only for authorized Civil Air Patrol activities.</p>
