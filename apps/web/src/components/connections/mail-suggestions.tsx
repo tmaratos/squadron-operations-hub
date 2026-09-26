@@ -19,9 +19,9 @@ interface Suggestion {
 export function MailSuggestions() {
   const [state, setState] = useState<"idle" | "loading" | "ready">("idle");
   // Which mail the member has asked the Hub to read. Labelling is what everybody starts on.
-  const [scan, setScan] = useState<"LABEL" | "INBOX" | "ALL">("LABEL");
+  const [scan, setScan] = useState<"UNREAD" | "INBOX" | "ALL">("UNREAD");
 
-  async function saveScan(mode: "LABEL" | "INBOX" | "ALL") {
+  async function saveScan(mode: "UNREAD" | "INBOX" | "ALL") {
     const previous = scan;
     setScan(mode);
     try {
@@ -51,7 +51,7 @@ export function MailSuggestions() {
     try {
       const response = await fetch("/api/google/gmail/suggestions");
       const data = (await response.json()) as { connected?: boolean; label?: string; mode?: string; suggestions?: Suggestion[]; read?: number; message?: string };
-      if (data.mode === "INBOX" || data.mode === "ALL" || data.mode === "LABEL") setScan(data.mode);
+      if (data.mode === "INBOX" || data.mode === "ALL" || data.mode === "UNREAD") setScan(data.mode);
       setConnected(data.connected !== false);
       if (data.label) setLabel(data.label);
       setSuggestions((data.suggestions ?? []).filter((suggestion) => suggestion.actionable));
@@ -97,29 +97,28 @@ export function MailSuggestions() {
               to hand over, and it should never happen because a default said so. */}
           <fieldset className="ms-scan">
             <legend>What it reads</legend>
-            <label className={scan === "LABEL" ? "is-on" : ""}>
-              <input type="radio" name="ms-scan" checked={scan === "LABEL"} onChange={() => saveScan("LABEL")} />
+            <label className={scan === "UNREAD" ? "is-on" : ""}>
+              <input type="radio" name="ms-scan" checked={scan === "UNREAD"} onChange={() => saveScan("UNREAD")} />
               <span>
-                <strong>Only what I label</strong>
-                Put the label <strong>{label}</strong> on an email in Gmail and leave it there. Nothing else is read.
+                <strong>My unread mail</strong>
+                What you have not dealt with yet, which is usually the same question.
               </span>
             </label>
             <label className={scan === "INBOX" ? "is-on" : ""}>
               <input type="radio" name="ms-scan" checked={scan === "INBOX"} onChange={() => saveScan("INBOX")} />
               <span>
-                <strong>My recent inbox</strong>
-                The last two weeks of real mail, skipping newsletters, promotions and anything from a noreply
-                address. You do not have to label anything.
+                <strong>My whole inbox</strong>
+                Read or not, but nothing you have already filed away.
               </span>
             </label>
             <label className={scan === "ALL" ? "is-on" : ""}>
               <input type="radio" name="ms-scan" checked={scan === "ALL"} onChange={() => saveScan("ALL")} />
               <span>
-                <strong>Everything except deleted mail</strong>
-                Every folder, not just the inbox &mdash; archived mail and anything filed under a label counts. The
-                last ninety days, and never your trash or spam.
+                <strong>Everything except the trash</strong>
+                Every folder, archived mail included, going back ninety days.
               </span>
             </label>
+            <p className="ms-fine">Your trash is never read, whichever you pick. Nor is spam.</p>
           </fieldset>
         </div>
       </div>
@@ -173,6 +172,7 @@ const msCss = [
   ".ms-btn{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:14px;font-weight:600;padding:9px 16px;border-radius:8px;cursor:pointer;white-space:nowrap}",
   ".ms-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}.ms-btn:disabled{opacity:.55;cursor:default}",
   ".ms-scan{border:0;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}",
+  ".ms-fine{font-size:11.5px;opacity:.6;margin:2px 0 0}",
   ".ms-scan legend{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.55;padding:0}",
   ".ms-scan label{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--cu-border,#e4e6eb);border-radius:9px;cursor:pointer;font-size:12.5px;line-height:1.5}",
   ".ms-scan label.is-on{border-color:#7b68ee;background:rgba(123,104,238,.08)}",

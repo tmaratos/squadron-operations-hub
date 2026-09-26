@@ -1,6 +1,8 @@
 import { AiChoiceCard } from "@/components/connections/ai-choice-card";
 import { ConnectionsBoard } from "@/components/connections/connections-board";
 import { MailSuggestions } from "@/components/connections/mail-suggestions";
+import { MailboxesCard } from "@/components/connections/mailboxes-card";
+import { listMailAccounts } from "@/lib/google/mail-accounts";
 import { PageHeader } from "@/components/page-header";
 import { aiSource, preferredProvider } from "@/lib/ai/provider";
 import { isVendorProvider } from "@/lib/ai/vendors";
@@ -11,9 +13,10 @@ export const dynamic = "force-dynamic";
 
 export default async function ConnectionsPage() {
   const user = await requireUser();
-  const [connections, choice] = await Promise.all([
+  const [connections, choice, mailboxes] = await Promise.all([
     listUserConnections(user.id, user.email),
-    preferredProvider(user.id)
+    preferredProvider(user.id),
+    listMailAccounts(user.id)
   ]);
   const connectedAi = connections
     .filter((connection) => connection.status === "CONNECTED" && isVendorProvider(connection.provider))
@@ -27,6 +30,7 @@ export default async function ConnectionsPage() {
         description="Connect your own accounts so the Hub can work with them. Only you can use what you connect here."
       />
       <MailSuggestions />
+      <MailboxesCard signedInAs={user.email} accounts={mailboxes} />
       <AiChoiceCard
         providers={PROVIDERS}
         connected={connectedAi}

@@ -56,7 +56,7 @@ interface OAuthRow {
   token_expires_at: string;
 }
 
-export async function createGoogleAuthorizationUrl(extraScopes: string[] = []): Promise<string> {
+export async function createGoogleAuthorizationUrl(extraScopes: string[] = [], purpose: "SIGN_IN" | "ADD_MAILBOX" = "SIGN_IN"): Promise<string> {
   const env = requiredOAuthEnv();
   const state = createRandomToken(32);
   const verifier = createRandomToken(64);
@@ -71,6 +71,9 @@ export async function createGoogleAuthorizationUrl(extraScopes: string[] = []): 
   };
   store.set(oauthCookieName("state"), state, cookieOptions);
   store.set(oauthCookieName("verifier"), verifier, cookieOptions);
+  // What this round trip is for. The callback has no other way to tell an added mailbox from a sign-in, and
+  // getting that wrong would swap the account somebody is signed in as.
+  store.set(oauthCookieName("purpose"), purpose, cookieOptions);
 
   const params = new URLSearchParams({
     client_id: env.clientId,
@@ -84,7 +87,9 @@ export async function createGoogleAuthorizationUrl(extraScopes: string[] = []): 
     include_granted_scopes: "true",
     // Choosing an account matters at sign-in. When an existing member is just adding a permission, asking
     // them to pick the account again is how people end up connecting the wrong one.
-    prompt: extraScopes.length ? "consent" : "select_account"
+    // Adding a second mailbox has to offer the account chooser, or Google hands back the one already
+    // signed in and the member adds the mailbox they already had.
+    prompt: purpose === "ADD_MAILBOX" ? "select_account consent" : extraScopes.length ? "consent" : "select_account"
   });
   return `${AUTHORIZATION_ENDPOINT}?${params}`;
 }
@@ -254,7 +259,7 @@ function requiredOAuthEnv() {
   return { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, redirectUri: env.GOOGLE_REDIRECT_URI };
 }
 
-function oauthCookieName(kind: "state" | "verifier"): string {
+function oauthCookieName(kind: "state" | "verifier" | "purpose"): string {
   return process.env.NODE_ENV === "production" ? `__Host-google_oauth_${kind}` : `google_oauth_${kind}`;
 }
 
@@ -279,4 +284,10 @@ function base64UrlFromHex(hex: string): string {
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
+}
+
+/** What the round trip in progress is for, read by the callback. */
+export async function oauthPurpose(): Promise<"SIGN_IN" | "ADD_MAILBOX"> {
+  const store = await cookies();
+  return store.get(oauthCookieName("purpose"))?.value === "ADD_MAILBOX" ? "ADD_MAILBOX" : "SIGN_IN";
 }

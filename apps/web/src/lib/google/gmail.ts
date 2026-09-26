@@ -80,7 +80,6 @@ async function googleReason(response: Response, prefix: string): Promise<string>
 // ---------------------------------------------------------------- reading
 
 // The label a member puts on mail they want the Hub to look at. Everything else is left alone.
-export const HUB_LABEL = "Hub";
 
 export interface MailMessage {
   id: string;
@@ -125,63 +124,39 @@ function plainTextFrom(part: GmailPart | undefined): string {
   return "";
 }
 
-/** The messages a member has labelled for the Hub. Nothing else in the mailbox is opened. */
 /**
- * The search Gmail is given when a member asks the Hub to watch their whole inbox rather than one label.
+ * The three things a member can ask the Hub to read.
  *
- * Deliberately narrow for something described as "everything". Two weeks, because an email from March is
- * not a job somebody is about to forget, and without the bulk categories, because a squadron inbox is
- * mostly newsletters and receipts and every one of them costs a read and an answer. Anything automated
- * enough to send from noreply is not asking a person for anything.
+ * Labelling is gone. It worked, and it asked somebody to keep a filing habit in Gmail before the Hub could
+ * be any use, which is a poor trade for a volunteer who checks mail on a phone between jobs. These are
+ * instead the three ways a person already thinks about their mailbox.
+ *
+ * Trash is never read, in any of them. Somebody who deleted a message has already said what they think of
+ * it. Spam and chats are out for the same reason: neither is somebody asking for something.
  */
-export const INBOX_SCAN_QUERY = [
-  "in:inbox",
-  "newer_than:14d",
-  "-category:promotions",
-  "-category:social",
-  "-category:forums",
-  "-category:updates",
-  "-from:noreply",
-  "-from:no-reply",
-  "-from:donotreply",
-  "-list:{*}"
-].join(" ");
+export const SCAN_QUERIES = {
+  // What has not been dealt with, which is usually exactly the question.
+  UNREAD: "is:unread -in:trash -in:spam -in:chats",
+  // The whole inbox, read or not, but not things already filed away.
+  INBOX: "in:inbox -in:trash -in:spam -in:chats",
+  // Every folder, archived mail included. Ninety days, because the point is work somebody still has to do
+  // and a message nobody has touched since spring is not that.
+  ALL: "newer_than:90d -in:trash -in:spam -in:chats"
+} as const;
+
+export type ScanMode = keyof typeof SCAN_QUERIES;
 
 /**
- * Everything, which means every folder rather than every message ever sent.
+ * Reads one mailbox.
  *
- * No in:inbox, so archived mail and anything filed into a label counts - that is the point of it. Trash and
- * spam are left out: a squadron member who deleted something has already said what they think of it, and
- * spam is spam. Ninety days rather than forever, because the point is work somebody still has to do, and a
- * message nobody has acted on since spring is not that.
+ * Takes a token rather than fetching one, so the same function serves the account somebody signed in with
+ * and every other mailbox they have connected. How many mailboxes there are is not this function's problem.
  */
-export const ALL_MAIL_SCAN_QUERY = [
-  "newer_than:90d",
-  "-in:trash",
-  "-in:spam",
-  "-in:chats",
-  "-category:promotions",
-  "-category:social",
-  "-from:noreply",
-  "-from:no-reply",
-  "-from:donotreply"
-].join(" ");
-
-export async function listRecentMail(userId: string, limit = 20): Promise<MailMessage[]> {
-  return listMailMatching(userId, INBOX_SCAN_QUERY, limit);
+export async function listMailForToken(token: string, mode: ScanMode, limit: number): Promise<MailMessage[]> {
+  return fetchMail(token, SCAN_QUERIES[mode], limit);
 }
 
-export async function listAllMail(userId: string, limit = 40): Promise<MailMessage[]> {
-  return listMailMatching(userId, ALL_MAIL_SCAN_QUERY, limit);
-}
-
-export async function listLabelledMail(userId: string, label = HUB_LABEL, limit = 10): Promise<MailMessage[]> {
-  return listMailMatching(userId, "label:" + label, limit);
-}
-
-async function listMailMatching(userId: string, search: string, limit: number): Promise<MailMessage[]> {
-  if (!(await canRead(userId))) throw new Error("Connect Gmail reading in My connections first.");
-  const token = await getUserGoogleAccessToken(userId);
+async function fetchMail(token: string, search: string, limit: number): Promise<MailMessage[]> {
   const headers = { Authorization: "Bearer " + token };
 
   const query = new URLSearchParams({ q: search, maxResults: String(limit) });

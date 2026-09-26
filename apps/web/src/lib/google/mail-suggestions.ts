@@ -1,6 +1,8 @@
 import { parseJsonReply } from "@/lib/ai/local";
 import { aiChatFor } from "@/lib/ai/provider";
-import { listAllMail, listLabelledMail, listRecentMail, type MailMessage } from "./gmail";
+import { canRead, listMailForToken, type MailMessage, type ScanMode } from "./gmail";
+import { getUserGoogleAccessToken } from "@/lib/auth/google-oauth";
+import { accessTokenFor, listMailAccounts } from "@/lib/google/mail-accounts";
 import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 
 // Reading squadron mail and saying what it thinks needs doing. Suggestions only: nothing is created until
@@ -42,12 +44,12 @@ function fromTheHub(message: MailMessage): boolean {
 }
 
 /**
- * What a member has asked the Hub to read: only what they label, or their recent inbox.
+ * What a member has asked the Hub to read.
  *
- * Labelling is the default and stays the default. Reading somebody's whole inbox is a different thing to
- * consent to, so it is never the setting somebody arrives on - they choose it, and can choose back.
+ * Unread mail is where everybody starts, because it is the narrowest of the three and the closest to the
+ * question somebody actually has. The wider two are chosen, never arrived at.
  */
-export type ScanMode = "LABEL" | "INBOX" | "ALL";
+export type { ScanMode };
 
 export async function getScanMode(userId: string): Promise<ScanMode> {
   try {
@@ -55,9 +57,9 @@ export async function getScanMode(userId: string): Promise<ScanMode> {
       .prepare("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mail_scan'")
       .bind(userId)
       .first<{ value: string }>();
-    return row?.value === "INBOX" ? "INBOX" : row?.value === "ALL" ? "ALL" : "LABEL";
+    return row?.value === "INBOX" ? "INBOX" : row?.value === "ALL" ? "ALL" : "UNREAD";
   } catch {
-    return "LABEL";
+    return "UNREAD";
   }
 }
 
@@ -71,13 +73,48 @@ export async function setScanMode(userId: string, mode: ScanMode): Promise<void>
     .run();
 }
 
-export async function suggestFromMail(userId: string, label?: string): Promise<{ suggestions: MailSuggestion[]; read: number }> {
+/**
+ * Every mailbox the member has connected, read in one go.
+ *
+ * The account they signed in with counts as one of them. A mailbox whose permission has lapsed at Google's
+ * end is skipped rather than allowed to stop the others - one dead connection should not make the Hub go
+ * quiet about the two that still work.
+ */
+async function everyMailbox(userId: string, mode: ScanMode): Promise<MailMessage[]> {
+  const perMailbox = mode === "ALL" ? 40 : 20;
+  const messages: MailMessage[] = [];
+
+  if (await canRead(userId).catch(() => false)) {
+    try {
+      const token = await getUserGoogleAccessToken(userId);
+      messages.push(...await listMailForToken(token, mode, perMailbox));
+    } catch {
+      // The signed-in account cannot be read just now. The others still can.
+    }
+  }
+
+  for (const account of await listMailAccounts(userId)) {
+    try {
+      const token = await accessTokenFor(userId, account.id);
+      if (!token) continue;
+      messages.push(...await listMailForToken(token, mode, perMailbox));
+    } catch {
+      continue;
+    }
+  }
+
+  // The same message can arrive in two connected mailboxes. Read it once.
+  const seen = new Set<string>();
+  return messages.filter((message) => {
+    if (seen.has(message.id)) return false;
+    seen.add(message.id);
+    return true;
+  });
+}
+
+export async function suggestFromMail(userId: string): Promise<{ suggestions: MailSuggestion[]; read: number }> {
   const mode = await getScanMode(userId);
-  const all = mode === "ALL"
-    ? await listAllMail(userId, 40)
-    : mode === "INBOX"
-      ? await listRecentMail(userId, 20)
-      : await listLabelledMail(userId, label);
+  const all = await everyMailbox(userId, mode);
   const messages = all.filter((message) => !fromTheHub(message));
   if (!messages.length) return { suggestions: [], read: all.length };
 

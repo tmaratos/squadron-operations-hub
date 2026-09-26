@@ -3,7 +3,7 @@ import { getScanMode, setScanMode } from "@/lib/google/mail-suggestions";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { canRead, HUB_LABEL } from "@/lib/google/gmail";
+import { canRead } from "@/lib/google/gmail";
 import { suggestFromMail } from "@/lib/google/mail-suggestions";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { createItem, updateItem } from "@/lib/work/items";
@@ -16,18 +16,17 @@ export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
   if (!(await canRead(user.id))) {
-    return NextResponse.json({ connected: false, label: HUB_LABEL, suggestions: [], mode: await getScanMode(user.id) });
+    return NextResponse.json({ connected: false, suggestions: [], mode: await getScanMode(user.id) });
   }
   try {
-    const label = new URL(request.url).searchParams.get("label") || HUB_LABEL;
-    const result = await suggestFromMail(user.id, label);
-    return NextResponse.json({ connected: true, label, mode: await getScanMode(user.id), ...result });
+    const result = await suggestFromMail(user.id);
+    return NextResponse.json({ connected: true, mode: await getScanMode(user.id), ...result });
   } catch (error) {
     return NextResponse.json({ connected: true, suggestions: [], message: error instanceof Error ? error.message : "Your mail could not be read." }, { status: 400 });
   }
 }
 
-const scanSchema = z.object({ action: z.literal("scan"), mode: z.enum(["LABEL", "INBOX", "ALL"]) });
+const scanSchema = z.object({ action: z.literal("scan"), mode: z.enum(["UNREAD", "INBOX", "ALL"]) });
 
 const schema = z.object({
   title: z.string().trim().min(2).max(300),
@@ -55,19 +54,19 @@ export async function POST(request: Request) {
         entityType: "user",
         entityId: user.id,
         summary: user.fullName + (asScan.data.mode === "ALL"
-          ? " had the Hub read all their mail except trash and spam"
+          ? " had the Hub read every folder except trash"
           : asScan.data.mode === "INBOX"
-            ? " had the Hub read their recent inbox"
-            : " had the Hub read only mail they label"),
+            ? " had the Hub read their whole inbox"
+            : " had the Hub read their unread mail"),
         metadata: { mode: asScan.data.mode }
       });
       return NextResponse.json({
         mode: asScan.data.mode,
         message: asScan.data.mode === "ALL"
-          ? "Reading everything except trash and spam."
+          ? "Reading every folder except the trash."
           : asScan.data.mode === "INBOX"
-            ? "Reading your recent inbox."
-            : "Reading only what you label."
+            ? "Reading your whole inbox."
+            : "Reading your unread mail."
       });
     }
 

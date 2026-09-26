@@ -5,10 +5,12 @@ import {
   getGoogleProfile,
   isAllowedEmailDomain,
   isVerifiedGoogleProfile,
+  oauthPurpose,
   storeGoogleTokens
 } from "@/lib/auth/google-oauth";
 import { ensureOwnership, upsertGoogleUser } from "@/lib/auth/repository";
-import { createSession, setSessionCookie } from "@/lib/auth/session";
+import { createSession, getCurrentUser, setSessionCookie } from "@/lib/auth/session";
+import { saveMailAccount } from "@/lib/google/mail-accounts";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { getRequestIp, hashIp } from "@/lib/security/crypto";
 
@@ -23,6 +25,32 @@ export async function GET(request: Request) {
     const tokens = await exchangeGoogleCode(code, state);
     const profile = await getGoogleProfile(tokens.access_token);
     if (!isVerifiedGoogleProfile(profile)) return loginRedirect(request, "unverified");
+
+    // Adding a second mailbox, not signing in. Nothing about the current session changes: this is a
+    // read-only mail connection belonging to whoever is already signed in, and it is stored somewhere else
+    // entirely so that removing it can never affect how they get in.
+    if ((await oauthPurpose()) === "ADD_MAILBOX") {
+      const signedIn = await getCurrentUser();
+      if (!signedIn) return loginRedirect(request, "invalid");
+      await saveMailAccount({
+        userId: signedIn.id,
+        email: profile.email,
+        googleSubject: profile.sub,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        expiresIn: tokens.expires_in,
+        scopes: tokens.scope
+      });
+      await recordAuditEvent({
+        actorUserId: signedIn.id,
+        action: "MAILBOX_ADDED",
+        entityType: "user",
+        entityId: signedIn.id,
+        summary: signedIn.fullName + " connected the mailbox " + profile.email + " for reading",
+        metadata: { email: profile.email }
+      });
+      return NextResponse.redirect(new URL("/connections#mail", request.url));
+    }
     // Either door: on the squadron's Shared Drive, or holding a CAP address. The Drive is asked either
     // way, because the answer decides what somebody may do once inside and not only whether they get in.
     const driveAccess = await canAccessSharedDrive(tokens.access_token);
