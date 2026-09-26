@@ -48,6 +48,24 @@ export function NotificationCenter({
     }).catch(() => undefined);
   }
 
+  async function clear(ids?: string[]) {
+    const before = notifications;
+    // Gone from the page at once. A clear that waits for a round trip feels broken, and the list is put back
+    // if the request fails rather than leaving somebody believing something was removed when it was not.
+    setNotifications(ids ? notifications.filter((notice) => !ids.includes(notice.id)) : []);
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "clear", ...(ids ? { ids } : {}) })
+      });
+      if (!response.ok) throw new Error("failed");
+    } catch {
+      setNotifications(before);
+      setNote("Those could not be cleared. Nothing was removed.");
+    }
+  }
+
   async function setEmail(on: boolean) {
     const previous = prefs;
     const next: NotificationPrefs = { ...prefs, emailEnabled: on };
@@ -122,7 +140,10 @@ export function NotificationCenter({
             <h2>Recent</h2>
             <p>{unread ? unread + " you have not read yet." : "You are up to date."}</p>
           </div>
-          {unread ? <button type="button" className="nc-btn" onClick={markAllRead}>Mark all read</button> : null}
+          <div className="nc-head-actions">
+            {unread ? <button type="button" className="nc-btn" onClick={markAllRead}>Mark all read</button> : null}
+            {notifications.length ? <button type="button" className="nc-btn" onClick={() => clear()}>Clear all</button> : null}
+          </div>
         </header>
 
         {notifications.length ? (
@@ -145,6 +166,15 @@ export function NotificationCenter({
                   {notice.itemId && notice.listId
                     ? <Link href={"/lists/" + notice.listId + "?item=" + notice.itemId}>{inner}</Link>
                     : <span className="nc-plain">{inner}</span>}
+                  <button
+                    type="button"
+                    className="nc-clear"
+                    aria-label={"Clear: " + notice.title}
+                    title="Clear this one"
+                    onClick={() => clear([notice.id])}
+                  >
+                    &times;
+                  </button>
                 </li>
               );
             })}
@@ -186,7 +216,11 @@ const ncCss = [
   ".nc-head h2{margin:0;font-size:16px}.nc-head p{margin:4px 0 0;font-size:13.5px;color:var(--cu-muted,#656f7d)}",
   ".nc-btn{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:13.5px;font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer}",
   ".nc-list{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column}",
-  ".nc-row{border-top:1px solid var(--cu-border,#eef0f3)}",
+  ".nc-row{border-top:1px solid var(--cu-border,#eef0f3);display:flex;align-items:stretch;gap:0}",
+  ".nc-row > a,.nc-row > .nc-plain{flex:1;min-width:0}",
+  ".nc-clear{flex:0 0 auto;align-self:center;border:0;background:none;color:inherit;opacity:.35;font-size:19px;line-height:1;padding:6px 12px;cursor:pointer;border-radius:7px}",
+  ".nc-clear:hover{opacity:1;color:#d03b3b}",
+  ".nc-head-actions{display:flex;gap:8px;flex-wrap:wrap}",
   "html[data-theme=dark] .nc-row{border-color:#33363c}",
   ".nc-row a,.nc-plain{display:flex;align-items:flex-start;gap:12px;padding:12px 6px;text-decoration:none;color:inherit}",
   ".nc-row a:hover{background:rgba(123,104,238,.07);border-radius:8px}",

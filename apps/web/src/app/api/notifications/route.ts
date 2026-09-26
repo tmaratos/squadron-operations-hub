@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
-import { listNotifications, markRead, savePrefs, sendTestEmail, unreadCount, type NotificationPrefs } from "@/lib/notify/notifications";
+import { clearNotifications, listNotifications, markRead, savePrefs, sendTestEmail, type NotificationPrefs, unreadCount } from "@/lib/notify/notifications";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 export async function GET() {
@@ -18,6 +18,8 @@ export async function GET() {
 
 const schema = z.union([
   z.object({ action: z.literal("read"), ids: z.array(z.string().max(80)).max(200).optional() }),
+  // No ids means all of them, which is deliberate rather than a fallthrough: the button says Clear all.
+  z.object({ action: z.literal("clear"), ids: z.array(z.string().max(80)).max(200).optional() }),
   z.object({
     action: z.literal("prefs"),
     prefs: z.object({
@@ -44,6 +46,16 @@ export async function POST(request: Request) {
     if (input.action === "read") {
       await markRead(user.id, input.ids);
       return NextResponse.json({ unread: await unreadCount(user.id) });
+    }
+
+    if (input.action === "clear") {
+      const cleared = await clearNotifications(user.id, input.ids);
+      return NextResponse.json({
+        cleared,
+        message: input.ids?.length
+          ? "Cleared."
+          : cleared + (cleared === 1 ? " notification cleared." : " notifications cleared.") + " The work they were about is untouched."
+      });
     }
 
     if (input.action === "test") {

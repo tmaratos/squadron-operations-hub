@@ -123,7 +123,12 @@ export function PulseWidget() {
       // request was rejected, the item was crossed off anyway, and nothing was ever created.
       const body = accept
         ? { action: "accept", ...(item.accept ?? { id: item.id.replace(/^offer:/, "") }) }
-        : { action: "dismiss", id: item.accept?.id ?? item.id.replace(/^offer:/, "") };
+        : {
+            action: "dismiss",
+            id: item.accept?.id ?? item.id.replace(/^offer:/, ""),
+            // Settles the mail suggestion underneath, rather than only the offer made out of it.
+            ...(item.accept?.suggestionId ? { suggestionId: item.accept.suggestionId } : {})
+          };
 
       const response = await fetch("/api/offers", {
         method: "POST",

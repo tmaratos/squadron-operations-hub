@@ -7,6 +7,7 @@ import {
   Compass,
   FileText,
   Gauge,
+  Wallet,
   Grid3x3,
   History,
   Home,
@@ -185,6 +186,12 @@ export const sections: Section[] = [
           { label: "Compliance", href: "/compliance", icon: ShieldCheck, hint: "Requirements and the evidence for them" },
           { label: "Announcements", href: "/communications", icon: Bell, hint: "What has been said to the squadron" }
         ]
+      },
+      {
+        label: "Money",
+        items: [
+          { label: "Finance tracker", href: "/finance", icon: Wallet, hint: "The ledger, the budget, and the committee" }
+        ]
       }
     ]
   },
@@ -272,6 +279,7 @@ export function sectionFor(pathname: string, search?: string): SectionKey {
     ["/documents", "docs"],
     ["/dashboards", "command"],
     ["/readiness", "command"],
+    ["/finance", "command"],
     ["/compliance", "command"],
     ["/communications", "command"],
     ["/staff", "squadron"],

@@ -277,6 +277,32 @@ export async function unreadCount(userId: string): Promise<number> {
   }
 }
 
+/**
+ * Removes notifications from somebody's own list. Theirs alone: the user id is in every statement, so one
+ * member clearing their list cannot touch anybody else's copy of the same message.
+ *
+ * The notification goes; the thing it was about does not. A cleared "due in 3 days" does not alter the task,
+ * its date, or tomorrow's reminder.
+ */
+export async function clearNotifications(userId: string, ids?: string[]): Promise<number> {
+  const db = getDatabase();
+  try {
+    if (ids && ids.length) {
+      const placeholders = ids.map(() => "?").join(", ");
+      const result = await db
+        .prepare("DELETE FROM notifications WHERE user_id = ? AND id IN (" + placeholders + ")")
+        .bind(userId, ...ids)
+        .run();
+      return result.meta?.changes ?? 0;
+    }
+    const result = await db.prepare("DELETE FROM notifications WHERE user_id = ?").bind(userId).run();
+    return result.meta?.changes ?? 0;
+  } catch (error) {
+    if (missingTable(error)) return 0;
+    throw error;
+  }
+}
+
 export async function markRead(userId: string, ids?: string[]): Promise<void> {
   const now = new Date().toISOString();
   const db = getDatabase();

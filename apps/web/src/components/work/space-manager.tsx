@@ -213,11 +213,13 @@ const smCss = [
   ".sm-btn:disabled{opacity:.55;cursor:default}",
   ".sm-rename{display:flex;gap:6px;align-items:center;flex-wrap:wrap}",
   ".sm-rename input{font:inherit;font-size:14px;min-height:32px;padding:0 8px;border-radius:7px;border:1px solid var(--border,#d5d8de);min-width:0;flex:1 1 140px}",
-  ".sm-list{display:flex;align-items:center;gap:8px;justify-content:space-between}",
-  ".sm-list .spaces-list{flex:1;min-width:0}",
+  ".sm-list{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap}",
+  ".sm-list .spaces-list{flex:1 1 190px;min-width:0}",
+  ".sm-list .spaces-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
   ".sm-note{margin:0 0 14px;font-size:13px;padding:10px 13px;border-radius:9px;background:rgba(123,104,238,.12)}",
   ".sm-empty{font-size:14px;color:var(--muted,#656f7d)}",
   ".sm-new{margin:0 0 16px}",
-  ".sm-move{cursor:pointer;max-width:130px}",
+  ".sm-move{cursor:pointer;max-width:112px}",
+  ".sm-actions{flex:0 1 auto}",
   ".sm-add{margin-top:8px;align-self:flex-start}"
 ].join("");

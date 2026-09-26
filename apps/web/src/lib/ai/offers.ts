@@ -53,6 +53,9 @@ export async function listOffers(userId: string): Promise<Offer[]> {
   // Anything the member's labelled email seems to be asking for, found in the background before they asked.
   const intake = items.find((item) => item.listName.toLowerCase().includes("intake"));
   fromMail.forEach((suggestion) => {
+    // Checked here as it is for every other kind of offer. Without this line the dismissal was recorded and
+    // then ignored, which is the only failure worse than not having the button.
+    if (dismissed.includes("mail:" + suggestion.id)) return;
     offers.push({
       id: "mail:" + suggestion.id,
       kind: "from_email",
