@@ -44,6 +44,13 @@ function within(spot: Spot): Spot {
 
 export function PulseWidget() {
   const [noticed, setNoticed] = useState<Noticed[]>([]);
+
+  // The size somebody dragged the panel to, kept for next time. Null means the size it comes as, which is
+  // also what the reset button puts it back to - a panel that has been resized once should not become a
+  // thing you have to rearrange on every page.
+  const [size, setSize] = useState<{ w: number; h: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const resizing = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [gone, setGone] = useState<string[]>([]);
@@ -57,6 +64,11 @@ export function PulseWidget() {
     const fromBottom = window.innerWidth <= 900 ? 96 : 22;
     let start: Spot = { x: window.innerWidth - SIZE - 22, y: window.innerHeight - SIZE - fromBottom };
     try {
+      const savedSize = localStorage.getItem("hub-pulse-size");
+      if (savedSize) {
+        const parsed = JSON.parse(savedSize) as { w?: number; h?: number };
+        if (parsed?.w && parsed?.h) setSize({ w: parsed.w, h: parsed.h });
+      }
       const saved = localStorage.getItem("hub-pulse-spot");
       if (saved) {
         const parsed = JSON.parse(saved) as Spot;
@@ -114,6 +126,46 @@ export function PulseWidget() {
       window.removeEventListener("pointerup", up);
     };
   });
+
+  function startResize(event: React.PointerEvent<HTMLSpanElement>) {
+    // Not a drag of the whole widget. Without this the panel would move while it was being resized.
+    event.preventDefault();
+    event.stopPropagation();
+    const panel = panelRef.current;
+    if (!panel) return;
+    const box = panel.getBoundingClientRect();
+    resizing.current = { x: event.clientX, y: event.clientY, w: box.width, h: box.height };
+
+    const move = (moveEvent: PointerEvent) => {
+      const from = resizing.current;
+      if (!from) return;
+      // Held inside something sensible at both ends: too small to read, or taller than the window, are both
+      // just ways of losing the thing.
+      const w = Math.max(280, Math.min(window.innerWidth - 24, from.w + (moveEvent.clientX - from.x)));
+      const h = Math.max(220, Math.min(window.innerHeight - 24, from.h + (moveEvent.clientY - from.y)));
+      setSize({ w: Math.round(w), h: Math.round(h) });
+    };
+
+    const up = () => {
+      resizing.current = null;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setSize((current) => {
+        if (current) {
+          try { localStorage.setItem("hub-pulse-size", JSON.stringify(current)); } catch { /* private window */ }
+        }
+        return current;
+      });
+    };
+
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function clearSize() {
+    setSize(null);
+    try { localStorage.removeItem("hub-pulse-size"); } catch { /* private window */ }
+  }
 
   async function act(item: Noticed, accept: boolean) {
     setBusy(item.id);
@@ -189,7 +241,10 @@ export function PulseWidget() {
       {open ? (
         <div
           className="pw-panel"
+          ref={panelRef}
           style={{
+            width: size ? size.w : undefined,
+            height: size ? size.h : undefined,
             left: leftHalf ? spot.x : undefined,
             right: leftHalf ? undefined : Math.max(8, window.innerWidth - spot.x - SIZE),
             top: topHalf ? spot.y + SIZE + 8 : undefined,
@@ -198,6 +253,9 @@ export function PulseWidget() {
         >
           <div className="pw-head">
             <strong>{showing.length === 1 ? "The Hub noticed something" : "The Hub noticed " + showing.length + " things"}</strong>
+            {size ? (
+              <button type="button" className="pw-reset" onClick={clearSize} title="Back to the normal size">Reset size</button>
+            ) : null}
             <button type="button" className="pw-close" onClick={() => setOpen(false)} aria-label="Close">×</button>
           </div>
 
@@ -258,7 +316,27 @@ export function PulseWidget() {
           {showing.length > 5 ? <p className="pw-more">and {showing.length - 5} more</p> : null}
           </div>
 
+          <div className="pw-ask">
+            <button
+              type="button"
+              className="pw-ask-btn"
+              onClick={() => {
+                setOpen(false);
+                window.dispatchEvent(new CustomEvent("hub:ask"));
+              }}
+            >
+              <span aria-hidden="true">✨</span> Ask the Hub to do something
+            </button>
+          </div>
           <p className="pw-foot">It looks on its own. It never does anything without being told.</p>
+
+          {/* Dragged from the corner of the panel. Whatever size somebody settles on is the size it keeps. */}
+          <span
+            className="pw-grip"
+            role="separator"
+            aria-label="Resize this panel"
+            onPointerDown={startResize}
+          />
         </div>
       ) : null}
     </>
@@ -273,6 +351,16 @@ const pwCss = [
   "html[data-theme=dark] .pw-count{border-color:#1f2024}",
   ".pw-panel{position:fixed;z-index:129;width:min(360px,calc(100vw - 16px));max-width:calc(100vw - 16px);border-radius:12px;overflow:hidden;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);box-shadow:0 18px 48px rgba(9,20,44,.32)}",
   "html[data-theme=dark] .pw-panel{background:#1f2024;border-color:#34363b}",
+  ".pw-panel{display:flex;flex-direction:column;min-height:0}",
+  ".pw-body{flex:1;min-height:0;overflow-y:auto}",
+  ".pw-grip{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;touch-action:none}",
+  ".pw-grip::after{content:\"\";position:absolute;right:4px;bottom:4px;width:8px;height:8px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;opacity:.35;border-radius:0 0 2px 0}",
+  ".pw-grip:hover::after{opacity:.8}",
+  ".pw-reset{border:0;background:none;color:inherit;font:inherit;font-size:11.5px;opacity:.6;cursor:pointer;padding:2px 6px;border-radius:6px;white-space:nowrap}",
+  ".pw-reset:hover{opacity:1;background:rgba(127,127,127,.15)}",
+  ".pw-ask{padding:9px 13px 0}",
+  ".pw-ask-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;padding:8px 11px;border-radius:8px;cursor:pointer}",
+  ".pw-ask-btn:hover{border-color:#7b68ee;color:#7b68ee}",
   ".pw-head{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--cu-border,#eef0f3);font-size:13px}",
   "html[data-theme=dark] .pw-head{border-color:#2c2e33}",
   ".pw-head strong{flex:1;min-width:0}",

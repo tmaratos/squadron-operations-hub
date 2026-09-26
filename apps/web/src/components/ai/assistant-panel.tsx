@@ -40,7 +40,7 @@ const EXAMPLES = [
   "When a task is marked Plan submitted, set its priority to high"
 ];
 
-export function AssistantPanel() {
+export function AssistantPanel({ hideLauncher = false }: { hideLauncher?: boolean } = {}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
@@ -53,6 +53,13 @@ export function AssistantPanel() {
   const [note, setNote] = useState("");
   const [pending, setPending] = useState<{ steps: Step[]; descriptions: string[]; picked: boolean[] } | null>(null);
   const [autonomy, setAutonomyState] = useState<Autonomy>("CONFIRM");
+
+  // Anything in the app can ask for this panel. The widget in the corner is what does.
+  useEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("hub:ask", show);
+    return () => window.removeEventListener("hub:ask", show);
+  }, []);
   const feedRef = useRef<HTMLDivElement>(null);
 
   async function load(conversation?: string | null) {
@@ -140,7 +147,9 @@ export function AssistantPanel() {
   return (
     <>
       <style>{apCss}</style>
-      <button type="button" className="ap-open" onClick={() => setOpen(true)} aria-label="Ask the Hub to do something"><span aria-hidden="true">✨</span><span className="ap-open-text">Ask</span></button>
+      {hideLauncher ? null : (
+        <button type="button" className="ap-open" onClick={() => setOpen(true)} aria-label="Ask the Hub to do something"><span aria-hidden="true">✨</span><span className="ap-open-text">Ask</span></button>
+      )}
       {open ? (
         <div className="ap-overlay" onMouseDown={() => setOpen(false)}>
           <aside className="ap" onMouseDown={(event) => event.stopPropagation()} aria-label="Ask the Hub">

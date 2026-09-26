@@ -581,7 +581,8 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           ) : null}
         </div>
         <CommandPalette lists={spaceTree.flatMap((space) => [...space.lists, ...space.folders.flatMap((folder) => folder.lists)]).map((list) => ({ id: list.id, name: list.name, openItems: list.openItems }))} />
-        <AssistantPanel />
+        {/* Opened from the widget in the corner now, which is where people were already going. */}
+        <AssistantPanel hideLauncher />
         <div className="cu-top-actions">
           <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
