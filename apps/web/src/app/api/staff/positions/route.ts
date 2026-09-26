@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canApproveAccounts } from "@/lib/auth/types";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { createPosition, listPersonnelMembers, listPersonnelPositions, removePosition, setMemberStatus, setPositionHolder } from "@/lib/operations/personnel";
+import { addPositionAssistant, createPosition, listPersonnelMembers, listPersonnelPositions, removePosition, removePositionAssistant, setMemberStatus, setPositionHolder } from "@/lib/operations/personnel";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 // Changing the organisation chart from inside the app.
@@ -33,6 +33,16 @@ const schema = z.discriminatedUnion("action", [
     reportsToPositionId: z.string().trim().max(80).nullable().optional()
   }),
   z.object({ action: z.literal("remove"), positionId: z.string().trim().min(1).max(80) }),
+  // An officer in charge holds the position; assistants hold it with them. Both get work routed to the
+  // functional area, which is the point - a position with three people on it should not go unanswered
+  // because the one incumbent is away.
+  z.object({
+    action: z.literal("addAssistant"),
+    positionId: z.string().trim().min(1).max(80),
+    memberId: z.string().trim().min(1).max(80),
+    roleTitle: z.string().trim().max(80).nullable().optional()
+  }),
+  z.object({ action: z.literal("removeAssistant"), assistantId: z.string().trim().min(1).max(80) }),
   z.object({
     action: z.literal("member"),
     memberId: z.string().trim().min(1).max(80),
@@ -74,6 +84,56 @@ export async function POST(request: Request) {
           : (position?.title ?? "That position") + " is vacant. Its recurring work will have no owner until somebody holds it."
       });
     }
+
+    if (input.action === "addAssistant") {
+
+      await addPositionAssistant(input);
+
+      await recordAuditEvent({
+
+        actorUserId: user.id,
+
+        action: "POSITION_ASSISTANT_ADDED",
+
+        entityType: "personnel_position",
+
+        entityId: input.positionId,
+
+        summary: user.fullName + " added an assistant to a duty position",
+
+        metadata: { memberId: input.memberId, roleTitle: input.roleTitle ?? null }
+
+      });
+
+      return NextResponse.json({ positions: await listPersonnelPositions(), message: "Assistant added." });
+
+    }
+
+
+    if (input.action === "removeAssistant") {
+
+      await removePositionAssistant(input.assistantId);
+
+      await recordAuditEvent({
+
+        actorUserId: user.id,
+
+        action: "POSITION_ASSISTANT_REMOVED",
+
+        entityType: "personnel_position",
+
+        entityId: input.assistantId,
+
+        summary: user.fullName + " removed an assistant from a duty position",
+
+        metadata: {}
+
+      });
+
+      return NextResponse.json({ positions: await listPersonnelPositions(), message: "Assistant removed." });
+
+    }
+
 
     if (input.action === "member") {
       await setMemberStatus(input);

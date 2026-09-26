@@ -10,6 +10,15 @@ export interface PersonnelMemberRecord {
   sourceDate: string;
 }
 
+/** Somebody holding a position alongside the officer in charge. */
+export interface PositionAssistantRecord {
+  id: string;
+  memberId: string;
+  name: string;
+  rank: string;
+  roleTitle: string | null;
+}
+
 export interface PersonnelPositionRecord {
   id: string;
   title: string;
@@ -25,6 +34,7 @@ export interface PersonnelPositionRecord {
   notes: string | null;
   sourceDate: string;
   displayOrder: number;
+  assistants: PositionAssistantRecord[];
 }
 
 export interface PersonnelCommitteeRecord {
@@ -92,6 +102,27 @@ export async function listPersonnelMembers(): Promise<PersonnelMemberRecord[]> {
 }
 
 export async function listPersonnelPositions(): Promise<PersonnelPositionRecord[]> {
+  // Every assistant for every position, fetched once. A query per position would be two dozen round trips
+  // to show one page.
+  const assistantsByPosition = new Map<string, PositionAssistantRecord[]>();
+  try {
+    const rows = await getDatabase()
+      .prepare(
+        `SELECT s.id, s.position_id, s.role_title, m.id AS member_id, m.full_name, m.rank
+         FROM position_assistants s
+         JOIN personnel_members m ON m.id = s.personnel_member_id
+         ORDER BY m.full_name COLLATE NOCASE`
+      )
+      .all<{ id: string; position_id: string; role_title: string | null; member_id: string; full_name: string; rank: string }>();
+    rows.results.forEach((row) => {
+      const held = assistantsByPosition.get(row.position_id) ?? [];
+      held.push({ id: row.id, memberId: row.member_id, name: row.full_name, rank: row.rank, roleTitle: row.role_title });
+      assistantsByPosition.set(row.position_id, held);
+    });
+  } catch {
+    // The table arrives with a migration; until then every position simply has none.
+  }
+
   const result = await getDatabase()
     .prepare(
       `SELECT
@@ -122,7 +153,8 @@ export async function listPersonnelPositions(): Promise<PersonnelPositionRecord[
     assignmentStatus: row.assignment_status,
     notes: row.notes,
     sourceDate: row.source_date,
-    displayOrder: row.display_order
+    displayOrder: row.display_order,
+    assistants: assistantsByPosition.get(row.id) ?? []
   }));
 }
 
@@ -250,4 +282,19 @@ export async function setMemberStatus(input: {
     .prepare("UPDATE personnel_members SET status = ?, status_note = ?, updated_at = ? WHERE id = ?")
     .bind(input.status, input.statusNote?.trim() || null, new Date().toISOString(), input.memberId)
     .run();
+}
+
+export async function addPositionAssistant(input: { positionId: string; memberId: string; roleTitle?: string | null }): Promise<void> {
+  await getDatabase()
+    .prepare(
+      "INSERT INTO position_assistants (id, position_id, personnel_member_id, role_title, created_at) " +
+      "VALUES (?, ?, ?, ?, ?) ON CONFLICT(position_id, personnel_member_id) DO UPDATE SET role_title = excluded.role_title"
+    )
+    .bind(crypto.randomUUID(), input.positionId, input.memberId, input.roleTitle?.trim() || null, new Date().toISOString())
+    .run();
+}
+
+export async function removePositionAssistant(id: string): Promise<void> {
+  // The assistant stops holding the position. Nothing happens to the person, or to the position.
+  await getDatabase().prepare("DELETE FROM position_assistants WHERE id = ?").bind(id).run();
 }

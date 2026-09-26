@@ -77,17 +77,40 @@ const LADDER = [7, 3, 1, 0];
 async function positionHolders(env) {
   const byArea = new Map();
   try {
+    // Two things were wrong here and both failed quietly, which is why work with a date and no owner has
+    // never once reached a position holder. The column is functional_area_key and not functional_area_name,
+    // so the query threw and the catch below swallowed it; and the lookup compares this against a space
+    // name like "Aerospace Education" while the key is "aerospace-education", so even a working query would
+    // have matched nothing. Both the key and the area's real name are now registered, each normalised the
+    // same way, so a department matches whichever it is named after.
+    //
+    // Assistants count. A position with an officer in charge and two assistants has three people doing the
+    // job, and routing to one of them because the chart has one incumbent field is how something sits
+    // unanswered while somebody is away.
     const rows = await env.DB.prepare(
-      `SELECT p.functional_area_name AS area, m.user_id AS user_id
+      `SELECT a.key AS area_key, a.name AS area_name, m.user_id AS user_id
        FROM personnel_positions p
        JOIN personnel_members m ON m.id = p.incumbent_id
-       WHERE m.user_id IS NOT NULL AND m.status = 'ACTIVE' AND p.functional_area_name IS NOT NULL`
+       JOIN functional_areas a ON a.key = p.functional_area_key
+       WHERE m.user_id IS NOT NULL AND m.status = 'ACTIVE'
+       UNION
+       SELECT a.key AS area_key, a.name AS area_name, m.user_id AS user_id
+       FROM position_assistants s
+       JOIN personnel_positions p ON p.id = s.position_id
+       JOIN personnel_members m ON m.id = s.personnel_member_id
+       JOIN functional_areas a ON a.key = p.functional_area_key
+       WHERE m.user_id IS NOT NULL AND m.status = 'ACTIVE'`
     ).all();
+
+    const normalise = (value) => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
     for (const row of rows.results || []) {
-      const key = String(row.area).trim().toLowerCase();
-      const held = byArea.get(key) || [];
-      if (!held.includes(row.user_id)) held.push(row.user_id);
-      byArea.set(key, held);
+      for (const label of [row.area_key, row.area_name]) {
+        const key = normalise(label);
+        if (!key) continue;
+        const held = byArea.get(key) || [];
+        if (!held.includes(row.user_id)) held.push(row.user_id);
+        byArea.set(key, held);
+      }
     }
   } catch {
     // No organisation chart yet. Assignees still get their own notices.
@@ -178,7 +201,8 @@ async function raiseDeadlineNotices(env) {
     queued.push({ ...row, viaPosition: false, viaWatch: true });
   }
   for (const row of unowned.results || []) {
-    for (const userId of holders.get(String(row.space_name || "").trim().toLowerCase()) || []) {
+    const areaKey = String(row.space_name || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    for (const userId of holders.get(areaKey) || []) {
       queued.push({
         ...row,
         user_id: userId,

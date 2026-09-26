@@ -150,6 +150,29 @@ export function StaffPage({
     }
   }
 
+  async function sendPosition(body: Record<string, unknown>, positionId: string, closeAfter = false) {
+    setBusyId(positionId);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/staff/positions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      const data = (await response.json()) as { positions?: PersonnelPositionRecord[]; members?: PersonnelMemberRecord[]; message?: string };
+      if (!response.ok) throw new Error(data.message || "That change could not be saved.");
+      if (data.positions) setPositions(data.positions);
+      if (data.members) setMembers(data.members);
+      // Adding an assistant leaves the position open for editing, because people add two or three at once.
+      if (closeAfter) setEditingPosition(null);
+      setNotice({ tone: "success", message: data.message ?? "Saved." });
+    } catch (error) {
+      setNotice({ tone: "danger", message: error instanceof Error ? error.message : "That change could not be saved." });
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function savePosition(positionId: string, incumbentId: string | null, assignmentStatus: "FILLED" | "ACTING" | "VACANT") {
     setBusyId(positionId);
     setNotice(null);
@@ -278,6 +301,50 @@ export function StaffPage({
                   ) : (
                     <span>{position.incumbentName ? `${position.incumbentRank} ${position.incumbentName}` : "Vacant"}</span>
                   )}
+                  {/* The officer in charge is above; these hold it with them, and work routed to this
+                      functional area reaches all of them. */}
+                  {position.assistants.length ? (
+                    <ul className="org-assistants">
+                      {position.assistants.map((assistant) => (
+                        <li key={assistant.id}>
+                          <span>{assistant.rank} {assistant.name}{assistant.roleTitle ? " · " + assistant.roleTitle : " · assistant"}</span>
+                          {canManage && editingPosition === position.id ? (
+                            <button
+                              type="button"
+                              className="org-assist-x"
+                              aria-label={"Remove " + assistant.name + " from " + position.title}
+                              disabled={busyId === position.id}
+                              onClick={() => sendPosition({ action: "removeAssistant", assistantId: assistant.id }, position.id)}
+                            >
+                              &times;
+                            </button>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+
+                  {canManage && editingPosition === position.id ? (
+                    <select
+                      className="org-assist-add"
+                      value=""
+                      disabled={busyId === position.id}
+                      aria-label={"Add an assistant to " + position.title}
+                      onChange={(event) => {
+                        if (event.target.value) sendPosition({ action: "addAssistant", positionId: position.id, memberId: event.target.value }, position.id);
+                      }}
+                    >
+                      <option value="">+ Add an assistant</option>
+                      {personnelMembers
+                        .filter((member) => member.status === "ACTIVE"
+                          && member.id !== position.incumbentId
+                          && !position.assistants.some((assistant) => assistant.memberId === member.id))
+                        .map((member) => (
+                          <option key={member.id} value={member.id}>{member.rank} {member.fullName}</option>
+                        ))}
+                    </select>
+                  ) : null}
+
                   <small>{position.reportsToTitle ? `Reports to ${position.reportsToTitle}` : "Unit command"}</small>
                   {position.notes ? <em>{position.notes}</em> : null}
                 </div>
