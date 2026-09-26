@@ -26,6 +26,8 @@ function whenText(reminder: Reminder): string {
 export function RemindersPanel({ itemId, dueOn, canEdit }: { itemId: string; dueOn: string | null; canEdit: boolean }) {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [proposed, setProposed] = useState<Proposed[] | null>(null);
+  /** Read out of the task when it had no due date. Offered, and only set if the proposal is kept. */
+  const [proposedDue, setProposedDue] = useState<string>("");
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -54,10 +56,11 @@ export function RemindersPanel({ itemId, dueOn, canEdit }: { itemId: string; due
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body)
       });
-      const data = (await response.json()) as { reminders?: Reminder[]; proposed?: Proposed[]; message?: string };
+      const data = (await response.json()) as { reminders?: Reminder[]; proposed?: Proposed[]; proposedDueOn?: string | null; message?: string };
       if (!response.ok) throw new Error(data.message || "That could not be saved.");
       if (data.reminders) setReminders(data.reminders);
       if (data.proposed) setProposed(data.proposed);
+      if (data.proposedDueOn) setProposedDue(data.proposedDueOn);
       if (data.message) setNote(data.message);
       return data;
     } catch (caught) {
@@ -72,15 +75,20 @@ export function RemindersPanel({ itemId, dueOn, canEdit }: { itemId: string; due
     <section className="rm">
       <h3 className="tp-h">
         Reminders
-        {canEdit && dueOn ? (
-          <button type="button" className="rm-btn" disabled={busy} onClick={() => send({ action: "suggest" })}>
-            {busy ? "…" : reminders.length ? "Suggest again" : "Set them up for me"}
+        {/* Always offered, with or without a due date. Hiding it on an undated task meant the one case where
+            somebody most needs help was the case with no button. */}
+        {canEdit ? (
+          <button type="button" className="rm-btn rm-btn--ai" disabled={busy} onClick={() => send({ action: "suggest" })}>
+            <span aria-hidden="true">✨</span> {busy ? "Working…" : reminders.length ? "Suggest again" : "Set them up for me"}
           </button>
         ) : null}
       </h3>
 
-      {!dueOn ? (
-        <p className="rm-faint">This task has no due date, so there is nothing to count back from. Give it one and the Hub can work out when to tell you.</p>
+      {!dueOn && !proposedDue ? (
+        <p className="rm-faint">
+          No due date yet. Press the button and the assistant will look for one in the task itself &mdash; squadron work
+          usually carries the date in its own words &mdash; and work the reminders back from it.
+        </p>
       ) : null}
 
       {note ? <p className="rm-note" role="status">{note}</p> : null}
@@ -89,6 +97,12 @@ export function RemindersPanel({ itemId, dueOn, canEdit }: { itemId: string; due
       {proposed?.length ? (
         <div className="rm-proposed">
           <strong>Suggested — nothing is set yet</strong>
+          {proposedDue ? (
+            <label className="rm-due">
+              <span>Due date to set on this task</span>
+              <input type="date" value={proposedDue} onChange={(event) => setProposedDue(event.target.value)} />
+            </label>
+          ) : null}
           <ul>
             {proposed.map((entry, index) => (
               <li key={entry.remindOn + index}>
@@ -110,14 +124,19 @@ export function RemindersPanel({ itemId, dueOn, canEdit }: { itemId: string; due
             ))}
           </ul>
           <div className="rm-actions">
-            <button type="button" className="rm-btn" onClick={() => setProposed(null)}>Throw away</button>
+            <button type="button" className="rm-btn" onClick={() => { setProposed(null); setProposedDue(""); }}>Throw away</button>
             <button
               type="button"
               className="rm-btn rm-btn--primary"
               disabled={busy || !proposed.length}
               onClick={async () => {
-                await send({ action: "apply", reminders: proposed.filter((row) => row.remindOn) });
+                await send({
+                  action: "apply",
+                  reminders: proposed.filter((row) => row.remindOn),
+                  ...(proposedDue ? { dueOn: proposedDue } : {})
+                });
                 setProposed(null);
+                setProposedDue("");
               }}
             >
               Keep these
@@ -209,6 +228,9 @@ const rmCss = [
   ".rm-proposed ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
   ".rm-proposed li{display:grid;grid-template-columns:140px minmax(0,1fr) auto;gap:6px;align-items:center}",
   ".rm-proposed input{font:inherit;font-size:12.5px;padding:5px 7px;border-radius:7px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit;min-width:0}",
+  ".rm-btn--ai{border-color:#7b68ee;color:#7b68ee}",
+  ".rm-due{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600}",
+  ".rm-due input{max-width:180px}",
   ".rm-actions,.rm-add{display:flex;gap:7px;flex-wrap:wrap;align-items:center}",
   ".rm-btn{border:1px solid var(--border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}",
   ".rm-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}",

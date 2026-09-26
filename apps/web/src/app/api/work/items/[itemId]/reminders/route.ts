@@ -3,11 +3,13 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { getItemDetail } from "@/lib/work/items";
+import { updateItem } from "@/lib/work/items";
 import {
   addReminder,
   applyProposal,
   clearReminders,
   deleteReminder,
+  findStatedDeadline,
   listReminders,
   proposeReminders,
   updateReminder
@@ -24,7 +26,12 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("suggest") }),
-  z.object({ action: z.literal("apply"), reminders: z.array(z.object({ remindOn: date, note: z.string().trim().max(160) })).max(6) }),
+  z.object({
+    action: z.literal("apply"),
+    reminders: z.array(z.object({ remindOn: date, note: z.string().trim().max(160) })).max(6),
+    // Present only when the task had no due date and the person accepted the one that was read out of it.
+    dueOn: date.optional()
+  }),
   z.object({ action: z.literal("add"), remindOn: date, note: z.string().trim().max(160).nullable().optional() }),
   z.object({ action: z.literal("update"), id: z.string().trim().min(1).max(80), remindOn: date.optional(), note: z.string().trim().max(160).nullable().optional() }),
   z.object({ action: z.literal("delete"), id: z.string().trim().min(1).max(80) }),
@@ -53,31 +60,58 @@ export async function POST(request: Request, context: { params: Promise<{ itemId
     if (!item) return NextResponse.json({ message: "That task is gone." }, { status: 404 });
 
     if (input.action === "suggest") {
-      // Reads and returns. Nothing is written by asking.
-      if (!item.dueOn) {
-        return NextResponse.json({ proposed: [], message: "Give it a due date first — a reminder needs something to count back from." });
+      // Reads and returns. Nothing is written by asking, including the due date.
+      let dueOn = item.dueOn;
+      let foundDate: { dueOn: string | null; because: string | null } = { dueOn: null, because: null };
+
+      // A task with no due date is the common case, and the date is usually sitting in the task's own words:
+      // "due 1 Nov", "Operations Briefing - Tue 15 Sep 2026". Asking somebody to retype it before the
+      // assistant will help is the kind of small refusal that stops a feature being used at all.
+      if (!dueOn) {
+        foundDate = await findStatedDeadline({ userId: user.id, title: item.title, description: item.description });
+        dueOn = foundDate.dueOn;
       }
+
+      if (!dueOn) {
+        return NextResponse.json({
+          proposed: [],
+          message: "This task does not say when it is due, and a deadline nobody set is worse than none. Put a date on it and press this again."
+        });
+      }
+
       const result = await proposeReminders({
         userId: user.id,
         title: item.title,
         description: item.description,
-        dueOn: item.dueOn
+        dueOn
       });
+
       return NextResponse.json({
         ...result,
-        message: result.proposed.length
-          ? result.fromAssistant
-            ? "Here is what it suggests. Change anything before you keep it."
-            : "No assistant was available, so this is the plain schedule. Change anything before you keep it."
-          : "It is due too soon for a reminder to be any use."
+        // Offered, never applied. The due date is part of the proposal a person accepts or throws away.
+        proposedDueOn: item.dueOn ? null : dueOn,
+        proposedDueBecause: foundDate.because,
+        message: !result.proposed.length
+          ? "It is due too soon for a reminder to be any use."
+          : item.dueOn
+            ? result.fromAssistant
+              ? "Here is what it suggests. Change anything before you keep it."
+              : "No assistant was available, so this is the plain schedule. Change anything before you keep it."
+            : foundDate.because
+              ? "The task says " + JSON.stringify(foundDate.because) + ", so it is read as due " + dueOn + ". Check that before you keep it."
+              : "Read as due " + dueOn + " from the task itself. Check that before you keep it."
       });
     }
 
     if (input.action === "apply") {
+      // The date is set first, so a reminder is never left counting back from nothing.
+      if (input.dueOn && !item.dueOn) await updateItem(itemId, { dueOn: input.dueOn });
       const kept = await applyProposal({ itemId, proposed: input.reminders, userId: user.id });
       return NextResponse.json({
         reminders: await listReminders(itemId),
-        message: kept ? kept + (kept === 1 ? " reminder set." : " reminders set.") : "Nothing new to add."
+        dueOn: input.dueOn && !item.dueOn ? input.dueOn : undefined,
+        message: (kept ? kept + (kept === 1 ? " reminder set." : " reminders set.") : "Nothing new to add.")
+          + (input.dueOn && !item.dueOn ? " Due date set to " + input.dueOn + "." : "")
       });
     }
 

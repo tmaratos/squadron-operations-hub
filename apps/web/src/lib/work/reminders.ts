@@ -12,6 +12,9 @@ import { parseJsonReply } from "@/lib/ai/local";
 // deadline, deduplicated and sorted - because a reminder for a date that does not exist, or one that fires
 // after the thing is due, is worse than no reminder at all.
 
+/** A line break, named so it survives being written by a script. */
+const NEWLINE = String.fromCharCode(10);
+
 export type ReminderSource = "PERSON" | "ASSISTANT";
 
 export interface Reminder {
@@ -175,6 +178,52 @@ export function plainSchedule(dueOn: string, from = today()): ProposedReminder[]
  * nothing in the past, nothing after the deadline, no duplicates, at most five. If nothing survives that,
  * the plain schedule is used, so the feature never simply fails.
  */
+/**
+ * The deadline a task already states, for tasks that have no due date set.
+ *
+ * Squadron work arrives with the date in the words: "Operations Briefing - Tue 15 Sep 2026", "due 1 Nov",
+ * "suspense 15 September". The date is sitting there and the field is empty, so the assistant reads it out
+ * rather than asking somebody to retype it.
+ *
+ * It is a reading, never a guess. Where the task states no date, this returns null and says so, because a
+ * deadline nobody set is worse than no deadline: it looks like a commitment somebody made.
+ */
+export async function findStatedDeadline(input: {
+  userId: string;
+  title: string;
+  description?: string | null;
+}): Promise<{ dueOn: string | null; because: string | null }> {
+  const system = [
+    "You read one task from a Civil Air Patrol squadron and find the deadline it already states.",
+    'Reply with JSON only: {"dueOn": "YYYY-MM-DD" or null, "because": "<the words in the task that say so>"}',
+    "Rules:",
+    "- Only a date the task actually states, in its title or its description. Never one you think is sensible.",
+    "- because must be the words that carry the date, copied from the task.",
+    "- If the task states no date, reply {\"dueOn\": null, \"because\": null}. That is a correct answer.",
+    "- Today is " + today() + ". A bare day and month means the next one still to come."
+  ].join(NEWLINE);
+
+  try {
+    const raw = await aiChatFor(input.userId, [
+      { role: "system", content: system },
+      { role: "user", content: ["Task: " + input.title, input.description ? "Detail: " + input.description.slice(0, 1200) : ""].filter(Boolean).join(NEWLINE) }
+    ], { json: true, maxTokens: 200 });
+
+    const parsed = parseJsonReply<{ dueOn?: unknown; because?: unknown }>(raw, {});
+    if (!isDate(parsed.dueOn)) return { dueOn: null, because: null };
+    // A stated deadline in the past is still a fact about the task, but it is no use to count back from.
+    if (parsed.dueOn < today()) return { dueOn: null, because: null };
+
+    const because = typeof parsed.because === "string" ? parsed.because.trim().slice(0, 160) : "";
+    const words = (input.title + " " + (input.description ?? "")).toLowerCase();
+    // The quote has to appear in the task. Without this check the reason is just the model's own sentence.
+    const honest = because.length > 3 && words.includes(because.toLowerCase().slice(0, Math.min(18, because.length)));
+    return { dueOn: parsed.dueOn, because: honest ? because : null };
+  } catch {
+    return { dueOn: null, because: null };
+  }
+}
+
 export async function proposeReminders(input: {
   userId: string;
   title: string;
