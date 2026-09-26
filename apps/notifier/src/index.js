@@ -233,6 +233,73 @@ async function raiseDeadlineNotices(env) {
     );
   }
 
+  // Reminders somebody set on the task itself, rather than the ladder above.
+  //
+  // These are exact: a date a person chose, or accepted from the assistant, and they go to whoever the task
+  // is assigned to. A task carrying its own reminders still gets the ladder as well - the point of setting
+  // one for six weeks out is the early warning, not going quiet a week before a deadline.
+  let own = { results: [] };
+  try {
+    own = await env.DB.prepare(
+      `SELECT r.id AS reminder_id, r.remind_on, r.note,
+              i.id AS item_id, i.title, i.due_on, l.id AS list_id, l.name AS list_name,
+              a.user_id AS user_id, COALESCE(p.email_enabled, 1) AS email_enabled
+       FROM item_reminders r
+       JOIN items i ON i.id = r.item_id
+       JOIN lists l ON l.id = i.list_id
+       JOIN item_assignees a ON a.item_id = i.id
+       JOIN users u ON u.id = a.user_id
+       LEFT JOIN list_statuses s ON s.id = i.status_id
+       LEFT JOIN notification_prefs p ON p.user_id = a.user_id
+       WHERE r.sent_at IS NULL
+         AND r.remind_on <= ?
+         AND i.archived_at IS NULL
+         AND l.archived_at IS NULL
+         AND u.status IN ('APPROVED','PENDING')
+         AND (s.category IS NULL OR s.category NOT IN ('DONE','CLOSED'))`
+    ).bind(today).all();
+  } catch {
+    // The table arrives with a migration. Until then there are none, and the ladder is all there is.
+    own = { results: [] };
+  }
+
+  const firing = new Set();
+  for (const row of own.results || []) {
+    firing.add(row.reminder_id);
+    const days = row.due_on ? daysBetween(today, row.due_on) : null;
+    statements.push(
+      env.DB.prepare(
+        "INSERT INTO notifications (id, user_id, kind, title, body, item_id, list_id, url, actor_user_id, dedupe_key, email_state, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?) ON CONFLICT DO NOTHING"
+      ).bind(
+        crypto.randomUUID(),
+        row.user_id,
+        "DUE_SOON",
+        row.note ? row.title + " — " + row.note : row.title,
+        [
+          "In " + row.list_name + ".",
+          row.due_on ? (days > 0 ? "Due in " + plural(days, "day") + ", on " + row.due_on + "." : days === 0 ? "Due today." : "Due " + row.due_on + ".") : null,
+          "You asked to be reminded now."
+        ].filter(Boolean).join(" "),
+        row.item_id,
+        row.list_id,
+        APP_URL + "/lists/" + row.list_id + "?item=" + row.item_id,
+        // Its own id, so one reminder sends once however many times this runs in a day.
+        "REMINDER:" + row.reminder_id,
+        row.email_enabled ? "PENDING" : "SKIPPED",
+        now
+      )
+    );
+  }
+
+  // Marked sent in the same batch as the notice, so a failure part way through does not lose the reminder
+  // or send it twice.
+  for (const reminderId of firing) {
+    statements.push(
+      env.DB.prepare("UPDATE item_reminders SET sent_at = ?, updated_at = ? WHERE id = ?").bind(now, now, reminderId)
+    );
+  }
+
   if (!statements.length) return 0;
   for (let index = 0; index < statements.length; index += 50) {
     await env.DB.batch(statements.slice(index, index + 50));

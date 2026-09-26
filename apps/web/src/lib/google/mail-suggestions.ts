@@ -1,6 +1,6 @@
 import { parseJsonReply } from "@/lib/ai/local";
 import { aiChatFor } from "@/lib/ai/provider";
-import { listLabelledMail, listRecentMail, type MailMessage } from "./gmail";
+import { listAllMail, listLabelledMail, listRecentMail, type MailMessage } from "./gmail";
 import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 
 // Reading squadron mail and saying what it thinks needs doing. Suggestions only: nothing is created until
@@ -47,7 +47,7 @@ function fromTheHub(message: MailMessage): boolean {
  * Labelling is the default and stays the default. Reading somebody's whole inbox is a different thing to
  * consent to, so it is never the setting somebody arrives on - they choose it, and can choose back.
  */
-export type ScanMode = "LABEL" | "INBOX";
+export type ScanMode = "LABEL" | "INBOX" | "ALL";
 
 export async function getScanMode(userId: string): Promise<ScanMode> {
   try {
@@ -55,7 +55,7 @@ export async function getScanMode(userId: string): Promise<ScanMode> {
       .prepare("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mail_scan'")
       .bind(userId)
       .first<{ value: string }>();
-    return row?.value === "INBOX" ? "INBOX" : "LABEL";
+    return row?.value === "INBOX" ? "INBOX" : row?.value === "ALL" ? "ALL" : "LABEL";
   } catch {
     return "LABEL";
   }
@@ -73,7 +73,11 @@ export async function setScanMode(userId: string, mode: ScanMode): Promise<void>
 
 export async function suggestFromMail(userId: string, label?: string): Promise<{ suggestions: MailSuggestion[]; read: number }> {
   const mode = await getScanMode(userId);
-  const all = mode === "INBOX" ? await listRecentMail(userId, 20) : await listLabelledMail(userId, label);
+  const all = mode === "ALL"
+    ? await listAllMail(userId, 40)
+    : mode === "INBOX"
+      ? await listRecentMail(userId, 20)
+      : await listLabelledMail(userId, label);
   const messages = all.filter((message) => !fromTheHub(message));
   if (!messages.length) return { suggestions: [], read: all.length };
 

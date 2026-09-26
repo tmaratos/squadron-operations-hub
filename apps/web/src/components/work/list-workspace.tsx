@@ -5,6 +5,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
 import { MentionBox, renderMentions, toStored } from "./mention-box";
 import { Dictate } from "@/components/dictate";
+import { RemindersPanel } from "@/components/work/reminders-panel";
 import { providerLabel } from "@/lib/ai/vendors";
 import { LinkPanel } from "./link-panel";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
@@ -2001,6 +2002,10 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                 </div>
               </section>
             ) : null}
+
+            <section className="tp-section">
+              <RemindersPanel itemId={item.id} dueOn={item.dueOn ?? null} canEdit={canEdit} />
+            </section>
 
             <section className="tp-section">
               <h3 className="tp-h">

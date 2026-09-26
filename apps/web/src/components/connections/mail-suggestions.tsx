@@ -19,9 +19,9 @@ interface Suggestion {
 export function MailSuggestions() {
   const [state, setState] = useState<"idle" | "loading" | "ready">("idle");
   // Which mail the member has asked the Hub to read. Labelling is what everybody starts on.
-  const [scan, setScan] = useState<"LABEL" | "INBOX">("LABEL");
+  const [scan, setScan] = useState<"LABEL" | "INBOX" | "ALL">("LABEL");
 
-  async function saveScan(mode: "LABEL" | "INBOX") {
+  async function saveScan(mode: "LABEL" | "INBOX" | "ALL") {
     const previous = scan;
     setScan(mode);
     try {
@@ -51,7 +51,7 @@ export function MailSuggestions() {
     try {
       const response = await fetch("/api/google/gmail/suggestions");
       const data = (await response.json()) as { connected?: boolean; label?: string; mode?: string; suggestions?: Suggestion[]; read?: number; message?: string };
-      if (data.mode) setScan(data.mode === "INBOX" ? "INBOX" : "LABEL");
+      if (data.mode === "INBOX" || data.mode === "ALL" || data.mode === "LABEL") setScan(data.mode);
       setConnected(data.connected !== false);
       if (data.label) setLabel(data.label);
       setSuggestions((data.suggestions ?? []).filter((suggestion) => suggestion.actionable));
@@ -110,6 +110,14 @@ export function MailSuggestions() {
                 <strong>My recent inbox</strong>
                 The last two weeks of real mail, skipping newsletters, promotions and anything from a noreply
                 address. You do not have to label anything.
+              </span>
+            </label>
+            <label className={scan === "ALL" ? "is-on" : ""}>
+              <input type="radio" name="ms-scan" checked={scan === "ALL"} onChange={() => saveScan("ALL")} />
+              <span>
+                <strong>Everything except deleted mail</strong>
+                Every folder, not just the inbox &mdash; archived mail and anything filed under a label counts. The
+                last ninety days, and never your trash or spam.
               </span>
             </label>
           </fieldset>

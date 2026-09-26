@@ -147,8 +147,32 @@ export const INBOX_SCAN_QUERY = [
   "-list:{*}"
 ].join(" ");
 
+/**
+ * Everything, which means every folder rather than every message ever sent.
+ *
+ * No in:inbox, so archived mail and anything filed into a label counts - that is the point of it. Trash and
+ * spam are left out: a squadron member who deleted something has already said what they think of it, and
+ * spam is spam. Ninety days rather than forever, because the point is work somebody still has to do, and a
+ * message nobody has acted on since spring is not that.
+ */
+export const ALL_MAIL_SCAN_QUERY = [
+  "newer_than:90d",
+  "-in:trash",
+  "-in:spam",
+  "-in:chats",
+  "-category:promotions",
+  "-category:social",
+  "-from:noreply",
+  "-from:no-reply",
+  "-from:donotreply"
+].join(" ");
+
 export async function listRecentMail(userId: string, limit = 20): Promise<MailMessage[]> {
   return listMailMatching(userId, INBOX_SCAN_QUERY, limit);
+}
+
+export async function listAllMail(userId: string, limit = 40): Promise<MailMessage[]> {
+  return listMailMatching(userId, ALL_MAIL_SCAN_QUERY, limit);
 }
 
 export async function listLabelledMail(userId: string, label = HUB_LABEL, limit = 10): Promise<MailMessage[]> {

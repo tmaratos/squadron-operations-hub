@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   }
 }
 
-const scanSchema = z.object({ action: z.literal("scan"), mode: z.enum(["LABEL", "INBOX"]) });
+const scanSchema = z.object({ action: z.literal("scan"), mode: z.enum(["LABEL", "INBOX", "ALL"]) });
 
 const schema = z.object({
   title: z.string().trim().min(2).max(300),
@@ -51,15 +51,24 @@ export async function POST(request: Request) {
       await setScanMode(user.id, asScan.data.mode);
       await recordAuditEvent({
         actorUserId: user.id,
-        action: asScan.data.mode === "INBOX" ? "MAIL_SCAN_INBOX" : "MAIL_SCAN_LABEL",
+        action: "MAIL_SCAN_" + asScan.data.mode,
         entityType: "user",
         entityId: user.id,
-        summary: user.fullName + (asScan.data.mode === "INBOX"
-          ? " had the Hub read their recent inbox"
-          : " had the Hub read only mail they label"),
+        summary: user.fullName + (asScan.data.mode === "ALL"
+          ? " had the Hub read all their mail except trash and spam"
+          : asScan.data.mode === "INBOX"
+            ? " had the Hub read their recent inbox"
+            : " had the Hub read only mail they label"),
         metadata: { mode: asScan.data.mode }
       });
-      return NextResponse.json({ mode: asScan.data.mode, message: asScan.data.mode === "INBOX" ? "Reading your recent inbox." : "Reading only what you label." });
+      return NextResponse.json({
+        mode: asScan.data.mode,
+        message: asScan.data.mode === "ALL"
+          ? "Reading everything except trash and spam."
+          : asScan.data.mode === "INBOX"
+            ? "Reading your recent inbox."
+            : "Reading only what you label."
+      });
     }
 
     if (user.globalRole === "READ_ONLY") return NextResponse.json({ message: "Read-only accounts cannot create work." }, { status: 403 });
