@@ -126,12 +126,41 @@ function plainTextFrom(part: GmailPart | undefined): string {
 }
 
 /** The messages a member has labelled for the Hub. Nothing else in the mailbox is opened. */
+/**
+ * The search Gmail is given when a member asks the Hub to watch their whole inbox rather than one label.
+ *
+ * Deliberately narrow for something described as "everything". Two weeks, because an email from March is
+ * not a job somebody is about to forget, and without the bulk categories, because a squadron inbox is
+ * mostly newsletters and receipts and every one of them costs a read and an answer. Anything automated
+ * enough to send from noreply is not asking a person for anything.
+ */
+export const INBOX_SCAN_QUERY = [
+  "in:inbox",
+  "newer_than:14d",
+  "-category:promotions",
+  "-category:social",
+  "-category:forums",
+  "-category:updates",
+  "-from:noreply",
+  "-from:no-reply",
+  "-from:donotreply",
+  "-list:{*}"
+].join(" ");
+
+export async function listRecentMail(userId: string, limit = 20): Promise<MailMessage[]> {
+  return listMailMatching(userId, INBOX_SCAN_QUERY, limit);
+}
+
 export async function listLabelledMail(userId: string, label = HUB_LABEL, limit = 10): Promise<MailMessage[]> {
+  return listMailMatching(userId, "label:" + label, limit);
+}
+
+async function listMailMatching(userId: string, search: string, limit: number): Promise<MailMessage[]> {
   if (!(await canRead(userId))) throw new Error("Connect Gmail reading in My connections first.");
   const token = await getUserGoogleAccessToken(userId);
   const headers = { Authorization: "Bearer " + token };
 
-  const query = new URLSearchParams({ q: "label:" + label, maxResults: String(limit) });
+  const query = new URLSearchParams({ q: search, maxResults: String(limit) });
   const listResponse = await fetch(GMAIL_API + "/users/me/messages?" + query, { headers });
   if (!listResponse.ok) {
     // Google says why. Replacing that with a guess - "reconnect Gmail" - sends people round a loop that

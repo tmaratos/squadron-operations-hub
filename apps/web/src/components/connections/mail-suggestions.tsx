@@ -18,6 +18,25 @@ interface Suggestion {
 
 export function MailSuggestions() {
   const [state, setState] = useState<"idle" | "loading" | "ready">("idle");
+  // Which mail the member has asked the Hub to read. Labelling is what everybody starts on.
+  const [scan, setScan] = useState<"LABEL" | "INBOX">("LABEL");
+
+  async function saveScan(mode: "LABEL" | "INBOX") {
+    const previous = scan;
+    setScan(mode);
+    try {
+      const response = await fetch("/api/google/gmail/suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "scan", mode })
+      });
+      if (!response.ok) throw new Error("failed");
+    } catch {
+      // Put the choice back rather than leaving somebody believing the Hub is reading more, or less, than it is.
+      setScan(previous);
+    }
+  }
+
   const [connected, setConnected] = useState(true);
   const [label, setLabel] = useState("Hub");
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -31,7 +50,8 @@ export function MailSuggestions() {
     setNote(null);
     try {
       const response = await fetch("/api/google/gmail/suggestions");
-      const data = (await response.json()) as { connected?: boolean; label?: string; suggestions?: Suggestion[]; read?: number; message?: string };
+      const data = (await response.json()) as { connected?: boolean; label?: string; mode?: string; suggestions?: Suggestion[]; read?: number; message?: string };
+      if (data.mode) setScan(data.mode === "INBOX" ? "INBOX" : "LABEL");
       setConnected(data.connected !== false);
       if (data.label) setLabel(data.label);
       setSuggestions((data.suggestions ?? []).filter((suggestion) => suggestion.actionable));
@@ -69,10 +89,30 @@ export function MailSuggestions() {
         <div>
           <h2>Turn email into tasks</h2>
           <p>
-            Put the label <strong>{label}</strong> on any email in Gmail. The Hub reads only those messages, on its
-            own, while you have it open, and brings anything worth doing to you in the corner. Nothing is created
-            until you say so.
+            The Hub reads your mail on its own while you have it open and brings anything worth doing to you in the
+            corner. Nothing is ever created until you say so.
           </p>
+          {/* Which mail gets read is the member's decision, and the narrow option is the one they arrive on.
+              Reading somebody's whole inbox is a different thing to consent to than reading what they chose
+              to hand over, and it should never happen because a default said so. */}
+          <fieldset className="ms-scan">
+            <legend>What it reads</legend>
+            <label className={scan === "LABEL" ? "is-on" : ""}>
+              <input type="radio" name="ms-scan" checked={scan === "LABEL"} onChange={() => saveScan("LABEL")} />
+              <span>
+                <strong>Only what I label</strong>
+                Put the label <strong>{label}</strong> on an email in Gmail and leave it there. Nothing else is read.
+              </span>
+            </label>
+            <label className={scan === "INBOX" ? "is-on" : ""}>
+              <input type="radio" name="ms-scan" checked={scan === "INBOX"} onChange={() => saveScan("INBOX")} />
+              <span>
+                <strong>My recent inbox</strong>
+                The last two weeks of real mail, skipping newsletters, promotions and anything from a noreply
+                address. You do not have to label anything.
+              </span>
+            </label>
+          </fieldset>
         </div>
       </div>
 
@@ -124,6 +164,12 @@ const msCss = [
   ".ms-head p{margin:4px 0 0;font-size:13.5px;line-height:1.55;color:var(--cu-muted,#656f7d);max-width:64ch}",
   ".ms-btn{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:14px;font-weight:600;padding:9px 16px;border-radius:8px;cursor:pointer;white-space:nowrap}",
   ".ms-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}.ms-btn:disabled{opacity:.55;cursor:default}",
+  ".ms-scan{border:0;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}",
+  ".ms-scan legend{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.55;padding:0}",
+  ".ms-scan label{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--cu-border,#e4e6eb);border-radius:9px;cursor:pointer;font-size:12.5px;line-height:1.5}",
+  ".ms-scan label.is-on{border-color:#7b68ee;background:rgba(123,104,238,.08)}",
+  ".ms-scan label span{display:flex;flex-direction:column;gap:2px;min-width:0}",
+  ".ms-scan label strong{font-size:13px}",
   ".ms-note{margin:12px 0 0;font-size:13px;line-height:1.55;padding:9px 12px;border-radius:8px;background:rgba(123,104,238,.1)}",
   ".ms-list{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:8px}",
   ".ms-list li{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 13px;border:1px solid var(--cu-border,#e4e6eb);border-radius:10px}",

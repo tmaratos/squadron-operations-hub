@@ -1,7 +1,7 @@
 import { parseJsonReply } from "@/lib/ai/local";
 import { aiChatFor } from "@/lib/ai/provider";
-import { listLabelledMail, type MailMessage } from "./gmail";
-import { getCloudflareEnv } from "@/lib/cloudflare";
+import { listLabelledMail, listRecentMail, type MailMessage } from "./gmail";
+import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 
 // Reading squadron mail and saying what it thinks needs doing. Suggestions only: nothing is created until
 // a member presses Add. The email it came from is always shown alongside, so a wrong reading is obvious
@@ -41,8 +41,39 @@ function fromTheHub(message: MailMessage): boolean {
   return sender.includes("hub@") && sender.includes("tristanmaratos.com");
 }
 
+/**
+ * What a member has asked the Hub to read: only what they label, or their recent inbox.
+ *
+ * Labelling is the default and stays the default. Reading somebody's whole inbox is a different thing to
+ * consent to, so it is never the setting somebody arrives on - they choose it, and can choose back.
+ */
+export type ScanMode = "LABEL" | "INBOX";
+
+export async function getScanMode(userId: string): Promise<ScanMode> {
+  try {
+    const row = await getDatabase()
+      .prepare("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mail_scan'")
+      .bind(userId)
+      .first<{ value: string }>();
+    return row?.value === "INBOX" ? "INBOX" : "LABEL";
+  } catch {
+    return "LABEL";
+  }
+}
+
+export async function setScanMode(userId: string, mode: ScanMode): Promise<void> {
+  await getDatabase()
+    .prepare(
+      "INSERT INTO user_settings (user_id, key, value, updated_at) VALUES (?, 'mail_scan', ?, ?) " +
+      "ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+    )
+    .bind(userId, mode, new Date().toISOString())
+    .run();
+}
+
 export async function suggestFromMail(userId: string, label?: string): Promise<{ suggestions: MailSuggestion[]; read: number }> {
-  const all = await listLabelledMail(userId, label);
+  const mode = await getScanMode(userId);
+  const all = mode === "INBOX" ? await listRecentMail(userId, 20) : await listLabelledMail(userId, label);
   const messages = all.filter((message) => !fromTheHub(message));
   if (!messages.length) return { suggestions: [], read: all.length };
 

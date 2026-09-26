@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getScanMode, setScanMode } from "@/lib/google/mail-suggestions";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
@@ -15,16 +16,18 @@ export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
   if (!(await canRead(user.id))) {
-    return NextResponse.json({ connected: false, label: HUB_LABEL, suggestions: [] });
+    return NextResponse.json({ connected: false, label: HUB_LABEL, suggestions: [], mode: await getScanMode(user.id) });
   }
   try {
     const label = new URL(request.url).searchParams.get("label") || HUB_LABEL;
     const result = await suggestFromMail(user.id, label);
-    return NextResponse.json({ connected: true, label, ...result });
+    return NextResponse.json({ connected: true, label, mode: await getScanMode(user.id), ...result });
   } catch (error) {
     return NextResponse.json({ connected: true, suggestions: [], message: error instanceof Error ? error.message : "Your mail could not be read." }, { status: 400 });
   }
 }
+
+const scanSchema = z.object({ action: z.literal("scan"), mode: z.enum(["LABEL", "INBOX"]) });
 
 const schema = z.object({
   title: z.string().trim().min(2).max(300),
@@ -39,8 +42,28 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
+    const body = await request.json();
+
+    // Changing what the Hub reads is a setting, not creating work, so it is allowed before the read-only
+    // check - and it is the one thing on this endpoint that a read-only member should still control.
+    const asScan = scanSchema.safeParse(body);
+    if (asScan.success) {
+      await setScanMode(user.id, asScan.data.mode);
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: asScan.data.mode === "INBOX" ? "MAIL_SCAN_INBOX" : "MAIL_SCAN_LABEL",
+        entityType: "user",
+        entityId: user.id,
+        summary: user.fullName + (asScan.data.mode === "INBOX"
+          ? " had the Hub read their recent inbox"
+          : " had the Hub read only mail they label"),
+        metadata: { mode: asScan.data.mode }
+      });
+      return NextResponse.json({ mode: asScan.data.mode, message: asScan.data.mode === "INBOX" ? "Reading your recent inbox." : "Reading only what you label." });
+    }
+
     if (user.globalRole === "READ_ONLY") return NextResponse.json({ message: "Read-only accounts cannot create work." }, { status: 403 });
-    const input = schema.parse(await request.json());
+    const input = schema.parse(body);
 
     const spaces = await getWorkspaceTree();
     const lists = spaces.flatMap((space) => [...space.lists, ...space.folders.flatMap((folder) => folder.lists)]);
