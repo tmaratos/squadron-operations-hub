@@ -113,6 +113,16 @@ export default function StartHerePage() {
               </div>
             </article>
             <article className="record-row">
+              <div className="record-row__marker record-row__marker--success" />
+              <div className="record-row__content">
+                <strong>Turn an email into a task by forwarding it</strong>
+                <span>
+                  You have your own address for this, under Connect &rarr; My connections. Forward any email to it and
+                  it becomes a task in Command Intake, assigned to you.
+                </span>
+              </div>
+            </article>
+            <article className="record-row">
               <div className="record-row__marker record-row__marker--info" />
               <div className="record-row__content">
                 <strong>Follow work that is not yours</strong>
@@ -124,6 +134,17 @@ export default function StartHerePage() {
               <div className="record-row__content">
                 <strong>Ask somebody a question on the task</strong>
                 <span>Type @ in a comment and pick a name. They get it in the six o&rsquo;clock email.</span>
+              </div>
+            </article>
+            <article className="record-row">
+              <div className="record-row__marker record-row__marker--info" />
+              <div className="record-row__content">
+                <strong>The Hub emails you once a day, not every time</strong>
+                <span>
+                  One message at six in the evening with everything that needs you &mdash; new jobs, anything due soon,
+                  anything late. It is on from the day your account is made; nobody has to switch it on. Turn it off in
+                  Notifications and everything still appears in the Hub.
+                </span>
               </div>
             </article>
             <article className="record-row">

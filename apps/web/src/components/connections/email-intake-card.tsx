@@ -41,7 +41,7 @@ export function EmailIntakeCard({ address }: { address: string }) {
         <span className="ei-logo" aria-hidden="true">✉</span>
         <div>
           <h2 id="ei-title">Turn email into a task</h2>
-          <p>Forward any email to this address and it becomes a task in Command Intake, assigned to you. The subject becomes the task name.</p>
+          <p>Forward any email to this address and it becomes a task in Command Intake, assigned to you. The subject becomes the task name and the message becomes the description.</p>
         </div>
       </div>
       <p className="ei-address"><code>{current}</code></p>
@@ -50,6 +50,25 @@ export function EmailIntakeCard({ address }: { address: string }) {
         <ConfirmButton className="ei-btn" disabled={busy} question="The address you have now stops working. Sure?" onConfirm={issueNew}>{busy ? "Issuing…" : "Issue a new one"}</ConfirmButton>
       </div>
       {note ? <p className="ei-note" role="status">{note}</p> : null}
+
+      {/* How, not just what. The card described the feature and left somebody holding an address with no
+          idea what to do with it, which is the same as not having the feature. */}
+      <ol className="ei-how">
+        <li>Copy the address above.</li>
+        <li>
+          Open the email you want to turn into a task and press <strong>Forward</strong> &mdash; on a phone that is
+          usually the arrow or the three dots at the top of the message.
+        </li>
+        <li>Paste the address into the To line and send it. Nothing needs to be typed in the message.</li>
+        <li>
+          It appears in <strong>Command Intake</strong> within a minute or two, assigned to you. Give it a date and
+          move it to the list it belongs in.
+        </li>
+      </ol>
+      <p className="ei-fine">
+        Change the subject line before you send it if the original one is useless &mdash; &ldquo;Re: Fwd: FW: question&rdquo;
+        makes a poor task name, and the subject is what you will be reading in a fortnight.
+      </p>
       <p className="ei-fine">Keep it to yourself: anyone who has it can create tasks in your name. Issuing a new address stops the old one working immediately.</p>
     </section>
   );
@@ -62,6 +81,7 @@ const eiCss = [
   ".ei-logo{flex:0 0 auto;width:34px;height:34px;border-radius:9px;background:#2a78d6;color:#fff;font-size:17px;display:flex;align-items:center;justify-content:center}",
   ".ei-head h2{margin:0;font-size:16px}",
   ".ei-head p{margin:4px 0 0;font-size:13.5px;line-height:1.5;color:var(--cu-muted,#656f7d);max-width:64ch}",
+  ".ei-how{margin:14px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:13px;line-height:1.5}",
   ".ei-address{margin:14px 0 0}",
   ".ei-address code{display:block;overflow-x:auto;padding:10px 12px;border-radius:9px;background:rgba(42,120,214,.1);border:1px solid rgba(42,120,214,.28);font-size:15px;font-weight:600;white-space:nowrap}",
   ".ei-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}",
