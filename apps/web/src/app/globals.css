@@ -557,9 +557,14 @@ kbd { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; bac
 .org-assistants { list-style: none; margin: 5px 0 0; padding: 0; display: grid; gap: 4px; }
 .org-assistants li { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .org-assistants li > span { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; font-size: 10px; color: var(--muted-strong); flex-wrap: wrap; }
-.org-assist-role { font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 3px 7px; border-radius: 99px; background: #ece9ff; color: #5b49cf; white-space: nowrap; }
-.org-cadet { font-style: normal; font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 3px 7px; border-radius: 99px; background: #e9f2ff; color: #1265d8; white-space: nowrap; }
-.org-assist-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Scoped through .org-position__body deliberately.
+   The card already styles every strong and em inside it - "strong is the position title colour", "em is the
+   acting note in gold" - and those are two-part selectors. A single class cannot beat them, so the title
+   badge rendered as near-white text on pale lavender and the cadet badge as gold on pale blue: the right
+   pills with unreadable writing on them. */
+.org-position__body .org-assist-role { font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 3px 7px; border-radius: 99px; background: #ece9ff; color: #4a39bd; white-space: nowrap; }
+.org-position__body .org-cadet { font-style: normal; font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; padding: 3px 7px; border-radius: 99px; background: #e9f2ff; color: #0f5bbd; white-space: nowrap; margin: 0; }
+.org-position__body .org-assist-name { font-size: 10px; color: var(--muted-strong); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .org-assist-x { flex: 0 0 auto; border: 0; background: none; color: var(--muted); font-size: 13px; line-height: 1; padding: 2px 5px; border-radius: 6px; cursor: pointer; }
 .org-assist-x:hover { color: #aa3434; background: #fdeaea; }
 
