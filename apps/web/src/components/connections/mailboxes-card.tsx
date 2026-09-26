@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ConfirmButton } from "@/components/confirm-button";
 import type { MailAccount } from "@/lib/google/mail-accounts";
 
@@ -23,6 +23,51 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
   const [accounts, setAccounts] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+
+  /**
+   * What the round trip to Google or Microsoft came back saying.
+   *
+   * Without this the page looked identical whether a mailbox had just been connected, refused, or failed
+   * halfway - somebody pressed a button, went to another site, came back to the same screen and had no way
+   * of telling which had happened.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const outcome = new URLSearchParams(window.location.search).get("mail");
+    if (!outcome) return;
+
+    const said: Record<string, string> = {
+      microsoft_connected: "Mailbox connected. It will be read the same way as the others.",
+      microsoft_denied: "You said no at Microsoft, so nothing was connected. Nothing has changed.",
+      microsoft_blocked: "That mailbox belongs to an organisation whose administrator has to approve outside applications, and has not approved this one. A personal mailbox will connect; this one needs their IT to allow it.",
+      microsoft_unavailable: "Microsoft mailboxes are not set up for this Hub yet. An administrator has to register it once.",
+      microsoft_failed: "Microsoft would not finish the connection. The usual cause is the application missing the Mail.Read and offline_access permissions, or a workplace account whose administrator does not allow it."
+    };
+    setNote(said[outcome] ?? null);
+
+    // Taken out of the address, so a refresh does not repeat a message about something that already happened.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("mail");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }, []);
+
+  async function check(id: string, email: string) {
+    setBusy(id);
+    setNote(null);
+    try {
+      const response = await fetch("/api/google/mailboxes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check", id })
+      });
+      const data = (await response.json()) as { ok?: boolean; message?: string };
+      setNote(email + ": " + (data.message ?? "No answer."));
+    } catch {
+      setNote(email + ": that mailbox could not be reached.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function remove(id: string, email: string) {
     setBusy(id);
@@ -75,14 +120,24 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
                 {" · added " + new Date(account.addedOn).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
               </small>
             </span>
-            <ConfirmButton
-              className="mb-btn mb-btn--danger"
-              disabled={busy === account.id}
-              question={"Stop reading " + account.email + "?"}
-              onConfirm={() => remove(account.id, account.email)}
-            >
-              Remove
-            </ConfirmButton>
+            <span className="mb-row-actions">
+              <button
+                type="button"
+                className="mb-btn"
+                disabled={busy === account.id}
+                onClick={() => check(account.id, account.email)}
+              >
+                {busy === account.id ? "Checking…" : "Check it works"}
+              </button>
+              <ConfirmButton
+                className="mb-btn mb-btn--danger"
+                disabled={busy === account.id}
+                question={"Stop reading " + account.email + "?"}
+                onConfirm={() => remove(account.id, account.email)}
+              >
+                Remove
+              </ConfirmButton>
+            </span>
           </li>
         ))}
       </ul>
@@ -127,6 +182,7 @@ const mbCss = [
   ".mb-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}",
   ".mb-btn--danger{color:#d03b3b}.mb-btn--danger:hover{border-color:#d03b3b}",
   ".mb-note{margin:0;font-size:12.5px;padding:8px 11px;border-radius:8px;background:rgba(123,104,238,.12)}",
+  ".mb-row-actions{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}",
   ".mb-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
   ".mb-fine{margin:0;font-size:11.5px;opacity:.6;line-height:1.5}"
 ].join("");

@@ -13,7 +13,17 @@ function back(request: Request, note: string): NextResponse {
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  if (url.searchParams.has("error")) return back(request, "microsoft_denied");
+
+  // Microsoft says why it refused, and the reasons are genuinely different problems: somebody pressing
+  // Cancel is not the same as a workplace administrator forbidding the whole application, and telling
+  // both of them "that did not work" leaves the second one with nothing to act on.
+  if (url.searchParams.has("error")) {
+    const reason = url.searchParams.get("error") ?? "";
+    const detail = (url.searchParams.get("error_description") ?? "").toLowerCase();
+    if (reason === "access_denied" && detail.includes("admin")) return back(request, "microsoft_blocked");
+    if (detail.includes("consent") && detail.includes("admin")) return back(request, "microsoft_blocked");
+    return back(request, reason === "access_denied" ? "microsoft_denied" : "microsoft_failed");
+  }
 
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
