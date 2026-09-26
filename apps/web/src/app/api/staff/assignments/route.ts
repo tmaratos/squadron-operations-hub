@@ -8,7 +8,10 @@ import { assertSameOrigin } from "@/lib/security/origin";
 const createSchema = z.object({
   // Not every account id is a UUID - invited members and anything seeded are not - and rejecting those
   // here failed the form with "that was invalid" and no way to tell which field was the problem.
-  userId: z.string().trim().min(1).max(80),
+  // The form sends one of these. Most of a squadron has no Hub account, and a duty they hold is still a
+  // fact about the squadron - so a roster name is as valid a holder here as a member who has signed in.
+  userId: z.string().trim().min(1).max(80).optional(),
+  personnelMemberId: z.string().trim().min(1).max(80).optional(),
   functionalAreaKey: z.string().trim().min(1).max(80),
   dutyTitle: z.string().trim().min(2).max(180),
   isPrimary: z.boolean().default(false),
@@ -31,6 +34,9 @@ export async function POST(request: Request) {
     }
 
     const input = createSchema.parse(await request.json());
+    if (!input.userId && !input.personnelMemberId) {
+      return NextResponse.json({ message: "Choose who holds this duty." }, { status: 400 });
+    }
     const assignment = await createDutyAssignment({ ...input, assignedBy: user.id });
     await recordAuditEvent({
       actorUserId: user.id,

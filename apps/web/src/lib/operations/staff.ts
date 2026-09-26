@@ -2,7 +2,8 @@ import { getDatabase } from "@/lib/cloudflare";
 
 export interface DutyAssignmentRecord {
   id: string;
-  userId: string;
+  userId: string | null;
+  personnelMemberId: string | null;
   userName: string;
   userEmail: string;
   functionalAreaKey: string;
@@ -19,7 +20,8 @@ export interface DutyAssignmentRecord {
 
 interface DutyAssignmentRow {
   id: string;
-  user_id: string;
+  user_id: string | null;
+  personnel_member_id: string | null;
   user_name: string;
   user_email: string;
   functional_area_key: string;
@@ -38,7 +40,10 @@ const assignmentSelect = `
   SELECT
     duty_assignments.id,
     duty_assignments.user_id,
-    assignee.full_name AS user_name,
+    duty_assignments.personnel_member_id,
+    -- Whichever of the two holds it. The roster name is used when there is no account, so the chart reads
+    -- the same either way and only the email is missing.
+    COALESCE(assignee.full_name, roster.rank || ' ' || roster.full_name, roster.full_name) AS user_name,
     assignee.email AS user_email,
     duty_assignments.functional_area_key,
     functional_areas.name AS functional_area_name,
@@ -51,7 +56,8 @@ const assignmentSelect = `
     duty_assignments.created_at,
     duty_assignments.updated_at
   FROM duty_assignments
-  JOIN users assignee ON assignee.id = duty_assignments.user_id
+  LEFT JOIN users assignee ON assignee.id = duty_assignments.user_id
+  LEFT JOIN personnel_members roster ON roster.id = duty_assignments.personnel_member_id
   JOIN users assigner ON assigner.id = duty_assignments.assigned_by
   JOIN functional_areas ON functional_areas.key = duty_assignments.functional_area_key
 `;
@@ -62,7 +68,8 @@ export async function listDutyAssignments(options?: { includeEnded?: boolean }):
     .prepare(
       `${assignmentSelect}
        ${where}
-       ORDER BY functional_areas.display_order ASC, duty_assignments.is_primary DESC, assignee.full_name COLLATE NOCASE ASC`
+       ORDER BY functional_areas.display_order ASC, duty_assignments.is_primary DESC,
+                COALESCE(assignee.full_name, roster.full_name) COLLATE NOCASE ASC`
     )
     .all<DutyAssignmentRow>();
   return result.results.map(mapAssignment);
@@ -77,7 +84,8 @@ export async function findDutyAssignmentById(id: string): Promise<DutyAssignment
 }
 
 export async function createDutyAssignment(input: {
-  userId: string;
+  userId?: string | null;
+  personnelMemberId?: string | null;
   functionalAreaKey: string;
   dutyTitle: string;
   isPrimary?: boolean;
@@ -100,13 +108,14 @@ export async function createDutyAssignment(input: {
   await getDatabase()
     .prepare(
       `INSERT INTO duty_assignments (
-        id, user_id, functional_area_key, duty_title, is_primary,
+        id, user_id, personnel_member_id, functional_area_key, duty_title, is_primary,
         starts_on, assigned_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id,
-      input.userId,
+      input.userId ?? null,
+      input.personnelMemberId ?? null,
       input.functionalAreaKey,
       input.dutyTitle.trim(),
       input.isPrimary ? 1 : 0,
@@ -146,6 +155,7 @@ function mapAssignment(row: DutyAssignmentRow): DutyAssignmentRecord {
   return {
     id: row.id,
     userId: row.user_id,
+    personnelMemberId: row.personnel_member_id,
     userName: row.user_name,
     userEmail: row.user_email,
     functionalAreaKey: row.functional_area_key,

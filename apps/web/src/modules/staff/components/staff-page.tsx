@@ -86,7 +86,11 @@ export function StaffPage({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId: String(data.get("userId") ?? ""),
+          // "user:..." or "roster:...", so the server is told which kind of holder without having to guess
+          // from an id that could belong to either table.
+          ...(String(data.get("holder") ?? "").startsWith("roster:")
+            ? { personnelMemberId: String(data.get("holder")).slice("roster:".length) }
+            : { userId: String(data.get("holder") ?? "").replace(/^user:/, "") }),
           functionalAreaKey: String(data.get("functionalAreaKey") ?? "command"),
           dutyTitle: String(data.get("dutyTitle") ?? ""),
           isPrimary: data.get("isPrimary") === "on",
@@ -211,7 +215,19 @@ export function StaffPage({
       {showForm && canManage ? (
         <SectionCard title="Create duty assignment" description="One senior member may hold multiple duties. Mark one assignment as primary when that person owns the functional area.">
           <form className="staff-assignment-form" ref={formRef} onSubmit={addAssignment}>
-            <label>Member<select name="userId" required defaultValue=""><option value="" disabled>Select a senior member</option>{users.map((user) => <option key={user.id} value={user.id}>{user.fullName} · {formatRole(user.globalRole)}</option>)}</select></label>
+            {/* Everybody on the roster, not only the handful with accounts. A name is prefixed so the form
+                knows which kind of holder it is sending, and somebody without an account is marked, because
+                the one thing it changes is whether the Hub has anywhere to send their reminders. */}
+            <label>Member<select name="holder" required defaultValue=""><option value="" disabled>Select a member</option>
+              {users.map((user) => <option key={user.id} value={"user:" + user.id}>{user.fullName} · {formatRole(user.globalRole)}</option>)}
+              {personnelMembers
+                .filter((member) => !member.userId && member.status !== "INACTIVE")
+                .map((member) => (
+                  <option key={member.id} value={"roster:" + member.id}>
+                    {member.rank} {member.fullName} · no Hub account
+                  </option>
+                ))}
+            </select></label>
             <label>Functional area<select name="functionalAreaKey" defaultValue="command">{functionalAreas.map((area) => <option key={area.key} value={area.key}>{area.name}</option>)}</select></label>
             <label>Duty title<input name="dutyTitle" required minLength={2} maxLength={180} placeholder="Safety Officer" /></label>
             <label>Start date<input name="startsOn" type="date" defaultValue={today()} required /></label>
