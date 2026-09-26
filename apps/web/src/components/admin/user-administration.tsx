@@ -3,22 +3,28 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Shield, UserCheck, UserMinus } from "lucide-react";
+import { ConfirmButton } from "@/components/confirm-button";
+import type { DuplicatePair } from "@/lib/auth/merge";
 import type { AuthenticatedUser, GlobalRole, UserRecord } from "@/lib/auth/types";
 
-const roles: Array<{ value: GlobalRole; label: string }> = [
-  { value: "SYSTEM_OWNER", label: "System owner" },
-  { value: "ACCOUNT_APPROVER", label: "Account approver" },
-  { value: "ADMINISTRATOR", label: "Administrator" },
-  { value: "STAFF_MEMBER", label: "Staff member" },
-  { value: "READ_ONLY", label: "Read only" }
+// What each role actually lets somebody do, said on the page rather than remembered. A dropdown of five
+// words that nobody can tell apart is how people end up handing out more than they meant to.
+const roles: Array<{ value: GlobalRole; label: string; means: string }> = [
+  { value: "SYSTEM_OWNER", label: "System owner", means: "Everything, including making somebody else an owner, merging accounts and removing members. The commander and whoever maintains the Hub." },
+  { value: "ACCOUNT_APPROVER", label: "Account approver", means: "Can let new members in and turn accounts off, and nothing else administrative." },
+  { value: "ADMINISTRATOR", label: "Administrator", means: "Runs the squadron's work: departments, lists, the organisation chart, agents and settings. Cannot change who may sign in." },
+  { value: "STAFF_MEMBER", label: "Staff member", means: "The ordinary one. Creates and completes work, assigns it, comments, and connects their own mail. Most members are this." },
+  { value: "READ_ONLY", label: "Read only", means: "Can see the squadron's work and change none of it. New members who have not been given Shared Drive access start here." }
 ];
 
 export function UserAdministration({
   actor,
-  users
+  users,
+  duplicates = []
 }: {
   actor: AuthenticatedUser;
   users: UserRecord[];
+  duplicates?: DuplicatePair[];
 }) {
   const router = useRouter();
   const [working, setWorking] = useState<string | null>(null);
@@ -40,7 +46,63 @@ export function UserAdministration({
 
   return (
     <div className="user-admin-stack">
+      <style>{uaCss}</style>
       {message ? <div className="inline-notice" role="status">{message}</div> : null}
+
+      {/* One person with two accounts is not a display problem. Work assigned to one is invisible from the
+          other, and where the two carry different privileges, which account somebody signs in with decides
+          what they are allowed to do. Detected and shown; merged only when somebody says so, because two
+          members really can share a name. */}
+      {duplicates.length ? (
+        <section className="section-card ua-dupes">
+          <header className="section-card__header">
+            <div>
+              <h2>These look like the same person twice</h2>
+              <p>Merging moves all of their work onto the account that stays and removes the other one. It cannot be undone.</p>
+            </div>
+            <span className="count-badge">{duplicates.length}</span>
+          </header>
+          <div className="section-card__body">
+            {duplicates.map((pair) => (
+              <div className="ua-dupe" key={pair.keep.id + pair.drop.id}>
+                <div className="ua-dupe-body">
+                  <strong>{pair.keep.name}</strong>
+                  <span className="ua-dupe-side">Keep <code>{pair.keep.email}</code> · {pair.keep.role.replace(/_/g, " ").toLowerCase()} · {pair.keep.status.toLowerCase()}</span>
+                  <span className="ua-dupe-side">Fold in <code>{pair.drop.email}</code> · {pair.drop.role.replace(/_/g, " ").toLowerCase()} · {pair.drop.status.toLowerCase()}</span>
+                  <small>{pair.because}</small>
+                </div>
+                {actor.globalRole === "SYSTEM_OWNER" ? (
+                  <ConfirmButton
+                    className="ua-merge"
+                    disabled={working === pair.drop.id}
+                    question={"Move everything from " + pair.drop.email + " onto " + pair.keep.email + " and remove it? This cannot be undone."}
+                    onConfirm={() => action({ action: "MERGE", targetId: pair.keep.id, mergeFromId: pair.drop.id }, pair.drop.id)}
+                  >
+                    Same person — merge
+                  </ConfirmButton>
+                ) : <span className="ua-dupe-note">A system owner can merge these.</span>}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/* Five words in a dropdown that nobody can tell apart is how people hand out more than they meant. */}
+      <section className="section-card">
+        <header className="section-card__header">
+          <div><h2>What the roles mean</h2><p>Every account has exactly one. They stack: each can do everything the one below it can.</p></div>
+        </header>
+        <div className="section-card__body">
+          <dl className="ua-roles">
+            {roles.map((role) => (
+              <div key={role.value}>
+                <dt>{role.label}</dt>
+                <dd>{role.means}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
 
       <section className="section-card">
         <header className="section-card__header">
@@ -86,3 +148,19 @@ export function UserAdministration({
 function initials(name: string): string {
   return name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
 }
+
+const uaCss = [
+  ".ua-dupes .section-card__body{display:flex;flex-direction:column;gap:9px}",
+  ".ua-dupe{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:11px 13px;border:1px solid var(--cu-border,#e4e6eb);border-left:3px solid #d9932b;border-radius:9px;flex-wrap:wrap}",
+  ".ua-dupe-body{display:flex;flex-direction:column;gap:2px;flex:1 1 280px;min-width:0}",
+  ".ua-dupe-body strong{font-size:14px}",
+  ".ua-dupe-side{font-size:12.5px;opacity:.8}",
+  ".ua-dupe-side code{font-size:12px}",
+  ".ua-dupe-body small{font-size:12px;opacity:.7;margin-top:3px}",
+  ".ua-dupe-note{font-size:12px;opacity:.6}",
+  ".ua-merge{border:1px solid #d9932b;background:none;color:#d9932b;font:inherit;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap}",
+  ".ua-roles{display:flex;flex-direction:column;gap:9px;margin:0}",
+  ".ua-roles > div{display:flex;flex-direction:column;gap:2px}",
+  ".ua-roles dt{font-size:13px;font-weight:700}",
+  ".ua-roles dd{margin:0;font-size:12.5px;opacity:.8;line-height:1.5}"
+].join("");

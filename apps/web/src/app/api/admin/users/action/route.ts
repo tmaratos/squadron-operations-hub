@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { mergeUsers } from "@/lib/auth/merge";
 import { z } from "zod";
 import {
   countActiveApprovers,
@@ -13,7 +14,9 @@ import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 const schema = z.object({
-  action: z.enum(["SET_ROLE", "SUSPEND", "REACTIVATE", "ARCHIVE"]),
+  action: z.enum(["SET_ROLE", "SUSPEND", "REACTIVATE", "ARCHIVE", "MERGE"]),
+  // The account to fold into this one, when two records turned out to be the same person.
+  mergeFromId: z.string().trim().max(80).optional(),
   targetId: z.string().uuid(),
   role: z.enum(["SYSTEM_OWNER", "ACCOUNT_APPROVER", "ADMINISTRATOR", "STAFF_MEMBER", "READ_ONLY"]).optional(),
   note: z.string().trim().max(500).optional()
@@ -30,6 +33,51 @@ export async function POST(request: Request) {
 
     const target = await findUserById(input.targetId);
     if (!target) return NextResponse.json({ message: "User not found." }, { status: 404 });
+
+    if (input.action === "MERGE") {
+
+      // Only a system owner may do this: it moves one member's work onto another and removes an account.
+
+      if (actor.globalRole !== "SYSTEM_OWNER") {
+
+        return NextResponse.json({ message: "Only a system owner may merge two accounts." }, { status: 403 });
+
+      }
+
+      if (!input.mergeFromId) {
+
+        return NextResponse.json({ message: "Say which account is being folded in." }, { status: 400 });
+
+      }
+
+      if (input.mergeFromId === actor.id) {
+
+        return NextResponse.json({ message: "That is the account you are signed in with." }, { status: 400 });
+
+      }
+
+      const result = await mergeUsers({ keepId: input.targetId, dropId: input.mergeFromId });
+
+      await recordAuditEvent({
+
+        actorUserId: actor.id,
+
+        action: "USER_MERGED",
+
+        entityType: "user",
+
+        entityId: input.targetId,
+
+        summary: actor.fullName + " merged two accounts into one, moving " + result.moved + " records",
+
+        metadata: { keptId: input.targetId, removedId: input.mergeFromId, moved: result.moved }
+
+      });
+
+      return NextResponse.json({ message: "Merged. " + result.moved + " records moved onto the account that stays." });
+
+    }
+
 
     if (input.action === "SET_ROLE") {
       if (!canManageOwners(actor.globalRole)) {

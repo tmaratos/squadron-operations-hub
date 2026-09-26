@@ -4,20 +4,21 @@ import { CapabilityRequests } from "@/components/admin/capability-requests";
 import { RosterManager } from "@/components/admin/roster-manager";
 import { UserAdministration } from "@/components/admin/user-administration";
 import { listUsers } from "@/lib/auth/repository";
+import { findDuplicates } from "@/lib/auth/merge";
 import { requireRole } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function UserAdministrationPage() {
   const actor = await requireRole(["SYSTEM_OWNER", "ACCOUNT_APPROVER"]);
-  const users = await listUsers();
+  const [users, duplicates] = await Promise.all([listUsers(), findDuplicates().catch(() => [])]);
   return (
     <div className="page-stack">
       <PageHeader eyebrow="Security and succession" title="User Administration" description="Manage Hub roles and suspend Hub access. Google Drive membership is managed by squadron command staff." />
       <CapabilityRequests />
       <RosterManager />
       <AddMember />
-      <UserAdministration actor={actor} users={users} />
+      <UserAdministration actor={actor} users={users} duplicates={duplicates} />
     </div>
   );
 }

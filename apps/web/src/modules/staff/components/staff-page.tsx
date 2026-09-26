@@ -42,6 +42,8 @@ export function StaffPage({
   // The chart is editable now, so it has to be state rather than a prop read once.
   const [positions, setPositions] = useState(personnelPositions);
   const [editingPosition, setEditingPosition] = useState<string | null>(null);
+  /** The title being typed for an assistant about to be added, per position. */
+  const [assistantTitle, setAssistantTitle] = useState<Record<string, string>>({});
   const [members, setMembers] = useState(personnelMembers);
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
@@ -312,7 +314,13 @@ export function StaffPage({
                     <ul className="org-assistants">
                       {position.assistants.map((assistant) => (
                         <li key={assistant.id}>
-                          <span>{assistant.rank} {assistant.name}{assistant.roleTitle ? " · " + assistant.roleTitle : " · assistant"}</span>
+                          <span>
+                            {assistant.rank} {assistant.name}
+                            {assistant.roleTitle ? <strong className="org-assist-role"> {assistant.roleTitle}</strong> : " · assistant"}
+                            {personnelMembers.find((member) => member.id === assistant.memberId)?.memberType === "CADET"
+                              ? <em className="org-cadet">cadet</em>
+                              : null}
+                          </span>
                           {canManage && editingPosition === position.id ? (
                             <button
                               type="button"
@@ -330,26 +338,55 @@ export function StaffPage({
                   ) : null}
 
                   {canManage && editingPosition === position.id ? (
-                    <select
-                      className="org-assist-add"
-                      value=""
-                      disabled={busyId === position.id}
-                      aria-label={"Add an assistant to " + position.title}
-                      onChange={(event) => {
-                        if (event.target.value) sendPosition({ action: "addAssistant", positionId: position.id, memberId: event.target.value }, position.id);
-                      }}
-                    >
-                      <option value="">+ Add an assistant</option>
-                      {personnelMembers
-                        .filter((member) => member.status === "ACTIVE"
-                          && member.id !== position.incumbentId
-                          && !position.assistants.some((assistant) => assistant.memberId === member.id))
-                        .map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.rank} {member.fullName}{member.memberType === "CADET" ? " · cadet" : ""}
-                          </option>
-                        ))}
-                    </select>
+                    <div className="org-assist-form">
+                      <input
+                        className="org-assist-title"
+                        value={assistantTitle[position.id] ?? ""}
+                        onChange={(event) => setAssistantTitle({ ...assistantTitle, [position.id]: event.target.value })}
+                        placeholder="Their title, e.g. CAEO, CAEA, Assistant"
+                        maxLength={80}
+                        aria-label={"Title for the assistant being added to " + position.title}
+                      />
+                      <select
+                        className="org-assist-add"
+                        value=""
+                        disabled={busyId === position.id}
+                        aria-label={"Add an assistant to " + position.title}
+                        onChange={(event) => {
+                          if (!event.target.value) return;
+                          sendPosition({
+                            action: "addAssistant",
+                            positionId: position.id,
+                            memberId: event.target.value,
+                            roleTitle: (assistantTitle[position.id] ?? "").trim() || null
+                          }, position.id);
+                          setAssistantTitle({ ...assistantTitle, [position.id]: "" });
+                        }}
+                      >
+                        <option value="">+ Add an assistant</option>
+                        {/* Two groups, because a list of fifty names where the only difference is a small
+                            word at the end is a list nobody can scan. */}
+                        <optgroup label="Senior members">
+                          {personnelMembers
+                            .filter((member) => member.status === "ACTIVE"
+                              && member.memberType !== "CADET"
+                              && member.id !== position.incumbentId
+                              && !position.assistants.some((assistant) => assistant.memberId === member.id))
+                            .map((member) => (
+                              <option key={member.id} value={member.id}>{member.rank} {member.fullName}</option>
+                            ))}
+                        </optgroup>
+                        <optgroup label="Cadets">
+                          {personnelMembers
+                            .filter((member) => member.status === "ACTIVE"
+                              && member.memberType === "CADET"
+                              && !position.assistants.some((assistant) => assistant.memberId === member.id))
+                            .map((member) => (
+                              <option key={member.id} value={member.id}>{member.rank} {member.fullName}</option>
+                            ))}
+                        </optgroup>
+                      </select>
+                    </div>
                   ) : null}
 
                   <small>{position.reportsToTitle ? `Reports to ${position.reportsToTitle}` : "Unit command"}</small>
