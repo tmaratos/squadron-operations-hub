@@ -879,3 +879,22 @@ html[data-theme="dark"] .home-task-list .home-task-row:hover { background: rgba(
 @media (max-width: 760px) {
   .home-task-list .home-task-row--wrap .home-task-link { grid-template-columns: 16px 1fr 18px; }
 }
+
+
+/* Dictation. Global rather than injected by the component: a <style> element inside a flex row is a flex
+   item, so it collected a gap of its own and shunted everything after it across. */
+.dictate{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}
+.dictate--compact{padding:6px 8px}
+.dictate:hover{border-color:#7b68ee}
+.dictate:disabled{opacity:.6;cursor:default}
+/* Listening has to be obvious. A microphone that is on and does not look on is a privacy problem. */
+.dictate.is-live{background:#d03b3b;border-color:#d03b3b;color:#fff;animation:dictate-pulse 1.6s ease-in-out infinite}
+@keyframes dictate-pulse{0%,100%{opacity:1}50%{opacity:.72}}
+@media (prefers-reduced-motion:reduce){.dictate.is-live{animation:none}}
+.dictate-problem{font-size:12px;color:#d03b3b}
+.dictate-preview{font-size:12.5px;opacity:.7;font-style:italic;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+
+/* One row, one height. The task composer had an input at 30px, a microphone at 29, Cancel at 28 and Save at
+   26, which reads as things not quite lining up without anybody being able to say why. */
+.lw-addform > input,.lw-addform > button{height:30px;box-sizing:border-box}
+.lw-addform > .dictate{padding:0 9px}

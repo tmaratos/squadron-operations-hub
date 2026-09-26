@@ -253,20 +253,6 @@ export function Dictate({ onText, label = "Dictate", compact = false }: {
       </button>
       {preview ? <span className="dictate-preview" role="status">{preview}</span> : null}
       {problem ? <span className="dictate-problem" role="status">{problem}</span> : null}
-      <style>{dictateCss}</style>
     </>
   );
 }
-
-const dictateCss = [
-  ".dictate{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:7px;cursor:pointer;white-space:nowrap}",
-  ".dictate--compact{padding:6px 8px}",
-  ".dictate:hover{border-color:#7b68ee}",
-  ".dictate:disabled{opacity:.6;cursor:default}",
-  // Listening has to be obvious. A microphone that is on and does not look on is a privacy problem.
-  ".dictate.is-live{background:#d03b3b;border-color:#d03b3b;color:#fff;animation:dictate-pulse 1.6s ease-in-out infinite}",
-  "@keyframes dictate-pulse{0%,100%{opacity:1}50%{opacity:.72}}",
-  "@media (prefers-reduced-motion:reduce){.dictate.is-live{animation:none}}",
-  ".dictate-problem{font-size:12px;color:#d03b3b}",
-  ".dictate-preview{font-size:12.5px;opacity:.7;font-style:italic;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}"
-].join("");

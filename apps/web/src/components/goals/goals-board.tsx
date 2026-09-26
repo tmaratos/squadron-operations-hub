@@ -288,6 +288,12 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
           >
             <input name="name" defaultValue={adding.name ?? ""} placeholder="What the squadron is trying to achieve" maxLength={160} required autoFocus />
             <textarea name="detail" defaultValue={adding.detail ?? ""} rows={2} maxLength={2000} placeholder="What it means, in one or two lines" />
+            <div className="gl-say-actions">
+              <Dictate
+                onText={(text) => setAdding((current) => (current ? { ...current, detail: (current.detail ? current.detail + " " + text : text) } : current))}
+                label="Say the detail"
+              />
+            </div>
             <div className="gl-form-row">
               <label>By when<input name="targetDate" type="date" /></label>
               <label>

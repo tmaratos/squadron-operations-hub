@@ -657,7 +657,10 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
                   patch(id, { statusId: status.id });
                 }}
               >
-                <div className="lw-group-head">
+                <div
+                  className="lw-group-head"
+                  onContextMenu={canEdit ? (event) => { event.preventDefault(); setEditingStatuses(true); } : undefined}
+                >
                   <button className="lw-caret" aria-label={folded ? "Expand group" : "Collapse group"} onClick={() => setCollapsedGroups({ ...collapsedGroups, [status.id]: !folded })}>
                     <svg viewBox="0 0 10 10" width="9" height="9" style={{ transform: folded ? "none" : "rotate(90deg)" }} aria-hidden="true"><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" strokeWidth="1.6" /></svg>
                   </button>
@@ -669,6 +672,20 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
                     </button>
                   ) : null}
                   {canEdit ? <button className="lw-group-add" onClick={() => setAddingIn(status.id)}>+ Add Task</button> : null}
+                  {/* Renaming or removing a section was only reachable from a Sections button in the toolbar,
+                      which nobody standing in front of the section itself thinks to press - so a section
+                      somebody had just added could not be edited or got rid of from where it was. */}
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      className="lw-group-edit"
+                      title={"Rename or remove " + status.name}
+                      aria-label={"Rename or remove the section " + status.name}
+                      onClick={() => setEditingStatuses(true)}
+                    >
+                      &#8943;
+                    </button>
+                  ) : null}
                 </div>
                 {folded ? null : (
                   <>
@@ -1855,6 +1872,19 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
               onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }}
               onBlur={() => { if (title.trim() && title !== item.title) save({ title: title.trim() }); }}
             />
+            {canEdit ? (
+              <div className="tp-title-say">
+                <Dictate
+                  onText={(text) => setTitle((current) => {
+                    const next = (current ? current + " " + text : text).replace(new RegExp(String.fromCharCode(10), "g"), " ");
+                    save({ title: next.trim() });
+                    return next;
+                  })}
+                  compact
+                  label="Say the name"
+                />
+              </div>
+            ) : null}
 
             <div className="tp-props">
               <div className="tp-prop">
@@ -2116,6 +2146,7 @@ const tpCss = [
   ".tp-side{border-left:1px solid var(--tp-border);background:var(--tp-side);display:flex;flex-direction:column;min-height:0}",
   ".tp-title{display:block;width:calc(100% + 12px);min-height:42px;border:0;outline:0;resize:none;overflow:hidden;background:transparent;color:inherit;font:inherit;font-size:26px;font-weight:700;line-height:1.3;padding:4px 6px;margin:0 -6px;border-radius:6px;box-shadow:none}",
   ".tp-title:hover:not(:disabled),.tp-title:focus{background:var(--tp-hover)}",
+  ".tp-title-say{margin:2px 0 6px}",
   ".tp-props{display:flex;flex-direction:column}",
   ".tp-prop{display:grid;grid-template-columns:160px minmax(0,1fr);align-items:center;min-height:38px;gap:12px;border-radius:6px}",
   ".tp-label{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--tp-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
@@ -2285,6 +2316,10 @@ const lwCss = [
   ".lw-why strong{flex:none}",
   ".lw-why button{margin-left:auto;flex:none;border:0;background:none;color:#7b68ee;font:inherit;font-size:12px;font-weight:700;cursor:pointer}",
   ".lw-hidden-note{font-size:10.5px;opacity:.6;white-space:nowrap}",
+  ".lw-group-edit{border:0;background:none;color:inherit;opacity:0;cursor:pointer;font-size:15px;line-height:1;padding:2px 7px;border-radius:6px}",
+  ".lw-group-head:hover .lw-group-edit,.lw-group-edit:focus-visible{opacity:.65}",
+  ".lw-group-edit:hover{opacity:1;background:var(--lw-hover,rgba(127,127,127,.14))}",
+  "@media (hover:none){.lw-group-edit{opacity:.65}}",
   ".lw-add-section{display:block;margin:10px 0 0;border:1px dashed var(--border,#d5d8de);background:none;color:var(--muted,#656f7d);font:inherit;font-size:13px;font-weight:600;padding:9px 14px;border-radius:9px;cursor:pointer;width:100%;text-align:left}",
   ".lw-add-section:hover{border-color:#7b68ee;color:#7b68ee;border-style:solid}",
   ".lw-rowmenu{position:fixed;z-index:95;min-width:200px;padding:6px;border-radius:11px;border:1px solid var(--border,#e4e6eb);background:var(--surface,#fff);box-shadow:0 16px 40px rgba(9,20,44,.28)}",
