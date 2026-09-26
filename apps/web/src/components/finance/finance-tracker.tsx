@@ -68,15 +68,30 @@ function dayText(date: string): string {
   return new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-export function FinanceTracker({ initial, years, canEdit, people, lists }: {
+export function FinanceTracker({ initial, years, canEdit, people, lists, initialTab = "ledger" }: {
   initial: State;
+  initialTab?: Tab;
   years: number[];
   canEdit: boolean;
   people: Array<{ userId: string; fullName: string }>;
   lists: Array<{ id: string; name: string; spaceName: string }>;
 }) {
   const [state, setState] = useState(initial);
-  const [tab, setTab] = useState<Tab>("ledger");
+  const [tab, setTab] = useState<Tab>(initialTab);
+
+  /**
+   * The tab lives in the address, so the four links in the Finance menu each land somewhere different and a
+   * particular view can be sent to somebody. Written with replaceState rather than a navigation, because
+   * asking the server to re-render the whole page to move between two tabs it already sent is wasteful.
+   */
+  function showTab(next: Tab) {
+    setTab(next);
+    try {
+      window.history.replaceState(null, "", next === "ledger" ? "/finance" : "/finance?view=" + next);
+    } catch {
+      // A browser that will not take it still gets the tab; only the address stays behind.
+    }
+  }
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -227,7 +242,7 @@ export function FinanceTracker({ initial, years, canEdit, people, lists }: {
               role="tab"
               aria-selected={tab === key}
               className={"fin-tab" + (tab === key ? " is-active" : "")}
-              onClick={() => setTab(key)}
+              onClick={() => showTab(key)}
             >
               {label}
             </button>

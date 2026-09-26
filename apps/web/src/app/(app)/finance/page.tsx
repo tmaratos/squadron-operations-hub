@@ -16,7 +16,11 @@ import { findings, summarise } from "@/lib/finance/findings";
 
 export const dynamic = "force-dynamic";
 
-export default async function FinancePage() {
+type Tab = "ledger" | "owed" | "budget" | "committee";
+
+export default async function FinancePage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  const asked = (await searchParams).view;
+  const initialTab: Tab = asked === "owed" || asked === "budget" || asked === "committee" ? asked : "ledger";
   const user = await requireUser();
   const fiscalYear = currentFiscalYear();
   const transactions = await listTransactions(fiscalYear);
@@ -48,6 +52,7 @@ export default async function FinancePage() {
           summary: summarise(transactions, budget, fiscalYear, opening?.cents ?? null, obligations),
           findings: findings({ transactions, budget, meetings, fiscalYear, openingCents: opening?.cents ?? null, obligations })
         }}
+        initialTab={initialTab}
         years={years}
         canEdit={user.globalRole !== "READ_ONLY"}
         people={users.filter((entry) => entry.status === "APPROVED").map((entry) => ({ userId: entry.id, fullName: entry.fullName }))}

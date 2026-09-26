@@ -40,6 +40,7 @@ export type SectionKey =
   | "docs"
   | "command"
   | "squadron"
+  | "finance"
   | "connect"
   | "settings";
 
@@ -186,12 +187,6 @@ export const sections: Section[] = [
           { label: "Compliance", href: "/compliance", icon: ShieldCheck, hint: "Requirements and the evidence for them" },
           { label: "Announcements", href: "/communications", icon: Bell, hint: "What has been said to the squadron" }
         ]
-      },
-      {
-        label: "Money",
-        items: [
-          { label: "Finance tracker", href: "/finance", icon: Wallet, hint: "The ledger, the budget, and the committee" }
-        ]
       }
     ]
   },
@@ -210,6 +205,24 @@ export const sections: Section[] = [
           { label: "Who does what", href: "/duties", icon: ClipboardCheck, hint: "Recurring duties by role" },
           { label: "Committees", href: "/staff#committees", icon: Users, hint: "Finance, awards, membership" },
           { label: "Professional development", href: "/development", icon: Gauge, hint: "Levels and what comes next" }
+        ]
+      }
+    ]
+  },
+  {
+    key: "finance",
+    label: "Finance",
+    icon: Wallet,
+    href: "/finance",
+    blurb: "What the squadron has, owes and has spent.",
+    groups: [
+      {
+        label: "The money",
+        items: [
+          { label: "Ledger", href: "/finance?view=ledger", icon: Wallet, hint: "Everything in and out, with its paper trail" },
+          { label: "Owed", href: "/finance?view=owed", icon: Wallet, hint: "Promised and not yet moved, either way" },
+          { label: "Budget", href: "/finance?view=budget", icon: Gauge, hint: "Planned against what has actually moved" },
+          { label: "Committee", href: "/finance?view=committee", icon: ClipboardCheck, hint: "Whether it met, quarter by quarter" }
         ]
       }
     ]
@@ -280,7 +293,7 @@ export function sectionFor(pathname: string, search?: string): SectionKey {
     ["/documents", "docs"],
     ["/dashboards", "command"],
     ["/readiness", "command"],
-    ["/finance", "command"],
+    ["/finance", "finance"],
     ["/compliance", "command"],
     ["/communications", "command"],
     ["/staff", "squadron"],
