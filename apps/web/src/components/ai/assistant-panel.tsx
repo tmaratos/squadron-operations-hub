@@ -53,18 +53,47 @@ export function AssistantPanel({ hideLauncher = false }: { hideLauncher?: boolea
   const [note, setNote] = useState("");
   const [pending, setPending] = useState<{ steps: Step[]; descriptions: string[]; picked: boolean[] } | null>(null);
   const [autonomy, setAutonomyState] = useState<Autonomy>("CONFIRM");
+  /** Which agent is answering, when one was asked for rather than the Hub in general. */
+  const [agentId, setAgentId] = useState<string | null>(null);
+  const [agentName, setAgentName] = useState<string | null>(null);
 
-  // Anything in the app can ask for this panel. The widget in the corner is what does.
+  // Anything in the app can ask for this panel, and can say which agent it wants.
+  //
+  // Asking an agent is the point of having agents: each carries a job description that goes in front of
+  // everything it is asked, so "what is slipping" answered by Deadline Watch is a different answer from the
+  // same words asked of nobody in particular.
   useEffect(() => {
-    const show = () => setOpen(true);
+    const show = (event: Event) => {
+      const wanted = (event as CustomEvent<{ agentId?: string; agentName?: string }>).detail;
+      if (wanted?.agentId) {
+        setAgentId(wanted.agentId);
+        setAgentName(wanted.agentName ?? null);
+        // A different agent is a different conversation, not a continuation of the last one.
+        setConversationId(null);
+        setMessages([]);
+        setPending(null);
+      }
+      setOpen(true);
+    };
     window.addEventListener("hub:ask", show);
     return () => window.removeEventListener("hub:ask", show);
+  }, []);
+
+  // A link straight to an agent still works, so the address can be shared or bookmarked.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const wanted = new URLSearchParams(window.location.search).get("agent");
+    if (wanted) {
+      setAgentId(wanted);
+      setOpen(true);
+    }
   }, []);
   const feedRef = useRef<HTMLDivElement>(null);
 
   async function load(conversation?: string | null) {
     const query = conversation ? "?conversation=" + encodeURIComponent(conversation) : "";
-    const response = await fetch("/api/ai/assistant" + query);
+    const asked = agentId ? (query ? query + "&" : "?") + "agent=" + encodeURIComponent(agentId) : query;
+    const response = await fetch("/api/ai/assistant" + asked);
     const data = (await response.json().catch(() => ({}))) as Payload;
     setAvailable(Boolean(data.available));
     if (data.retentionDays) setRetentionDays(data.retentionDays);
@@ -89,7 +118,7 @@ export function AssistantPanel({ hideLauncher = false }: { hideLauncher?: boolea
     setPrompt("");
     setMessages((current) => [...current, { id: "local-" + Date.now(), role: "user", content: text, steps: null, applied: null, createdAt: new Date().toISOString() }]);
     try {
-      const response = await fetch("/api/ai/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "plan", prompt: text, conversationId }) });
+      const response = await fetch("/api/ai/assistant", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "plan", prompt: text, conversationId, agentId }) });
       const data = (await response.json().catch(() => ({}))) as Payload;
       if (!response.ok) throw new Error(data.message || "The assistant could not answer.");
       if (data.conversationId) setConversationId(data.conversationId);
@@ -154,7 +183,16 @@ export function AssistantPanel({ hideLauncher = false }: { hideLauncher?: boolea
         <div className="ap-overlay" onMouseDown={() => setOpen(false)}>
           <aside className="ap" onMouseDown={(event) => event.stopPropagation()} aria-label="Ask the Hub">
             <header className="ap-top">
-              <strong>✨ Ask the Hub</strong>
+              <strong>✨ {agentName ? "Ask " + agentName : "Ask the Hub"}</strong>
+            {agentId ? (
+              <button
+                type="button"
+                className="ap-agent-off"
+                onClick={() => { setAgentId(null); setAgentName(null); setConversationId(null); setMessages([]); }}
+              >
+                Ask the Hub instead
+              </button>
+            ) : null}
               <button type="button" className="ap-icon" onClick={() => setOpen(false)} aria-label="Close">✕</button>
             </header>
 
@@ -275,6 +313,8 @@ const apCss = [
   ".ap-empty{padding:24px;color:var(--cu-muted,#656f7d)}",
   ".ap-body{flex:1;min-height:0;display:grid;grid-template-columns:240px minmax(0,1fr)}",
   ".ap-side{border-right:1px solid var(--cu-border,#e4e6eb);padding:12px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}",
+  ".ap-agent-off{border:0;background:none;color:inherit;font:inherit;font-size:11.5px;opacity:.6;cursor:pointer;text-decoration:underline;padding:0 6px}",
+  ".ap-agent-off:hover{opacity:1}",
   ".ap-new{border:1px dashed var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:13px;padding:8px;border-radius:8px;cursor:pointer}",
   ".ap-new:hover{border-color:#7b68ee;color:#7b68ee}",
   ".ap-side-note{margin:2px 0 8px;font-size:11px;color:var(--cu-muted,#656f7d);line-height:1.4}",

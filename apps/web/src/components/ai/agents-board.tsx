@@ -111,7 +111,15 @@ export function AgentsBoard({ agents: initial, canEdit, lists = [] }: {
         </p>
       </div>
       <div className="ag-actions">
-        <Link className="ag-btn ag-btn--primary" href={"/?agent=" + agent.id}>Ask</Link>
+        {/* Opens the assistant on this agent. It used to link to "/?agent=" and nothing anywhere read
+            that, so it navigated to the home page and did nothing at all. */}
+        <button
+          type="button"
+          className="ag-btn ag-btn--primary"
+          onClick={() => window.dispatchEvent(new CustomEvent("hub:ask", { detail: { agentId: agent.id, agentName: agent.name } }))}
+        >
+          Ask
+        </button>
         {agent.canEdit ? (
           <>
             <button type="button" className="ag-btn" onClick={() => setEditing({ ...agent, open: true })}>Edit</button>
