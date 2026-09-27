@@ -74,10 +74,35 @@ export async function exchangeMicrosoftCode(code: string): Promise<TokenReply> {
     })
   });
   if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error("Microsoft would not complete the connection" + (detail ? ": " + detail.slice(0, 160) : "."));
+    // Said plainly rather than swallowed.
+    //
+    // Microsoft returns a precise reason here - the wrong secret, a registration that does not allow this
+    // kind of account, a redirect URI registered as something other than Web - and each one needs a
+    // different fix. Turning all of them into "that did not work" meant the only way to tell them apart was
+    // to guess, which cost an afternoon.
+    throw new Error(microsoftSaid(await response.text().catch(() => "")));
   }
   return response.json<TokenReply>();
+}
+
+/**
+ * The useful sentence out of Microsoft's error body.
+ *
+ * Their description runs to several lines and repeats the trace and correlation ids, which help nobody
+ * reading a web page. The AADSTS code is the part worth keeping: it names the problem exactly and is what
+ * their own documentation is indexed by.
+ */
+export function microsoftSaid(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as { error?: string; error_description?: string };
+    const described = (parsed.error_description ?? "").split(/\r?\n/)[0].trim();
+    const code = described.match(/AADSTS\d+/)?.[0];
+    if (described) return (code && !described.startsWith(code) ? code + ": " : "") + described.slice(0, 300);
+    if (parsed.error) return parsed.error;
+  } catch {
+    // Not JSON, which itself is worth seeing.
+  }
+  return body.slice(0, 300) || "Microsoft gave no reason.";
 }
 
 export async function refreshMicrosoftToken(refreshToken: string): Promise<TokenReply | null> {

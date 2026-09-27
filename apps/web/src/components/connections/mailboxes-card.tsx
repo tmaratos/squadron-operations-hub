@@ -23,6 +23,7 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
   const [accounts, setAccounts] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [why, setWhy] = useState<string | null>(null);
 
   /**
    * What the round trip to Google or Microsoft came back saying.
@@ -43,11 +44,16 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
       microsoft_unavailable: "Microsoft mailboxes are not set up for this Hub yet. An administrator has to register it once.",
       microsoft_failed: "Microsoft would not finish the connection. The usual cause is the application missing the Mail.Read and offline_access permissions, or a workplace account whose administrator does not allow it."
     };
+    // Microsoft's own sentence, kept underneath ours. Ours says what kind of problem it is; theirs says
+    // which one exactly, and only theirs is any use for fixing a registration.
+    const why = new URLSearchParams(window.location.search).get("why");
     setNote(said[outcome] ?? null);
+    setWhy(why);
 
     // Taken out of the address, so a refresh does not repeat a message about something that already happened.
     const url = new URL(window.location.href);
     url.searchParams.delete("mail");
+    url.searchParams.delete("why");
     window.history.replaceState(null, "", url.pathname + url.search + url.hash);
   }, []);
 
@@ -143,6 +149,7 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
       </ul>
 
       {note ? <p className="mb-note" role="status">{note}</p> : null}
+      {why ? <p className="mb-said">Microsoft said: &ldquo;{why}&rdquo;</p> : null}
 
       {/* Plain links, not fetches: these leave for the provider and come back to this page. */}
       <div className="mb-add">
@@ -184,5 +191,7 @@ const mbCss = [
   ".mb-note{margin:0;font-size:12.5px;padding:8px 11px;border-radius:8px;background:rgba(123,104,238,.12)}",
   ".mb-row-actions{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}",
   ".mb-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
+  ".mb-said{margin:0;font-size:11.5px;line-height:1.5;opacity:.75;padding:8px 11px;border-radius:8px;background:rgba(0,0,0,.05);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}",
+  "html[data-theme=dark] .mb-said{background:rgba(255,255,255,.07)}",
   ".mb-fine{margin:0;font-size:11.5px;opacity:.6;line-height:1.5}"
 ].join("");

@@ -7,8 +7,11 @@ import { saveMailAccount } from "@/lib/google/mail-accounts";
 
 // Where Microsoft sends somebody back after they have connected a mailbox.
 
-function back(request: Request, note: string): NextResponse {
-  return NextResponse.redirect(new URL("/connections?mail=" + note + "#mail", request.url));
+function back(request: Request, note: string, why?: string): NextResponse {
+  // `why` carries Microsoft's own words through to the page. Only the member who just tried this sees it,
+  // and it is the difference between a fix and a guess.
+  const query = "/connections?mail=" + note + (why ? "&why=" + encodeURIComponent(why.slice(0, 300)) : "") + "#mail";
+  return NextResponse.redirect(new URL(query, request.url));
 }
 
 export async function GET(request: Request) {
@@ -20,9 +23,10 @@ export async function GET(request: Request) {
   if (url.searchParams.has("error")) {
     const reason = url.searchParams.get("error") ?? "";
     const detail = (url.searchParams.get("error_description") ?? "").toLowerCase();
-    if (reason === "access_denied" && detail.includes("admin")) return back(request, "microsoft_blocked");
-    if (detail.includes("consent") && detail.includes("admin")) return back(request, "microsoft_blocked");
-    return back(request, reason === "access_denied" ? "microsoft_denied" : "microsoft_failed");
+    const said = url.searchParams.get("error_description") ?? reason;
+    if (reason === "access_denied" && detail.includes("admin")) return back(request, "microsoft_blocked", said);
+    if (detail.includes("consent") && detail.includes("admin")) return back(request, "microsoft_blocked", said);
+    return back(request, reason === "access_denied" ? "microsoft_denied" : "microsoft_failed", said);
   }
 
   const code = url.searchParams.get("code");
@@ -41,7 +45,7 @@ export async function GET(request: Request) {
   try {
     const tokens = await exchangeMicrosoftCode(code);
     const profile = await microsoftProfile(tokens.access_token);
-    if (!profile.email) return back(request, "microsoft_failed");
+    if (!profile.email) return back(request, "microsoft_failed", "That account came back without an email address.");
 
     await saveMailAccount({
       userId: user.id,
@@ -66,6 +70,6 @@ export async function GET(request: Request) {
     return back(request, "microsoft_connected");
   } catch (error) {
     console.error(error);
-    return back(request, "microsoft_failed");
+    return back(request, "microsoft_failed", error instanceof Error ? error.message : undefined);
   }
 }
