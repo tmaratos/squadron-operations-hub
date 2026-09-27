@@ -173,7 +173,14 @@ export async function microsoftProfile(accessToken: string, idToken?: string): P
   return { id: data.id, email: (data.mail || data.userPrincipalName || "").toLowerCase() };
 }
 
-/** Folders never read, whatever the setting: deleted mail and junk. */
+/**
+ * Folders never read, whatever the setting: deleted mail, junk, drafts and the member's own sent mail.
+ *
+ * Drafts are half-written sentences somebody has not decided to say yet, and turning one into a task acts on
+ * a decision that has not been made. Sent mail is the member's own words coming back at them: "every folder
+ * except the trash" swept it in, so the Hub was reading what they wrote and offering it back as work for
+ * them to do.
+ */
 async function excludedFolderIds(accessToken: string): Promise<string[]> {
   try {
     const response = await fetch(GRAPH + "/me/mailFolders?$select=id,displayName&$top=60", {
@@ -182,7 +189,7 @@ async function excludedFolderIds(accessToken: string): Promise<string[]> {
     if (!response.ok) return [];
     const data = await response.json<{ value?: Array<{ id: string; displayName?: string }> }>();
     return (data.value ?? [])
-      .filter((folder) => /deleted items|junk e-?mail|trash|spam/i.test(folder.displayName ?? ""))
+      .filter((folder) => /deleted items|junk e-?mail|trash|spam|drafts|sent items/i.test(folder.displayName ?? ""))
       .map((folder) => folder.id);
   } catch {
     return [];

@@ -18,8 +18,6 @@ interface Suggestion {
 
 interface Autopilot {
   on: boolean;
-  listId: string | null;
-  listName: string | null;
 }
 
 export function MailSuggestions() {
@@ -50,8 +48,7 @@ export function MailSuggestions() {
   const [note, setNote] = useState<string | null>(null);
   const [added, setAdded] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [autopilot, setAutopilot] = useState<Autopilot>({ on: false, listId: null, listName: null });
-  const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
+  const [autopilot, setAutopilot] = useState<Autopilot>({ on: false });
   const [saving, setSaving] = useState(false);
 
   /**
@@ -64,12 +61,11 @@ export function MailSuggestions() {
   useEffect(() => {
     let live = true;
     fetch("/api/google/gmail/suggestions?settings=1")
-      .then((response) => response.json() as Promise<{ mode?: string; autopilot?: Autopilot; lists?: Array<{ id: string; name: string }>; connected?: boolean }>)
+      .then((response) => response.json() as Promise<{ mode?: string; autopilot?: Autopilot; connected?: boolean }>)
       .then((data) => {
         if (!live) return;
         if (data.mode === "UNREAD" || data.mode === "INBOX" || data.mode === "ALL") setScan(data.mode);
         if (data.autopilot) setAutopilot(data.autopilot);
-        if (data.lists) setLists(data.lists);
         setConnected(data.connected !== false);
       })
       .catch(() => undefined);
@@ -78,17 +74,17 @@ export function MailSuggestions() {
     };
   }, []);
 
-  /** Turns this on or off, or moves which list it uses. */
-  async function saveAutopilot(next: { on: boolean; listId: string | null }) {
+  /** Turns this on or off. Where each task goes is worked out per task, not chosen once. */
+  async function saveAutopilot(next: { on: boolean }) {
     const previous = autopilot;
     setSaving(true);
     setNote(null);
-    setAutopilot({ ...autopilot, ...next, listName: lists.find((list) => list.id === next.listId)?.name ?? null });
+    setAutopilot({ ...autopilot, ...next });
     try {
       const response = await fetch("/api/google/gmail/suggestions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "autopilot", on: next.on, listId: next.listId })
+        body: JSON.stringify({ action: "autopilot", on: next.on })
       });
       const data = (await response.json()) as { autopilot?: Autopilot; message?: string };
       if (!response.ok) throw new Error(data.message || "That could not be saved.");
@@ -191,8 +187,8 @@ export function MailSuggestions() {
               <input
                 type="checkbox"
                 checked={autopilot.on}
-                disabled={saving || !lists.length}
-                onChange={(event) => saveAutopilot({ on: event.target.checked, listId: autopilot.listId ?? lists.find((list) => list.name.toLowerCase().includes("intake"))?.id ?? lists[0]?.id ?? null })}
+                disabled={saving}
+                onChange={(event) => saveAutopilot({ on: event.target.checked })}
               />
               <span>
                 <strong>Create the task for me, and set its reminders</strong>
@@ -201,24 +197,11 @@ export function MailSuggestions() {
               </span>
             </label>
 
-            {autopilot.on ? (
-              <label className="ms-where">
-                <span>Put them in</span>
-                <select
-                  value={autopilot.listId ?? ""}
-                  disabled={saving}
-                  onChange={(event) => saveAutopilot({ on: true, listId: event.target.value })}
-                >
-                  {lists.map((list) => (
-                    <option key={list.id} value={list.id}>{list.name}</option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
-
             <p className="ms-fine">
-              Mail with no date, or a date the Hub cannot find in the email&rsquo;s own words, still waits for you.
-              At most six tasks a day. Anything wrong can be deleted like any other task.
+              Each task is filed in whichever list it belongs to &mdash; safety mail with safety, finance with
+              finance &mdash; and you are told where it went. Mail with no date, or a date the Hub cannot find in
+              the email&rsquo;s own words, still waits for you. At most six tasks a day. Anything wrong can be
+              deleted like any other task.
             </p>
           </div>
         </div>

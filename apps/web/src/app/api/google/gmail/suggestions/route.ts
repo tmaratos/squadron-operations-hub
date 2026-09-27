@@ -45,8 +45,7 @@ const scanSchema = z.object({ action: z.literal("scan"), mode: z.enum(["UNREAD",
 
 const autopilotSchema = z.object({
   action: z.literal("autopilot"),
-  on: z.boolean(),
-  listId: z.string().trim().max(80).nullable().optional()
+  on: z.boolean()
 });
 
 /** Every list a task could go in, loose ones and the ones inside folders. */
@@ -109,30 +108,22 @@ export async function POST(request: Request) {
       if (user.globalRole === "READ_ONLY") {
         return NextResponse.json({ message: "Read-only accounts cannot create work." }, { status: 403 });
       }
-      const lists = await listChoices();
-      const chosen = asAutopilot.data.listId
-        ? lists.find((list) => list.id === asAutopilot.data.listId)
-        : undefined;
-      if (asAutopilot.data.on && !chosen) {
-        return NextResponse.json({ message: "Choose which list these tasks should go in first." }, { status: 400 });
-      }
-
-      await setAutopilot(user.id, { on: asAutopilot.data.on, listId: chosen?.id ?? null });
+      await setAutopilot(user.id, { on: asAutopilot.data.on });
       await recordAuditEvent({
         actorUserId: user.id,
         action: asAutopilot.data.on ? "MAIL_AUTOCREATE_ON" : "MAIL_AUTOCREATE_OFF",
         entityType: "user",
         entityId: user.id,
         summary: user.fullName + (asAutopilot.data.on
-          ? " let the Hub create tasks from dated mail, in " + chosen?.name
+          ? " let the Hub create tasks from dated mail"
           : " stopped the Hub creating tasks from mail"),
-        metadata: { listId: chosen?.id ?? null }
+        metadata: {}
       });
 
       return NextResponse.json({
         autopilot: await getAutopilot(user.id),
         message: asAutopilot.data.on
-          ? "Mail that states a date will become a task in " + chosen?.name + ", with its reminders already set. You will be told each time."
+          ? "Mail that states a date will become a task, filed where it belongs, with its reminders already set. You will be told each time."
           : "Nothing will be created on its own. Suggestions still wait for you."
       });
     }

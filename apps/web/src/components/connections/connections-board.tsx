@@ -98,7 +98,7 @@ export function ConnectionsBoard({ providers, initialConnections }: { providers:
                   ) : null}
 
                   {provider.method === "not_yet" ? (
-                    <p className="cx-help">Nothing to do. This turns on by itself if the squadron moves to Microsoft 365.</p>
+                    <p className="cx-help">Nothing to do here yet.</p>
                   ) : null}
 
                   {provider.method === "google_permission" ? (

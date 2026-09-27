@@ -138,10 +138,12 @@ export const SCAN_QUERIES = {
   // What has not been dealt with, which is usually exactly the question.
   UNREAD: "is:unread -in:trash -in:spam -in:chats",
   // The whole inbox, read or not, but not things already filed away.
-  INBOX: "in:inbox -in:trash -in:spam -in:chats",
+  INBOX: "in:inbox -in:trash -in:spam -in:chats -in:drafts",
   // Every folder, archived mail included. Ninety days, because the point is work somebody still has to do
   // and a message nobody has touched since spring is not that.
-  ALL: "newer_than:90d -in:trash -in:spam -in:chats"
+  // Sent mail and drafts are left out for the same reason on both sides: one is the member's own words
+  // coming back at them as work, and the other is something they have not decided to say yet.
+  ALL: "newer_than:90d -in:trash -in:spam -in:chats -in:sent -in:drafts"
 } as const;
 
 export type ScanMode = keyof typeof SCAN_QUERIES;

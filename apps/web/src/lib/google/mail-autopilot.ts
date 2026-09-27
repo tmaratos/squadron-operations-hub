@@ -4,6 +4,8 @@ import { applyProposal, proposeReminders } from "@/lib/work/reminders";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { notify } from "@/lib/notify/notifications";
 import { dateIsInTheText } from "./dated";
+import { aiChatFor } from "@/lib/ai/provider";
+import { parseJsonReply } from "@/lib/ai/local";
 
 // Making the task without being asked, for the mail that plainly says what has to happen and when.
 //
@@ -30,51 +32,90 @@ const MOST_PER_DAY = 6;
 
 export interface AutopilotSettings {
   on: boolean;
-  /** Where tasks land. Null means the member has not chosen, which is the same as off. */
-  listId: string | null;
-  listName: string | null;
 }
 
 export async function getAutopilot(userId: string): Promise<AutopilotSettings> {
   try {
-    const rows = await getDatabase()
-      .prepare("SELECT key, value FROM user_settings WHERE user_id = ? AND key IN ('mail_autocreate', 'mail_autocreate_list')")
+    const row = await getDatabase()
+      .prepare("SELECT value FROM user_settings WHERE user_id = ? AND key = 'mail_autocreate'")
       .bind(userId)
-      .all<{ key: string; value: string }>();
-    const held = new Map(rows.results.map((row) => [row.key, row.value]));
-    const listId = held.get("mail_autocreate_list") ?? null;
-
-    let listName: string | null = null;
-    if (listId) {
-      // Asked of the table rather than the tree, because a list inside a folder is not in a space's own
-      // lists and reading the tree would have found the loose ones only.
-      const list = await getDatabase()
-        .prepare("SELECT name FROM lists WHERE id = ? AND archived_at IS NULL")
-        .bind(listId)
-        .first<{ name: string }>();
-      listName = list?.name ?? null;
-    }
-    // A list that has since been removed turns this off rather than guessing at a replacement.
-    return { on: held.get("mail_autocreate") === "ON" && Boolean(listId && listName), listId, listName };
+      .first<{ value: string }>();
+    return { on: row?.value === "ON" };
   } catch {
-    return { on: false, listId: null, listName: null };
+    return { on: false };
   }
 }
 
-export async function setAutopilot(userId: string, input: { on: boolean; listId: string | null }): Promise<void> {
-  const db = getDatabase();
+export async function setAutopilot(userId: string, input: { on: boolean }): Promise<void> {
   const now = new Date().toISOString();
-  const put = async (key: string, value: string) => {
-    await db
-      .prepare(
-        "INSERT INTO user_settings (user_id, key, value, updated_at) VALUES (?, ?, ?, ?) " +
-        "ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
-      )
-      .bind(userId, key, value, now)
-      .run();
-  };
-  await put("mail_autocreate", input.on ? "ON" : "OFF");
-  await put("mail_autocreate_list", input.listId ?? "");
+  await getDatabase()
+    .prepare(
+      "INSERT INTO user_settings (user_id, key, value, updated_at) VALUES (?, 'mail_autocreate', ?, ?) " +
+      "ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+    )
+    .bind(userId, input.on ? "ON" : "OFF", now)
+    .run();
+}
+
+/**
+ * Which list a task belongs in, decided per task rather than asked once and applied to everything.
+ *
+ * Making somebody nominate one list up front meant every piece of mail landed in the same place regardless
+ * of what it was about - safety mail filed with finance mail - and the squadron already keeps lists for
+ * exactly these subjects. The assistant is shown the real lists and has to answer with one of them; anything
+ * it invents is discarded and the intake list is used instead, so a bad answer costs filing rather than the
+ * task itself.
+ */
+async function chooseList(input: { userId: string; title: string; because: string | null; subject: string | null }): Promise<{ id: string; name: string } | null> {
+  const lists = await allLists();
+  if (!lists.length) return null;
+
+  const fallback = lists.find((list) => list.name.toLowerCase().includes("intake")) ?? lists[0];
+  if (lists.length === 1) return fallback;
+
+  try {
+    const reply = await aiChatFor(input.userId, [
+      {
+        role: "system",
+        content: [
+          "You file one task into one of a Civil Air Patrol squadron's existing lists.",
+          "Reply with JSON only: {\"list\": \"<the exact name of one list>\"}.",
+          "Choose the list whose subject matches the task. If none clearly matches, answer with the intake list.",
+          "The lists are:",
+          lists.map((list) => "- " + list.name).join("\n")
+        ].join("\n")
+      },
+      {
+        role: "user",
+        content: [
+          "Task: " + input.title,
+          input.subject ? "Email subject: " + input.subject : "",
+          input.because ? "The email said: " + input.because : ""
+        ].filter(Boolean).join("\n")
+      }
+    ], { json: true, maxTokens: 80 });
+
+    const parsed = parseJsonReply<{ list?: unknown }>(reply, {});
+    const wanted = typeof parsed.list === "string" ? parsed.list.trim().toLowerCase() : "";
+    // Matched against the real lists, so a name the assistant made up files to intake instead of nowhere.
+    const chosen = lists.find((list) => list.name.toLowerCase() === wanted)
+      ?? lists.find((list) => wanted.length > 2 && list.name.toLowerCase().includes(wanted));
+    return chosen ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Every list a task could be filed in, loose ones and the ones inside folders. */
+async function allLists(): Promise<Array<{ id: string; name: string }>> {
+  try {
+    const rows = await getDatabase()
+      .prepare("SELECT id, name FROM lists WHERE archived_at IS NULL ORDER BY name COLLATE NOCASE")
+      .all<{ id: string; name: string }>();
+    return rows.results;
+  } catch {
+    return [];
+  }
 }
 
 async function madeToday(userId: string): Promise<number> {
@@ -134,6 +175,8 @@ export interface AutoCreated {
   title: string;
   dueOn: string;
   reminders: number;
+  listId: string;
+  listName: string;
 }
 
 /**
@@ -144,7 +187,7 @@ export interface AutoCreated {
  */
 export async function runAutopilot(userId: string, userName: string): Promise<AutoCreated[]> {
   const settings = await getAutopilot(userId);
-  if (!settings.on || !settings.listId) return [];
+  if (!settings.on) return [];
 
   // Done before the query below, so turning this on applies to the mail already read and not only to what
   // arrives next.
@@ -193,7 +236,15 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
         .run();
       if (!claim.meta.changes) continue;
 
-      const itemId = await createItem({ listId: settings.listId, title: suggestion.title, dueOn: suggestion.due_on, userId });
+      const list = await chooseList({
+        userId,
+        title: suggestion.title,
+        because: suggestion.because,
+        subject: suggestion.subject
+      });
+      if (!list) continue;
+
+      const itemId = await createItem({ listId: list.id, title: suggestion.title, dueOn: suggestion.due_on, userId });
       // Written down the moment the task exists. The description and the reminders come next and either of
       // them can fail; if the row did not already know about the task by then, putting it back would make a
       // second copy of one that had been created perfectly well.
@@ -223,7 +274,7 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
         ? await applyProposal({ itemId, proposed: proposal.proposed, userId, source: "ASSISTANT" })
         : 0;
 
-      made.push({ itemId, title: suggestion.title, dueOn: suggestion.due_on, reminders });
+      made.push({ itemId, title: suggestion.title, dueOn: suggestion.due_on, reminders, listId: list.id, listName: list.name });
     } catch (error) {
       console.error(error);
       // Put back, so one that failed halfway is still offered by hand rather than vanishing. A task that did
@@ -247,11 +298,11 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
     userId,
     kind: "ASSIGNED",
     title: "Made from your email: " + entry.title,
-    body: "Due " + entry.dueOn + " in " + settings.listName + "."
+    body: "Due " + entry.dueOn + " in " + entry.listName + "."
       + (entry.reminders ? " " + entry.reminders + " reminder" + (entry.reminders === 1 ? "" : "s") + " set." : "")
       + " Delete it if it is wrong.",
     itemId: entry.itemId,
-    listId: settings.listId,
+    listId: entry.listId,
     dedupeKey: "AUTOMADE:" + entry.itemId
   })));
 
@@ -261,7 +312,7 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
     entityType: "user",
     entityId: userId,
     summary: userName + " had " + made.length + (made.length === 1 ? " task" : " tasks") + " created automatically from dated mail",
-    metadata: { count: made.length, listId: settings.listId, at: now }
+    metadata: { count: made.length, lists: made.map((entry) => entry.listName), at: now }
   });
 
   return made;
