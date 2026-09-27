@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 
   try {
     const tokens = await exchangeMicrosoftCode(code);
-    const profile = await microsoftProfile(tokens.access_token);
+    const profile = await microsoftProfile(tokens.access_token, tokens.id_token);
     if (!profile.email) return back(request, "microsoft_failed", "That account came back without an email address.");
 
     await saveMailAccount({

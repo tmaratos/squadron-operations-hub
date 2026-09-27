@@ -58,6 +58,8 @@ interface TokenReply {
   refresh_token?: string;
   expires_in: number;
   scope?: string;
+  /** Present because openid is among the scopes. It carries who signed in, so Graph need not be asked. */
+  id_token?: string;
 }
 
 export async function exchangeMicrosoftCode(code: string): Promise<TokenReply> {
@@ -123,11 +125,50 @@ export async function refreshMicrosoftToken(refreshToken: string): Promise<Token
   return response.json<TokenReply>();
 }
 
-export async function microsoftProfile(accessToken: string): Promise<{ id: string; email: string }> {
+/**
+ * Whose mailbox this is, taken from the identity token rather than from Graph.
+ *
+ * Asking Graph's /me for it needs the User.Read permission, which is a permission to read a person's
+ * directory profile - their job title, their manager, their photo. The Hub wants none of that and asking for
+ * it to learn an address the sign-in already stated would be the wrong trade. Without it, /me answers with a
+ * refusal, which is exactly what it did: a perfectly good mailbox token, and no way to say who it belonged
+ * to.
+ *
+ * The identity token comes back from the token endpoint in the same reply as the access token, over TLS,
+ * straight from Microsoft. Its claims are read without verifying the signature, which is safe only because
+ * of where it came from - this is never read from anything a browser handed us.
+ */
+function claimsOf(idToken: string): { sub?: string; email?: string; preferred_username?: string; oid?: string } {
+  const payload = idToken.split(".")[1];
+  if (!payload) return {};
+  const padded = payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=");
+  const bytes = Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+export async function microsoftProfile(accessToken: string, idToken?: string): Promise<{ id: string; email: string }> {
+  if (idToken) {
+    try {
+      const claims = claimsOf(idToken);
+      // preferred_username is what a personal account carries; work accounts put the address in email too.
+      const email = (claims.email || claims.preferred_username || "").toLowerCase();
+      const id = claims.oid || claims.sub || "";
+      if (email && id) return { id, email };
+    } catch {
+      // Fall through and ask Graph, which may still be allowed.
+    }
+  }
+
   const response = await fetch(GRAPH + "/me?$select=id,mail,userPrincipalName", {
     headers: { Authorization: "Bearer " + accessToken }
   });
-  if (!response.ok) throw new Error("Microsoft would not say who that mailbox belongs to.");
+  if (!response.ok) {
+    throw new Error(
+      response.status === 403 || response.status === 401
+        ? "Microsoft would not say who that mailbox belongs to, and the sign-in did not state it either."
+        : "Microsoft would not say who that mailbox belongs to."
+    );
+  }
   const data = await response.json<{ id: string; mail?: string; userPrincipalName?: string }>();
   return { id: data.id, email: (data.mail || data.userPrincipalName || "").toLowerCase() };
 }
