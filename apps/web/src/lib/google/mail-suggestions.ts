@@ -118,10 +118,15 @@ async function everyMailbox(userId: string, mode: ScanMode): Promise<MailMessage
   }
 
   // The same message can arrive in two connected mailboxes. Read it once.
+  //
+  // Matched on the Message-ID where there is one, because a member with a CAP address and a personal one
+  // that both receive squadron mail holds two copies of it with different per-mailbox ids. Falling back to
+  // the per-mailbox id keeps the old behaviour for mail that states no Message-ID.
   const seen = new Set<string>();
   return messages.filter((message) => {
-    if (seen.has(message.id)) return false;
-    seen.add(message.id);
+    const key = message.internetId || message.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
@@ -132,46 +137,98 @@ export async function suggestFromMail(userId: string): Promise<{ suggestions: Ma
   const messages = all.filter((message) => !fromTheHub(message));
   if (!messages.length) return { suggestions: [], read: all.length };
 
+  // Read several to a request, and a few requests at once.
+  //
+  // One message per request meant thirty-nine emails took two and a half minutes, nearly all of it spent
+  // waiting. That was tolerable while the scan only ever looked at unread mail; it is not once members ask
+  // for every folder, and it is what stands between the squadron and reading further back than ninety days.
+  //
+  // What it must not cost is accuracy. Every answer is still checked against the one message it claims to be
+  // about - the quote has to appear in that message and the date has to be in that message's words - so an
+  // assistant that muddles two emails in one prompt produces an answer that fails its own check rather than
+  // a task about the wrong thing.
+  const batches: MailMessage[][] = [];
+  for (let at = 0; at < messages.length; at += PER_REQUEST) {
+    batches.push(messages.slice(at, at + PER_REQUEST));
+  }
+
   const suggestions: MailSuggestion[] = [];
-  for (const message of messages) {
-    const suggestion = await readOne(userId, message);
-    if (suggestion) suggestions.push(suggestion);
+  for (let at = 0; at < batches.length; at += AT_ONCE) {
+    const answered = await Promise.all(
+      batches.slice(at, at + AT_ONCE).map((batch) => readBatch(userId, batch).catch(() => []))
+    );
+    answered.forEach((found) => suggestions.push(...found));
   }
   return { suggestions, read: messages.length };
 }
 
-async function readOne(userId: string, message: MailMessage): Promise<MailSuggestion | null> {
+/** How many emails go in one request, and how many of those requests run at once. */
+const PER_REQUEST = 6;
+const AT_ONCE = 3;
+
+/**
+ * Reads a handful of emails in one request and returns what each of them asks for.
+ *
+ * The emails are numbered in the prompt and the answers come back carrying those numbers, so an answer can
+ * be tied to the message it belongs to. Anything referring to a number that was not sent is dropped: that is
+ * the shape a muddled answer takes, and there is no safe way to guess which email it meant.
+ */
+async function readBatch(userId: string, batch: MailMessage[]): Promise<MailSuggestion[]> {
   const system = [
-    "You read one email for a Civil Air Patrol squadron and say whether it asks somebody to do something.",
-    'Reply with JSON only: {"actionable": true|false, "title": "...", "dueOn": "YYYY-MM-DD" or null, "because": "<a short quote from the email>"}.',
+    "You read a squadron's emails and say, for each one, whether it asks somebody to do something.",
+    "The emails are numbered. Answer about every one of them, using its number.",
+    'Reply with JSON only: {"emails": [{"n": 1, "actionable": true|false, "title": "...", "dueOn": "YYYY-MM-DD" or null, "because": "<a short quote from that email>"}]}',
     "Rules:",
     "- title is what a person must DO, in plain words, starting with a verb. Not the subject line.",
-    "- dueOn only when the email states or clearly implies a date. Never guess one.",
-    "- because must be words that actually appear in the email.",
+    "- dueOn only when that email states or clearly implies a date. Never guess one.",
+    "- because must be words that actually appear in that same email.",
+    "- Never mix details between the emails. Each answer is about its own number only.",
     "- Newsletters, receipts, confirmations and thank-yous are not actionable.",
     "Today is " + today() + "."
   ].join("\n");
 
-  const content = ["From: " + message.from, "Subject: " + message.subject, "", message.body.slice(0, 3000)].join("\n");
+  const content = batch
+    .map((message, at) => [
+      "### Email " + (at + 1),
+      "From: " + message.from,
+      "Subject: " + message.subject,
+      "",
+      // Shorter than a single-message read, because several share the request. The parts of an email that
+      // ask for something are near the top; what is cut is usually signatures and quoted history.
+      message.body.slice(0, 1500)
+    ].join("\n"))
+    .join("\n\n");
 
-  try {
-    const raw = await aiChatFor(userId, [
-      { role: "system", content: system },
-      { role: "user", content }
-    ], { json: true, maxTokens: 300 });
+  const raw = await aiChatFor(userId, [
+    { role: "system", content: system },
+    { role: "user", content }
+  ], { json: true, maxTokens: 220 * batch.length });
 
-    const parsed = parseJsonReply<{ actionable?: unknown; title?: unknown; dueOn?: unknown; because?: unknown }>(raw, {});
-    const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
-    const actionable = parsed.actionable === true && title.length > 2;
-    const dueOn = typeof parsed.dueOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueOn) ? parsed.dueOn : null;
-    // Shown either way, because a member reading it can judge a date for themselves. Recorded separately
-    // because only a date the email actually contains is allowed to create a task without being pressed.
-    const dueVerified = dueOn ? dateIsInTheText(dueOn, message.subject + "|" + message.body) : false;
-    // A quote that is not in the email is a sign the model is inventing; drop it rather than show it.
-    const quoted = typeof parsed.because === "string" ? parsed.because.trim().slice(0, 200) : "";
+  const parsed = parseJsonReply<{ emails?: unknown }>(raw, {});
+  const answers = Array.isArray(parsed.emails) ? parsed.emails : [];
+
+  const out: MailSuggestion[] = [];
+  for (const answer of answers) {
+    if (!answer || typeof answer !== "object") continue;
+    const said = answer as { n?: unknown; actionable?: unknown; title?: unknown; dueOn?: unknown; because?: unknown };
+
+    // The number has to be one that was sent. An answer about email 9 in a batch of six is the assistant
+    // losing track, and there is nothing sensible to do with it.
+    const n = typeof said.n === "number" ? said.n : Number(said.n);
+    const message = Number.isInteger(n) && n >= 1 && n <= batch.length ? batch[n - 1] : null;
+    if (!message) continue;
+
+    const title = typeof said.title === "string" ? said.title.trim() : "";
+    const actionable = said.actionable === true && title.length > 2;
+    const dueOn = typeof said.dueOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(said.dueOn) ? said.dueOn : null;
+
+    // Checked against this message, not the batch. A quote or a date borrowed from the email next to it in
+    // the prompt fails here, which is the whole reason reading several at once is safe to do.
+    const quoted = typeof said.because === "string" ? said.because.trim().slice(0, 200) : "";
     const because = quoted && message.body.toLowerCase().includes(quoted.slice(0, 40).toLowerCase()) ? quoted : "";
+    const dueVerified = dueOn ? dateIsInTheText(dueOn, message.subject + "|" + message.body) : false;
 
-    return {
+    out.push({
       messageId: message.id,
       from: message.from,
       subject: message.subject,
@@ -182,9 +239,8 @@ async function readOne(userId: string, message: MailMessage): Promise<MailSugges
       dueVerified,
       internetId: message.internetId,
       actionable
-    };
-  } catch {
-    // One unreadable message should not stop the rest.
-    return null;
+    });
   }
+  return out;
 }
+
