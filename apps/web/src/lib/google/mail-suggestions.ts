@@ -137,16 +137,19 @@ export async function suggestFromMail(userId: string): Promise<{ suggestions: Ma
   const messages = all.filter((message) => !fromTheHub(message));
   if (!messages.length) return { suggestions: [], read: all.length };
 
-  // Read several to a request, and a few requests at once.
+  // Several requests at once, one email in each.
   //
-  // One message per request meant thirty-nine emails took two and a half minutes, nearly all of it spent
-  // waiting. That was tolerable while the scan only ever looked at unread mail; it is not once members ask
-  // for every folder, and it is what stands between the squadron and reading further back than ninety days.
+  // Putting six emails in a request was supposed to be the speed-up and measured slower: thirty-eight emails
+  // took 185 seconds where thirty-nine had taken 149, and it found less. The squadron's assistant runs on one
+  // server, so a longer prompt does not save it any thinking - it just makes one request take longer, and the
+  // reply it has to write is six answers instead of one.
   //
-  // What it must not cost is accuracy. Every answer is still checked against the one message it claims to be
-  // about - the quote has to appear in that message and the date has to be in that message's words - so an
-  // assistant that muddles two emails in one prompt produces an answer that fails its own check rather than
-  // a task about the wrong thing.
+  // So the emails go back to one per request, where the assistant reads best, and the waiting is overlapped
+  // instead. Whether that helps depends on the server taking more than one at a time, which is worth
+  // measuring rather than assuming.
+  //
+  // The checking is unchanged either way: every answer is tied to the message it names, the quote has to
+  // appear in that message, and the date has to be in that message's own words.
   const batches: MailMessage[][] = [];
   for (let at = 0; at < messages.length; at += PER_REQUEST) {
     batches.push(messages.slice(at, at + PER_REQUEST));
@@ -162,9 +165,13 @@ export async function suggestFromMail(userId: string): Promise<{ suggestions: Ma
   return { suggestions, read: messages.length };
 }
 
-/** How many emails go in one request, and how many of those requests run at once. */
-const PER_REQUEST = 6;
-const AT_ONCE = 3;
+/**
+ * How many emails go in one request, and how many of those requests run at once.
+ *
+ * One per request because that is what the assistant answers best, and what it was measured doing best.
+ */
+const PER_REQUEST = 1;
+const AT_ONCE = 4;
 
 /**
  * Reads a handful of emails in one request and returns what each of them asks for.
@@ -193,9 +200,9 @@ async function readBatch(userId: string, batch: MailMessage[]): Promise<MailSugg
       "From: " + message.from,
       "Subject: " + message.subject,
       "",
-      // Shorter than a single-message read, because several share the request. The parts of an email that
-      // ask for something are near the top; what is cut is usually signatures and quoted history.
-      message.body.slice(0, 1500)
+      // A request carrying one email can afford to show more of it. What gets cut is the foot of a message -
+      // signatures and quoted history - rather than anything that asks for something.
+      message.body.slice(0, batch.length === 1 ? 3000 : 1500)
     ].join("\n"))
     .join("\n\n");
 
