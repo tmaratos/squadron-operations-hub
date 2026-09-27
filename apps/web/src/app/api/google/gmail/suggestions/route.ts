@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getScanMode, setScanMode } from "@/lib/google/mail-suggestions";
 import { getAutopilot, setAutopilot } from "@/lib/google/mail-autopilot";
+import { alreadyMadeFor, alreadySaid } from "@/lib/google/already";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
@@ -65,7 +66,9 @@ const schema = z.object({
   dueOn: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   listId: z.string().trim().max(80).optional(),
   from: z.string().trim().max(300).optional(),
-  subject: z.string().trim().max(300).optional()
+  subject: z.string().trim().max(300).optional(),
+  /** The email's worldwide id, so one message to the whole squadron cannot become one task per member. */
+  internetId: z.string().trim().max(400).optional()
 });
 
 export async function POST(request: Request) {
@@ -130,6 +133,18 @@ export async function POST(request: Request) {
 
     if (user.globalRole === "READ_ONLY") return NextResponse.json({ message: "Read-only accounts cannot create work." }, { status: 403 });
     const input = schema.parse(body);
+
+    // Somebody may have made this already, from their own copy of the same email.
+    const held = await alreadyMadeFor(input.internetId);
+    if (held) {
+      return NextResponse.json({
+        id: held.itemId,
+        listId: held.listId,
+        listName: held.listName,
+        message: alreadySaid(held, user.id) + " Nothing new was made."
+      });
+    }
+
 
     const spaces = await getWorkspaceTree();
     const lists = spaces.flatMap((space) => [...space.lists, ...space.folders.flatMap((folder) => folder.lists)]);

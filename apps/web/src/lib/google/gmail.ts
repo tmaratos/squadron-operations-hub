@@ -87,10 +87,28 @@ export interface MailMessage {
   subject: string;
   date: string;
   body: string;
+  /**
+   * The Message-ID the sender's mail server set, identical in every recipient's copy.
+   *
+   * The id above is not this: Gmail and Outlook each invent their own per mailbox, so one email sent to the
+   * whole squadron looks like a different message to every member who receives it. This is what makes it
+   * the same message.
+   */
+  internetId: string;
 }
 
 export async function canRead(userId: string): Promise<boolean> {
   return hasGmailReadScope(await storedScopesFor(userId));
+}
+
+/**
+ * A Message-ID in one shape, so two mailboxes' copies of one email compare equal.
+ *
+ * Servers are inconsistent about the angle brackets and about case, and a header that differs only in those
+ * would defeat the whole point of comparing them.
+ */
+export function normaliseInternetId(raw: string): string {
+  return raw.trim().replace(/^</, "").replace(/>$/, "").toLowerCase();
 }
 
 function headerValue(headers: Array<{ name?: string; value?: string }>, wanted: string): string {
@@ -181,7 +199,8 @@ async function fetchMail(token: string, search: string, limit: number): Promise<
       from: headerValue(mailHeaders, "from"),
       subject: headerValue(mailHeaders, "subject") || "(no subject)",
       date: payload.internalDate ? new Date(Number(payload.internalDate)).toISOString() : "",
-      body: plainTextFrom(payload.payload).slice(0, 4000)
+      body: plainTextFrom(payload.payload).slice(0, 4000),
+      internetId: normaliseInternetId(headerValue(mailHeaders, "message-id"))
     });
   }
   return messages;

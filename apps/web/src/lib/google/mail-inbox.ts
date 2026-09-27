@@ -88,10 +88,10 @@ export async function checkMail(userId: string): Promise<number> {
     try {
       await db
         .prepare(
-          "INSERT INTO mail_suggestions (id, user_id, message_id, from_address, subject, title, due_on, due_verified, because, status, created_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?) ON CONFLICT(user_id, message_id) DO NOTHING"
+          "INSERT INTO mail_suggestions (id, user_id, message_id, internet_id, from_address, subject, title, due_on, due_verified, because, status, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?) ON CONFLICT(user_id, message_id) DO NOTHING"
         )
-        .bind(crypto.randomUUID(), userId, suggestion.messageId, suggestion.from, suggestion.subject, suggestion.title, suggestion.dueOn, suggestion.dueVerified ? 1 : 0, suggestion.because, now)
+        .bind(crypto.randomUUID(), userId, suggestion.messageId, suggestion.internetId || null, suggestion.from, suggestion.subject, suggestion.title, suggestion.dueOn, suggestion.dueVerified ? 1 : 0, suggestion.because, now)
         .run();
       kept += 1;
     } catch (error) {
@@ -139,6 +139,19 @@ export async function openSuggestions(userId: string, limit = 5): Promise<Stored
     }));
   } catch {
     return [];
+  }
+}
+
+/** The email a stored suggestion came from, for checking whether anybody has acted on it already. */
+export async function internetIdOf(userId: string, id: string): Promise<string | null> {
+  try {
+    const row = await getDatabase()
+      .prepare("SELECT internet_id FROM mail_suggestions WHERE id = ? AND user_id = ?")
+      .bind(id, userId)
+      .first<{ internet_id: string | null }>();
+    return row?.internet_id ?? null;
+  } catch {
+    return null;
   }
 }
 

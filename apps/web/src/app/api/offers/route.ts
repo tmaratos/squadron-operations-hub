@@ -2,7 +2,8 @@ import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { dismissOffer, listOffers } from "@/lib/ai/offers";
-import { checkMail, dueForCheck, settleSuggestion } from "@/lib/google/mail-inbox";
+import { checkMail, dueForCheck, internetIdOf, settleSuggestion } from "@/lib/google/mail-inbox";
+import { alreadyMadeFor, alreadySaid } from "@/lib/google/already";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
@@ -53,6 +54,25 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "That offer is no longer valid. Refresh and try again." }, { status: 400 });
     }
     if (user.globalRole === "READ_ONLY") return NextResponse.json({ message: "Read-only accounts cannot create work." }, { status: 403 });
+
+    // Somebody may have got to this email first.
+    //
+    // A squadron email lands in everybody's mailbox, so the same offer appears for everybody, and each of
+    // them pressing Add would make its own copy of one job. Pointing at the task that exists is more use
+    // than a second one - and this is a person pressing a button, so they are told and can still decide the
+    // work is genuinely separate and make their own.
+    if (input.suggestionId) {
+      const held = await alreadyMadeFor(await internetIdOf(user.id, input.suggestionId));
+      if (held) {
+        await settleSuggestion({ userId: user.id, id: input.suggestionId, status: "ADDED", itemId: held.itemId });
+        await dismissOffer(user.id, input.id);
+        return NextResponse.json({
+          offers: await listOffers(user.id),
+          created: { id: held.itemId, listId: held.listId },
+          message: alreadySaid(held, user.id) + " Opened that one instead of making a second."
+        });
+      }
+    }
 
     const id = await createItem({ listId: input.listId, title: input.title, userId: user.id });
     if (input.dueOn) await updateItem(id, { dueOn: input.dueOn });

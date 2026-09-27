@@ -4,6 +4,7 @@ import { applyProposal, proposeReminders } from "@/lib/work/reminders";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { notify } from "@/lib/notify/notifications";
 import { dateIsInTheText } from "./dated";
+import { alreadyMadeFor, alreadySaid } from "./already";
 import { aiChatFor } from "@/lib/ai/provider";
 import { parseJsonReply } from "@/lib/ai/local";
 
@@ -198,11 +199,11 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
   if (room <= 0) return [];
 
   const db = getDatabase();
-  let waiting: Array<{ id: string; title: string; due_on: string; because: string | null; from_address: string | null; subject: string | null; message_id: string }> = [];
+  let waiting: Array<{ id: string; title: string; due_on: string; because: string | null; from_address: string | null; subject: string | null; message_id: string; internet_id: string | null }> = [];
   try {
     const rows = await db
       .prepare(
-        "SELECT id, title, due_on, because, from_address, subject, message_id FROM mail_suggestions " +
+        "SELECT id, title, due_on, because, from_address, subject, message_id, internet_id FROM mail_suggestions " +
         // The date is the whole qualification, and it has to be a date the email really contains. An
         // unverified one still shows as a suggestion for somebody to read; it just cannot make work by itself.
         // A deadline that has already gone by is not work, it is history - and reading ninety days of mail
@@ -212,7 +213,7 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
         "AND due_on >= ? ORDER BY created_at LIMIT ?"
       )
       .bind(userId, new Date().toISOString().slice(0, 10), room)
-      .all<{ id: string; title: string; due_on: string; because: string | null; from_address: string | null; subject: string | null; message_id: string }>();
+      .all<{ id: string; title: string; due_on: string; because: string | null; from_address: string | null; subject: string | null; message_id: string; internet_id: string | null }>();
     waiting = rows.results;
   } catch {
     return [];
@@ -220,6 +221,8 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
   if (!waiting.length) return [];
 
   const made: AutoCreated[] = [];
+  /** Emails somebody else had already turned into a task. Worth saying, not worth duplicating. */
+  const shared: Array<{ said: string; itemId: string; listId: string | null }> = [];
   const now = new Date().toISOString();
 
   for (const suggestion of waiting) {
@@ -235,6 +238,21 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
         .bind(suggestion.id)
         .run();
       if (!claim.meta.changes) continue;
+
+      // One email, one task, however many members it was sent to.
+      //
+      // A squadron email reaches everybody, and without this every member's Hub would make its own copy of
+      // the same job, each with its own reminders. The member is told who has it rather than handed a
+      // duplicate, and the suggestion is settled so it stops being offered.
+      const held = await alreadyMadeFor(suggestion.internet_id);
+      if (held) {
+        await db
+          .prepare("UPDATE mail_suggestions SET item_id = ? WHERE id = ?")
+          .bind(held.itemId, suggestion.id)
+          .run();
+        shared.push({ said: alreadySaid(held, userId), itemId: held.itemId, listId: held.listId });
+        continue;
+      }
 
       const list = await chooseList({
         userId,
@@ -286,6 +304,20 @@ export async function runAutopilot(userId: string, userName: string): Promise<Au
         .catch(() => undefined);
       continue;
     }
+  }
+
+  // Said once, for the emails that turned out to be somebody else's job already. Without this the member
+  // would simply never hear about mail the Hub had quietly decided not to act on.
+  if (shared.length) {
+    await notify(shared.map((entry) => ({
+      userId,
+      kind: "ASSIGNED" as const,
+      title: "Already being handled",
+      body: entry.said + " Nothing new was created for you.",
+      itemId: entry.itemId,
+      listId: entry.listId,
+      dedupeKey: "ALREADYMADE:" + entry.itemId + ":" + userId
+    }))).catch((error) => console.error(error));
   }
 
   if (!made.length) return [];

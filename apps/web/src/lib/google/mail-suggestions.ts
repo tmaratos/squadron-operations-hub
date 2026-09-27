@@ -22,6 +22,8 @@ export interface MailSuggestion {
   dueOn: string | null;
   /** True only when that date is in the email's own words. Nothing is created unasked without it. */
   dueVerified: boolean;
+  /** The email's worldwide id, the same in every member's copy of a message sent to several of them. */
+  internetId: string;
   /** False when the assistant read the mail and concluded there is nothing to do. */
   actionable: boolean;
 }
@@ -178,6 +180,7 @@ async function readOne(userId: string, message: MailMessage): Promise<MailSugges
       title: actionable ? title.slice(0, 300) : "",
       dueOn,
       dueVerified,
+      internetId: message.internetId,
       actionable
     };
   } catch {

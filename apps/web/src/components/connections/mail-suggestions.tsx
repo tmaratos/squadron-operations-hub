@@ -13,6 +13,7 @@ interface Suggestion {
   because: string;
   title: string;
   dueOn: string | null;
+  internetId: string;
   actionable: boolean;
 }
 
@@ -125,7 +126,14 @@ export function MailSuggestions() {
       const response = await fetch("/api/google/gmail/suggestions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: suggestion.title, dueOn: suggestion.dueOn, from: suggestion.from, subject: suggestion.subject })
+        body: JSON.stringify({
+          title: suggestion.title,
+          dueOn: suggestion.dueOn,
+          from: suggestion.from,
+          subject: suggestion.subject,
+          // Sent so the Hub can tell this is the same email somebody else may already have acted on.
+          internetId: suggestion.internetId
+        })
       });
       const data = (await response.json()) as { message?: string };
       if (!response.ok) throw new Error(data.message || "It could not be added.");

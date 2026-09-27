@@ -1,5 +1,5 @@
 import { getCloudflareEnv } from "@/lib/cloudflare";
-import type { MailMessage } from "@/lib/google/gmail";
+import { normaliseInternetId, type MailMessage } from "@/lib/google/gmail";
 import type { ScanMode } from "@/lib/google/gmail";
 
 // Reading a Microsoft mailbox: Outlook, Hotmail, Live, Office 365, and CAP's own @cap.gov mail.
@@ -213,7 +213,7 @@ function plainText(body: { contentType?: string; content?: string } | undefined)
  */
 export async function listMicrosoftMail(accessToken: string, mode: ScanMode, limit: number): Promise<MailMessage[]> {
   const headers = { Authorization: "Bearer " + accessToken };
-  const select = "$select=id,subject,from,receivedDateTime,bodyPreview,body,isRead,parentFolderId";
+  const select = "$select=id,internetMessageId,subject,from,receivedDateTime,bodyPreview,body,isRead,parentFolderId";
   const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString();
 
   let url: string;
@@ -235,6 +235,7 @@ export async function listMicrosoftMail(accessToken: string, mode: ScanMode, lim
   const data = await response.json<{
     value?: Array<{
       id: string;
+      internetMessageId?: string;
       subject?: string;
       from?: { emailAddress?: { name?: string; address?: string } };
       receivedDateTime?: string;
@@ -255,7 +256,8 @@ export async function listMicrosoftMail(accessToken: string, mode: ScanMode, lim
         from: address?.name ? address.name + " <" + (address.address ?? "") + ">" : address?.address ?? "",
         subject: message.subject ?? "",
         body: plainText(message.body) || (message.bodyPreview ?? ""),
-        date: message.receivedDateTime ?? new Date().toISOString()
+        date: message.receivedDateTime ?? new Date().toISOString(),
+        internetId: normaliseInternetId(message.internetMessageId ?? "")
       } satisfies MailMessage;
     });
 }
