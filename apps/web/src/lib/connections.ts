@@ -24,7 +24,10 @@ export const PROVIDERS: ProviderDefinition[] = [
   { id: "google-drive", name: "Google Drive", category: "files", method: "google_signin", summary: "Open and attach squadron files. This uses the Google account you sign in with.", color: "#1a73e8", initials: "GD" },
   { id: "microsoft-onedrive", name: "Microsoft OneDrive", category: "files", method: "not_yet", summary: "Attach files from OneDrive or SharePoint. The squadron is on Google, so there is nothing to connect yet.", color: "#0364b8", initials: "OD" },
   { id: "gmail", name: "Gmail", category: "email", method: "google_permission", summary: "Let the Hub write emails into your Gmail drafts. You read them and press send yourself.", color: "#d93025", initials: "GM" },
-  { id: "microsoft-outlook", name: "Outlook email", category: "email", method: "not_yet", summary: "Drafting into Outlook. The squadron is on Google, so there is nothing to connect yet.", color: "#0078d4", initials: "OL" },
+  // Reading an Outlook or CAP mailbox is set up further up this page, and works today. What is missing is
+  // the other direction - having the Hub write a draft into Outlook - so this card says that rather than
+  // claiming there is nothing to connect while a connected Outlook mailbox is listed above it.
+  { id: "microsoft-outlook", name: "Outlook drafts", category: "email", method: "not_yet", summary: "Having the Hub write drafts into Outlook is not built yet. Reading an Outlook, Hotmail or CAP mailbox is set up under “Which mailboxes are read” above.", color: "#0078d4", initials: "OL" },
   { id: "anthropic", name: "Claude (Anthropic)", category: "ai", method: "api_key", summary: "Use Claude with your own Anthropic account.", keyUrl: "https://console.anthropic.com/settings/keys", keyHelp: "Anthropic keys start with sk-ant-", color: "#c96442", initials: "CL" },
   { id: "openai", name: "ChatGPT (OpenAI)", category: "ai", method: "api_key", summary: "Use OpenAI models with your own OpenAI account.", keyUrl: "https://platform.openai.com/api-keys", keyHelp: "OpenAI keys start with sk-", color: "#10a37f", initials: "AI" },
   { id: "google-gemini", name: "Gemini (Google)", category: "ai", method: "api_key", summary: "Use Google's Gemini models with your own key.", keyUrl: "https://aistudio.google.com/app/apikey", keyHelp: "Create a key in Google AI Studio", color: "#4285f4", initials: "GE" },

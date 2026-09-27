@@ -108,11 +108,12 @@ export function ConnectionsBoard({ providers, initialConnections }: { providers:
                           The Hub can put drafts in your Gmail. It never sends anything: you open the draft, read it, and press send.
                           Remove this any time in your Google account under “Third-party access”.
                         </p>
-                        <a className="cx-btn" href="/api/auth/google/connect?scope=gmail-read">Also let it read labelled mail</a>
+<a className="cx-btn" href="/api/auth/google/connect?scope=gmail-read">Also let it read your mail</a>
                         <span className="cx-help">
-                          For turning email into tasks. Google has no “only the mail I labelled” permission, so this grants read
-                          access to your mailbox — the Hub opens only messages you label Hub, but the permission is wider than that.
-                          Forwarding to your Hub address does the same job and needs no permission at all.
+                          For turning email into tasks. How much of it gets read is yours to set under
+                          “Turn email into tasks” at the top of this page — unread only, your whole inbox, or every folder
+                          except the trash. Your trash and spam are never read. Forwarding to your Hub address does the same
+                          job and needs no permission at all.
                         </span>
                       </div>
                     ) : (
