@@ -18,6 +18,8 @@ export interface MailAccount {
   provider: MailProvider;
   scopes: string | null;
   addedOn: string;
+  /** How much of this one to read. Null means whatever the member's own default is. */
+  scanMode: "UNREAD" | "INBOX" | "ALL" | null;
 }
 
 interface AccountRow {
@@ -33,15 +35,16 @@ interface AccountRow {
 export async function listMailAccounts(userId: string): Promise<MailAccount[]> {
   try {
     const rows = await getDatabase()
-      .prepare("SELECT id, email, scopes, created_at, COALESCE(provider, 'GOOGLE') AS provider FROM user_mail_accounts WHERE user_id = ? ORDER BY created_at")
+      .prepare("SELECT id, email, scopes, created_at, scan_mode, COALESCE(provider, 'GOOGLE') AS provider FROM user_mail_accounts WHERE user_id = ? ORDER BY created_at")
       .bind(userId)
-      .all<{ id: string; email: string; scopes: string | null; created_at: string; provider: string }>();
+      .all<{ id: string; email: string; scopes: string | null; created_at: string; provider: string; scan_mode: string | null }>();
     return rows.results.map((row) => ({
       id: row.id,
       email: row.email,
       provider: row.provider === "MICROSOFT" ? "MICROSOFT" : "GOOGLE",
       scopes: row.scopes,
-      addedOn: row.created_at
+      addedOn: row.created_at,
+      scanMode: row.scan_mode === "UNREAD" || row.scan_mode === "INBOX" || row.scan_mode === "ALL" ? row.scan_mode : null
     }));
   } catch {
     // The table arrives with a migration; until then a member simply has none.
@@ -102,6 +105,15 @@ export async function saveMailAccount(input: {
       crypto.randomUUID(), input.userId, input.email, input.googleSubject, access, refresh,
       expiresAt, input.scopes ?? null, input.provider ?? "GOOGLE", now.toISOString(), now.toISOString()
     )
+    .run();
+}
+
+/** How much of one mailbox to read. Null puts it back to following the member's default. */
+export async function setMailboxScanMode(userId: string, id: string, mode: "UNREAD" | "INBOX" | "ALL" | null): Promise<void> {
+  // Scoped to the member, so one person's id can never change another's mailbox.
+  await getDatabase()
+    .prepare("UPDATE user_mail_accounts SET scan_mode = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+    .bind(mode, new Date().toISOString(), id, userId)
     .run();
 }
 

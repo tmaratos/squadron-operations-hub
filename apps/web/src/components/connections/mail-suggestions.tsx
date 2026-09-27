@@ -155,7 +155,7 @@ export function MailSuggestions() {
               Reading somebody's whole inbox is a different thing to consent to than reading what they chose
               to hand over, and it should never happen because a default said so. */}
           <fieldset className="ms-scan">
-            <legend>What it reads</legend>
+            <legend>What it reads by default</legend>
             <label className={scan === "UNREAD" ? "is-on" : ""}>
               <input type="radio" name="ms-scan" checked={scan === "UNREAD"} onChange={() => saveScan("UNREAD")} />
               <span>
@@ -177,7 +177,11 @@ export function MailSuggestions() {
                 Every folder, archived mail included, going back ninety days.
               </span>
             </label>
-            <p className="ms-fine">Your trash is never read, whichever you pick. Nor is spam.</p>
+            <p className="ms-fine">
+              Your trash is never read, whichever you pick. Nor is spam. Any mailbox you connect below can be
+              set to something different from this &mdash; a CAP address read in full, a personal one only when
+              unread.
+            </p>
           </fieldset>
 
           {/* Creating the task without being asked. Off for everybody until they turn it on here, and only

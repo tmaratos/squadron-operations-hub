@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { accessTokenFor, listMailAccounts, removeMailAccount } from "@/lib/google/mail-accounts";
+import { accessTokenFor, listMailAccounts, removeMailAccount, setMailboxScanMode } from "@/lib/google/mail-accounts";
 import { getScanMode } from "@/lib/google/mail-suggestions";
 import { listMailForToken } from "@/lib/google/gmail";
 import { listMicrosoftMail } from "@/lib/microsoft/graph";
@@ -15,7 +15,13 @@ const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("remove"), id: z.string().trim().min(1).max(80) }),
   // Reads one page of a mailbox and reports what it found. The only way to know a connection works without
   // waiting for the assistant to happen to find something worth suggesting.
-  z.object({ action: z.literal("check"), id: z.string().trim().min(1).max(80) })
+  z.object({ action: z.literal("check"), id: z.string().trim().min(1).max(80) }),
+  // How much of this one mailbox to read. Null follows the member's own default.
+  z.object({
+    action: z.literal("scan"),
+    id: z.string().trim().min(1).max(80),
+    mode: z.enum(["UNREAD", "INBOX", "ALL"]).nullable()
+  })
 ]);
 
 export async function GET() {
@@ -31,6 +37,36 @@ export async function POST(request: Request) {
     if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
 
     const input = schema.parse(await request.json());
+
+    if (input.action === "scan") {
+      const account = (await listMailAccounts(user.id)).find((entry) => entry.id === input.id);
+      if (!account) return NextResponse.json({ message: "That mailbox is not connected." }, { status: 404 });
+
+      await setMailboxScanMode(user.id, input.id, input.mode);
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: "MAILBOX_SCAN_" + (input.mode ?? "DEFAULT"),
+        entityType: "user",
+        entityId: user.id,
+        summary: user.fullName + " set " + account.email + " to be read " + (
+          input.mode === "ALL" ? "in every folder except the trash"
+            : input.mode === "INBOX" ? "in the inbox only"
+              : input.mode === "UNREAD" ? "when unread only"
+                : "the same as their other mail"
+        ),
+        metadata: { email: account.email, mode: input.mode }
+      });
+
+      return NextResponse.json({
+        accounts: await listMailAccounts(user.id),
+        message: account.email + " will be read " + (
+          input.mode === "ALL" ? "in every folder except the trash."
+            : input.mode === "INBOX" ? "in the inbox only."
+              : input.mode === "UNREAD" ? "when something in it is unread."
+                : "the same way as the rest of your mail."
+        )
+      });
+    }
 
     if (input.action === "check") {
       const account = (await listMailAccounts(user.id)).find((entry) => entry.id === input.id);
@@ -50,7 +86,10 @@ export async function POST(request: Request) {
         // This used to read unread mail whatever the setting said, so somebody who had asked for every
         // folder was told "there is nothing unread in it right now" - which reads as the Hub only caring
         // about unread mail, and is alarming when the whole point is that it reads everything else too.
-        const mode = await getScanMode(user.id);
+        // This mailbox's own scope, falling back to the member's default when it has none of its own -
+        // exactly what the real scan does, so the check cannot report on a different scope from the one
+        // that will actually be used.
+        const mode = account.scanMode ?? (await getScanMode(user.id));
         const messages = account.provider === "MICROSOFT"
           ? await listMicrosoftMail(token, mode, 5)
           : await listMailForToken(token, mode, 5);

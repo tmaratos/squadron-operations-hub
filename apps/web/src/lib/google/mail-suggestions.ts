@@ -85,13 +85,13 @@ export async function setScanMode(userId: string, mode: ScanMode): Promise<void>
  * quiet about the two that still work.
  */
 async function everyMailbox(userId: string, mode: ScanMode): Promise<MailMessage[]> {
-  const perMailbox = mode === "ALL" ? 40 : 20;
+  const howMany = (of: ScanMode) => (of === "ALL" ? 40 : 20);
   const messages: MailMessage[] = [];
 
   if (await canRead(userId).catch(() => false)) {
     try {
       const token = await getUserGoogleAccessToken(userId);
-      messages.push(...await listMailForToken(token, mode, perMailbox));
+      messages.push(...await listMailForToken(token, mode, howMany(mode)));
     } catch {
       // The signed-in account cannot be read just now. The others still can.
     }
@@ -101,10 +101,15 @@ async function everyMailbox(userId: string, mode: ScanMode): Promise<MailMessage
     try {
       const token = await accessTokenFor(userId, account.id);
       if (!token) continue;
-      // Same three settings either way; only the service behind them differs.
+      // Each mailbox is read as much as it has been told to be.
+      //
+      // A CAP address and somebody's personal mail do not deserve the same treatment: one is worth reading
+      // every folder of, the other mostly is not. A mailbox nobody has decided about follows the member's
+      // own default, which is what the single setting used to do for all of them.
+      const its = account.scanMode ?? mode;
       messages.push(...(account.provider === "MICROSOFT"
-        ? await listMicrosoftMail(token, mode, perMailbox)
-        : await listMailForToken(token, mode, perMailbox)));
+        ? await listMicrosoftMail(token, its, howMany(its))
+        : await listMailForToken(token, its, howMany(its))));
     } catch {
       continue;
     }

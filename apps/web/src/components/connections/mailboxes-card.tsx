@@ -75,6 +75,29 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
     }
   }
 
+  /** How much of one mailbox gets read. "" means follow the member's own default. */
+  async function setScope(id: string, value: string) {
+    const previous = accounts;
+    const mode = value === "" ? null : (value as "UNREAD" | "INBOX" | "ALL");
+    setAccounts(accounts.map((account) => (account.id === id ? { ...account, scanMode: mode } : account)));
+    setNote(null);
+    try {
+      const response = await fetch("/api/google/mailboxes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "scan", id, mode })
+      });
+      const data = (await response.json()) as { accounts?: MailAccount[]; message?: string };
+      if (!response.ok) throw new Error(data.message || "That could not be saved.");
+      if (data.accounts) setAccounts(data.accounts);
+      if (data.message) setNote(data.message);
+    } catch (caught) {
+      // Put it back, rather than leaving somebody believing a mailbox is read more, or less, than it is.
+      setAccounts(previous);
+      setNote(caught instanceof Error ? caught.message : "That could not be saved.");
+    }
+  }
+
   async function remove(id: string, email: string) {
     setBusy(id);
     setNote(null);
@@ -126,6 +149,15 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
                 {" · added " + new Date(account.addedOn).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
               </small>
             </span>
+            <label className="mbx-scope">
+              <span>Read</span>
+              <select value={account.scanMode ?? ""} onChange={(event) => setScope(account.id, event.target.value)}>
+                <option value="">the same as my other mail</option>
+                <option value="UNREAD">only when unread</option>
+                <option value="INBOX">the inbox</option>
+                <option value="ALL">every folder except the trash</option>
+              </select>
+            </label>
             <span className="mbx-row-actions">
               <button
                 type="button"
@@ -180,7 +212,7 @@ const mbCss = [
   ".mbx-head h2{margin:0;font-size:15.5px}",
   ".mbx-head p{margin:3px 0 0;font-size:12.5px;opacity:.75;line-height:1.5}",
   ".mbx-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
-  ".mbx-list li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--cu-border,#e4e6eb);border-radius:9px;min-width:0}",
+  ".mbx-list li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--cu-border,#e4e6eb);border-radius:9px;min-width:0;flex-wrap:wrap}",
   ".mbx-text{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}",
   ".mbx-text strong{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
   ".mbx-text small{font-size:11.5px;opacity:.6}",
@@ -189,6 +221,9 @@ const mbCss = [
   ".mbx-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}",
   ".mbx-btn--danger{color:#d03b3b}.mbx-btn--danger:hover{border-color:#d03b3b}",
   ".mbx-note{margin:0;font-size:12.5px;padding:8px 11px;border-radius:8px;background:rgba(123,104,238,.12)}",
+  ".mbx-scope{display:flex;gap:6px;align-items:center;font-size:11.5px;opacity:.85;flex:0 0 auto}",
+  ".mbx-scope select{font:inherit;font-size:11.5px;padding:5px 8px;border-radius:7px;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);color:inherit;max-width:100%}",
+  "html[data-theme=dark] .mbx-scope select{background:#2a2b2f;border-color:#3a3d44}",
   ".mbx-row-actions{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}",
   ".mbx-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
   ".mbx-said{margin:0;font-size:11.5px;line-height:1.5;opacity:.75;padding:8px 11px;border-radius:8px;background:rgba(0,0,0,.05);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}",
