@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getScanMode, setScanMode } from "@/lib/google/mail-suggestions";
+import { getAutopilot, setAutopilot } from "@/lib/google/mail-autopilot";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
@@ -15,18 +16,50 @@ import { getWorkspaceTree } from "@/lib/work/structure";
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
+
+  // Sent whether or not mail can be read, so the page can always show what the setting currently is rather
+  // than defaulting the switch to off on screen while it is on underneath.
+  const autopilot = await getAutopilot(user.id);
+  const lists = await listChoices();
+  const mode = await getScanMode(user.id);
+
+  // Asking only for the settings, which is what the page needs to draw itself correctly. Reading a mailbox
+  // takes the better part of a minute, and doing it just to find out which radio button to fill in meant
+  // the page never asked at all - so it always drew the first one, whatever the member had actually chosen.
+  if (new URL(request.url).searchParams.get("settings")) {
+    return NextResponse.json({ connected: await canRead(user.id).catch(() => false), mode, autopilot, lists, suggestions: [] });
+  }
+
   if (!(await canRead(user.id))) {
-    return NextResponse.json({ connected: false, suggestions: [], mode: await getScanMode(user.id) });
+    return NextResponse.json({ connected: false, suggestions: [], mode, autopilot, lists });
   }
   try {
     const result = await suggestFromMail(user.id);
-    return NextResponse.json({ connected: true, mode: await getScanMode(user.id), ...result });
+    return NextResponse.json({ connected: true, mode, autopilot, lists, ...result });
   } catch (error) {
     return NextResponse.json({ connected: true, suggestions: [], message: error instanceof Error ? error.message : "Your mail could not be read." }, { status: 400 });
   }
 }
 
 const scanSchema = z.object({ action: z.literal("scan"), mode: z.enum(["UNREAD", "INBOX", "ALL"]) });
+
+const autopilotSchema = z.object({
+  action: z.literal("autopilot"),
+  on: z.boolean(),
+  listId: z.string().trim().max(80).nullable().optional()
+});
+
+/** Every list a task could go in, loose ones and the ones inside folders. */
+async function listChoices(): Promise<Array<{ id: string; name: string }>> {
+  try {
+    const spaces = await getWorkspaceTree();
+    return spaces
+      .flatMap((space) => [...space.lists, ...space.folders.flatMap((folder) => folder.lists)])
+      .map((list) => ({ id: list.id, name: list.name }));
+  } catch {
+    return [];
+  }
+}
 
 const schema = z.object({
   title: z.string().trim().min(2).max(300),
@@ -67,6 +100,40 @@ export async function POST(request: Request) {
           : asScan.data.mode === "INBOX"
             ? "Reading your whole inbox."
             : "Reading your unread mail."
+      });
+    }
+
+    // Letting the Hub create tasks by itself is creating work, so a read-only account cannot turn it on.
+    const asAutopilot = autopilotSchema.safeParse(body);
+    if (asAutopilot.success) {
+      if (user.globalRole === "READ_ONLY") {
+        return NextResponse.json({ message: "Read-only accounts cannot create work." }, { status: 403 });
+      }
+      const lists = await listChoices();
+      const chosen = asAutopilot.data.listId
+        ? lists.find((list) => list.id === asAutopilot.data.listId)
+        : undefined;
+      if (asAutopilot.data.on && !chosen) {
+        return NextResponse.json({ message: "Choose which list these tasks should go in first." }, { status: 400 });
+      }
+
+      await setAutopilot(user.id, { on: asAutopilot.data.on, listId: chosen?.id ?? null });
+      await recordAuditEvent({
+        actorUserId: user.id,
+        action: asAutopilot.data.on ? "MAIL_AUTOCREATE_ON" : "MAIL_AUTOCREATE_OFF",
+        entityType: "user",
+        entityId: user.id,
+        summary: user.fullName + (asAutopilot.data.on
+          ? " let the Hub create tasks from dated mail, in " + chosen?.name
+          : " stopped the Hub creating tasks from mail"),
+        metadata: { listId: chosen?.id ?? null }
+      });
+
+      return NextResponse.json({
+        autopilot: await getAutopilot(user.id),
+        message: asAutopilot.data.on
+          ? "Mail that states a date will become a task in " + chosen?.name + ", with its reminders already set. You will be told each time."
+          : "Nothing will be created on its own. Suggestions still wait for you."
       });
     }
 

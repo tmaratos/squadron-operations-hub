@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // "Here is what your email seems to be asking for." Every suggestion shows the message it came from and a
 // quote from it, so a wrong reading is obvious. Nothing becomes a task until somebody presses Add.
@@ -14,6 +14,12 @@ interface Suggestion {
   title: string;
   dueOn: string | null;
   actionable: boolean;
+}
+
+interface Autopilot {
+  on: boolean;
+  listId: string | null;
+  listName: string | null;
 }
 
 export function MailSuggestions() {
@@ -44,6 +50,59 @@ export function MailSuggestions() {
   const [note, setNote] = useState<string | null>(null);
   const [added, setAdded] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [autopilot, setAutopilot] = useState<Autopilot>({ on: false, listId: null, listName: null });
+  const [lists, setLists] = useState<Array<{ id: string; name: string }>>([]);
+  const [saving, setSaving] = useState(false);
+
+  /**
+   * What the member has actually chosen, asked for as soon as the card appears.
+   *
+   * It asks for the settings alone. Reading a mailbox takes the better part of a minute, so the card used
+   * never to ask at all - which meant it drew the first option every time regardless of what was stored, and
+   * somebody who had chosen to have every folder read was shown "my unread mail" on their next visit.
+   */
+  useEffect(() => {
+    let live = true;
+    fetch("/api/google/gmail/suggestions?settings=1")
+      .then((response) => response.json() as Promise<{ mode?: string; autopilot?: Autopilot; lists?: Array<{ id: string; name: string }>; connected?: boolean }>)
+      .then((data) => {
+        if (!live) return;
+        if (data.mode === "UNREAD" || data.mode === "INBOX" || data.mode === "ALL") setScan(data.mode);
+        if (data.autopilot) setAutopilot(data.autopilot);
+        if (data.lists) setLists(data.lists);
+        setConnected(data.connected !== false);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  /** Turns this on or off, or moves which list it uses. */
+  async function saveAutopilot(next: { on: boolean; listId: string | null }) {
+    const previous = autopilot;
+    setSaving(true);
+    setNote(null);
+    setAutopilot({ ...autopilot, ...next, listName: lists.find((list) => list.id === next.listId)?.name ?? null });
+    try {
+      const response = await fetch("/api/google/gmail/suggestions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "autopilot", on: next.on, listId: next.listId })
+      });
+      const data = (await response.json()) as { autopilot?: Autopilot; message?: string };
+      if (!response.ok) throw new Error(data.message || "That could not be saved.");
+      if (data.autopilot) setAutopilot(data.autopilot);
+      if (data.message) setNote(data.message);
+    } catch (caught) {
+      // Put it back, rather than leaving somebody believing the Hub will create work when it will not, or
+      // that it has stopped when it has not.
+      setAutopilot(previous);
+      setNote(caught instanceof Error ? caught.message : "That could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function check() {
     setState("loading");
@@ -120,6 +179,44 @@ export function MailSuggestions() {
             </label>
             <p className="ms-fine">Your trash is never read, whichever you pick. Nor is spam.</p>
           </fieldset>
+
+          {/* Creating the task without being asked. Off for everybody until they turn it on here, and only
+              ever for mail that states a date in its own words - the rest keeps waiting to be pressed. */}
+          <div className={"ms-auto" + (autopilot.on ? " is-on" : "")}>
+            <label className="ms-switch">
+              <input
+                type="checkbox"
+                checked={autopilot.on}
+                disabled={saving || !lists.length}
+                onChange={(event) => saveAutopilot({ on: event.target.checked, listId: autopilot.listId ?? lists.find((list) => list.name.toLowerCase().includes("intake"))?.id ?? lists[0]?.id ?? null })}
+              />
+              <span>
+                <strong>Create the task for me, and set its reminders</strong>
+                For mail that states a date &mdash; a report due the 15th, a form closing Friday. The task is made and
+                its reminders are set without you pressing anything, and you are told each time.
+              </span>
+            </label>
+
+            {autopilot.on ? (
+              <label className="ms-where">
+                <span>Put them in</span>
+                <select
+                  value={autopilot.listId ?? ""}
+                  disabled={saving}
+                  onChange={(event) => saveAutopilot({ on: true, listId: event.target.value })}
+                >
+                  {lists.map((list) => (
+                    <option key={list.id} value={list.id}>{list.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
+            <p className="ms-fine">
+              Mail with no date, or a date the Hub cannot find in the email&rsquo;s own words, still waits for you.
+              At most six tasks a day. Anything wrong can be deleted like any other task.
+            </p>
+          </div>
         </div>
       </div>
 
@@ -178,6 +275,15 @@ const msCss = [
   ".ms-scan label.is-on{border-color:#7b68ee;background:rgba(123,104,238,.08)}",
   ".ms-scan label span{display:flex;flex-direction:column;gap:2px;min-width:0}",
   ".ms-scan label strong{font-size:13px}",
+  ".ms-auto{margin:11px 0 0;padding:11px 13px;border:1px solid var(--cu-border,#e4e6eb);border-radius:10px;display:flex;flex-direction:column;gap:8px}",
+  ".ms-auto.is-on{border-color:#7b68ee;background:rgba(123,104,238,.07)}",
+  ".ms-switch{display:flex;gap:9px;align-items:flex-start;cursor:pointer;font-size:12.5px;line-height:1.5}",
+  ".ms-switch input{margin-top:2px;flex:0 0 auto}",
+  ".ms-switch span{display:flex;flex-direction:column;gap:2px;min-width:0}",
+  ".ms-switch strong{font-size:13px}",
+  ".ms-where{display:flex;gap:8px;align-items:center;font-size:12.5px;flex-wrap:wrap;padding-left:23px}",
+  ".ms-where select{font:inherit;font-size:12.5px;padding:6px 9px;border-radius:8px;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);color:inherit;max-width:100%}",
+  "html[data-theme=dark] .ms-where select{background:#2a2b2f;border-color:#3a3d44}",
   ".ms-note{margin:12px 0 0;font-size:13px;line-height:1.55;padding:9px 12px;border-radius:8px;background:rgba(123,104,238,.1)}",
   ".ms-list{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:8px}",
   ".ms-list li{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 13px;border:1px solid var(--cu-border,#e4e6eb);border-radius:10px}",

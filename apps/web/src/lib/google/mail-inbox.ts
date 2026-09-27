@@ -1,6 +1,7 @@
 import { getDatabase } from "@/lib/cloudflare";
 import { canRead } from "./gmail";
 import { suggestFromMail } from "./mail-suggestions";
+import { runAutopilot } from "./mail-autopilot";
 
 // Looking through labelled mail quietly, in the background, so the answer is already waiting.
 //
@@ -49,7 +50,12 @@ export async function dueForCheck(userId: string): Promise<boolean> {
 
 /** Reads the labelled mail and keeps anything worth doing. Safe to call often; it does the work rarely. */
 export async function checkMail(userId: string): Promise<number> {
-  if (!(await dueForCheck(userId))) return 0;
+  // Creating tasks from what has already been read is not part of reading, and waiting up to ninety minutes
+  // for it would make turning the setting on look like it had done nothing.
+  if (!(await dueForCheck(userId))) {
+    await autopilot(userId);
+    return 0;
+  }
   await markChecked(userId); // marked first, so a failure does not put it in a loop
 
   const { suggestions } = await suggestFromMail(userId);
@@ -82,17 +88,35 @@ export async function checkMail(userId: string): Promise<number> {
     try {
       await db
         .prepare(
-          "INSERT INTO mail_suggestions (id, user_id, message_id, from_address, subject, title, due_on, because, status, created_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?) ON CONFLICT(user_id, message_id) DO NOTHING"
+          "INSERT INTO mail_suggestions (id, user_id, message_id, from_address, subject, title, due_on, due_verified, because, status, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?) ON CONFLICT(user_id, message_id) DO NOTHING"
         )
-        .bind(crypto.randomUUID(), userId, suggestion.messageId, suggestion.from, suggestion.subject, suggestion.title, suggestion.dueOn, suggestion.because, now)
+        .bind(crypto.randomUUID(), userId, suggestion.messageId, suggestion.from, suggestion.subject, suggestion.title, suggestion.dueOn, suggestion.dueVerified ? 1 : 0, suggestion.because, now)
         .run();
       kept += 1;
     } catch (error) {
       console.error(error);
     }
   }
+
+  // And, for the members who asked for it, the dated ones become tasks here rather than waiting to be
+  // pressed. This does nothing at all for anybody who has not turned it on, which is everybody by default.
+  await autopilot(userId);
+
   return kept;
+}
+
+/** Runs the member's own autopilot, if they have one. Never lets it take the mail check down with it. */
+async function autopilot(userId: string): Promise<void> {
+  try {
+    const who = await getDatabase()
+      .prepare("SELECT full_name FROM users WHERE id = ?")
+      .bind(userId)
+      .first<{ full_name: string }>();
+    await runAutopilot(userId, who?.full_name ?? "A member");
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 export async function openSuggestions(userId: string, limit = 5): Promise<StoredSuggestion[]> {

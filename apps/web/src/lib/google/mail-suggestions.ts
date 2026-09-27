@@ -4,6 +4,7 @@ import { canRead, listMailForToken, type MailMessage, type ScanMode } from "./gm
 import { getUserGoogleAccessToken } from "@/lib/auth/google-oauth";
 import { accessTokenFor, listMailAccounts } from "@/lib/google/mail-accounts";
 import { listMicrosoftMail } from "@/lib/microsoft/graph";
+import { dateIsInTheText } from "./dated";
 import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 
 // Reading squadron mail and saying what it thinks needs doing. Suggestions only: nothing is created until
@@ -19,6 +20,8 @@ export interface MailSuggestion {
   because: string;
   title: string;
   dueOn: string | null;
+  /** True only when that date is in the email's own words. Nothing is created unasked without it. */
+  dueVerified: boolean;
   /** False when the assistant read the mail and concluded there is nothing to do. */
   actionable: boolean;
 }
@@ -154,6 +157,9 @@ async function readOne(userId: string, message: MailMessage): Promise<MailSugges
     const title = typeof parsed.title === "string" ? parsed.title.trim() : "";
     const actionable = parsed.actionable === true && title.length > 2;
     const dueOn = typeof parsed.dueOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(parsed.dueOn) ? parsed.dueOn : null;
+    // Shown either way, because a member reading it can judge a date for themselves. Recorded separately
+    // because only a date the email actually contains is allowed to create a task without being pressed.
+    const dueVerified = dueOn ? dateIsInTheText(dueOn, message.subject + "|" + message.body) : false;
     // A quote that is not in the email is a sign the model is inventing; drop it rather than show it.
     const quoted = typeof parsed.because === "string" ? parsed.because.trim().slice(0, 200) : "";
     const because = quoted && message.body.toLowerCase().includes(quoted.slice(0, 40).toLowerCase()) ? quoted : "";
@@ -166,6 +172,7 @@ async function readOne(userId: string, message: MailMessage): Promise<MailSugges
       because,
       title: actionable ? title.slice(0, 300) : "",
       dueOn,
+      dueVerified,
       actionable
     };
   } catch {
