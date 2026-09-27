@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { accessTokenFor, listMailAccounts, removeMailAccount } from "@/lib/google/mail-accounts";
+import { getScanMode } from "@/lib/google/mail-suggestions";
 import { listMailForToken } from "@/lib/google/gmail";
 import { listMicrosoftMail } from "@/lib/microsoft/graph";
 
@@ -44,16 +45,28 @@ export async function POST(request: Request) {
       }
 
       try {
-        // Unread is the narrowest of the three, so this reads as little as possible while still proving it works.
+        // Checked the way the member has actually set it, not the narrowest way.
+        //
+        // This used to read unread mail whatever the setting said, so somebody who had asked for every
+        // folder was told "there is nothing unread in it right now" - which reads as the Hub only caring
+        // about unread mail, and is alarming when the whole point is that it reads everything else too.
+        const mode = await getScanMode(user.id);
         const messages = account.provider === "MICROSOFT"
-          ? await listMicrosoftMail(token, "UNREAD", 5)
-          : await listMailForToken(token, "UNREAD", 5);
+          ? await listMicrosoftMail(token, mode, 5)
+          : await listMailForToken(token, mode, 5);
+
+        const what = mode === "ALL"
+          ? "in every folder except the trash"
+          : mode === "INBOX"
+            ? "in the inbox"
+            : "unread";
         return NextResponse.json({
           ok: true,
           message: messages.length
-            ? "Working. It can see " + messages.length + (messages.length === 1 ? " unread message" : " unread messages") +
-              ", the most recent from " + (messages[0].from || "somebody") + "."
-            : "Working — it opened the mailbox and there is nothing unread in it right now."
+            ? "Working. Reading " + what + ", it can see " + messages.length +
+              (messages.length === 1 ? " message" : " messages") + ", the most recent from " +
+              (messages[0].from || "somebody") + "."
+            : "Working — it opened the mailbox, and reading " + what + " there is nothing there to read."
         });
       } catch (error) {
         return NextResponse.json({
