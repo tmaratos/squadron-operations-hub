@@ -96,11 +96,11 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
   }
 
   return (
-    <section className="mb" aria-labelledby="mb-title">
-      <div className="mb-head">
-        <span className="mb-logo" aria-hidden="true">✉</span>
+    <section className="mbx" aria-labelledby="mbx-title">
+      <div className="mbx-head">
+        <span className="mbx-logo" aria-hidden="true">✉</span>
         <div>
-          <h2 id="mb-title">Which mailboxes are read</h2>
+          <h2 id="mbx-title">Which mailboxes are read</h2>
           <p>
             Add any mailbox you keep squadron business in &mdash; Gmail, or Outlook, Hotmail and Office 365,
             which is what a CAP address runs on. Each one is read the same way, and only for suggesting work:
@@ -109,34 +109,34 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
         </div>
       </div>
 
-      <ul className="mb-list">
+      <ul className="mbx-list">
         <li>
-          <span className="mb-text">
+          <span className="mbx-text">
             <strong>{signedInAs}</strong>
             <small>The account you sign in with</small>
           </span>
-          <span className="mb-tag">sign-in</span>
+          <span className="mbx-tag">sign-in</span>
         </li>
         {accounts.map((account) => (
           <li key={account.id}>
-            <span className="mb-text">
+            <span className="mbx-text">
               <strong>{account.email}</strong>
               <small>
                 {account.provider === "MICROSOFT" ? "Outlook or Microsoft 365" : "Gmail"}
                 {" · added " + new Date(account.addedOn).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
               </small>
             </span>
-            <span className="mb-row-actions">
+            <span className="mbx-row-actions">
               <button
                 type="button"
-                className="mb-btn"
+                className="mbx-btn"
                 disabled={busy === account.id}
                 onClick={() => check(account.id, account.email)}
               >
                 {busy === account.id ? "Checking…" : "Check it works"}
               </button>
               <ConfirmButton
-                className="mb-btn mb-btn--danger"
+                className="mbx-btn mbx-btn--danger"
                 disabled={busy === account.id}
                 question={"Stop reading " + account.email + "?"}
                 onConfirm={() => remove(account.id, account.email)}
@@ -148,21 +148,21 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
         ))}
       </ul>
 
-      {note ? <p className="mb-note" role="status">{note}</p> : null}
-      {why ? <p className="mb-said">Microsoft said: &ldquo;{why}&rdquo;</p> : null}
+      {note ? <p className="mbx-note" role="status">{note}</p> : null}
+      {why ? <p className="mbx-said">Microsoft said: &ldquo;{why}&rdquo;</p> : null}
 
       {/* Plain links, not fetches: these leave for the provider and come back to this page. */}
-      <div className="mb-add">
-        <a className="mb-btn mb-btn--primary" href="/api/auth/google/start?add=mailbox">Connect a Gmail mailbox</a>
+      <div className="mbx-add">
+        <a className="mbx-btn mbx-btn--primary" href="/api/auth/google/start?add=mailbox">Connect a Gmail mailbox</a>
         {microsoftReady ? (
-          <a className="mb-btn mb-btn--primary" href="/api/auth/microsoft/start">Connect an Outlook or CAP mailbox</a>
+          <a className="mbx-btn mbx-btn--primary" href="/api/auth/microsoft/start">Connect an Outlook or CAP mailbox</a>
         ) : (
-          <span className="mb-fine">
+          <span className="mbx-fine">
             Outlook, Hotmail and CAP mailboxes need setting up once by an administrator before anybody can connect one.
           </span>
         )}
       </div>
-      <p className="mb-fine">
+      <p className="mbx-fine">
         You will be asked which account to use. Pick a different one from the list &mdash; choosing the account you are
         already signed in with simply re-confirms the one you have.
       </p>
@@ -173,25 +173,25 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
 }
 
 const mbCss = [
-  ".mb{border:1px solid var(--cu-border,#e4e6eb);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0}",
-  "html[data-theme=dark] .mb{background:#222326;border-color:#3a3d44}",
-  ".mb-head{display:flex;gap:11px;align-items:flex-start}",
-  ".mb-logo{flex:0 0 auto;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(42,120,214,.12);font-size:15px}",
-  ".mb-head h2{margin:0;font-size:15.5px}",
-  ".mb-head p{margin:3px 0 0;font-size:12.5px;opacity:.75;line-height:1.5}",
-  ".mb-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
-  ".mb-list li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--cu-border,#e4e6eb);border-radius:9px;min-width:0}",
-  ".mb-text{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}",
-  ".mb-text strong{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
-  ".mb-text small{font-size:11.5px;opacity:.6}",
-  ".mb-tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.5;white-space:nowrap}",
-  ".mb-btn{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;text-decoration:none;align-self:flex-start;display:inline-block}",
-  ".mb-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}",
-  ".mb-btn--danger{color:#d03b3b}.mb-btn--danger:hover{border-color:#d03b3b}",
-  ".mb-note{margin:0;font-size:12.5px;padding:8px 11px;border-radius:8px;background:rgba(123,104,238,.12)}",
-  ".mb-row-actions{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}",
-  ".mb-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
-  ".mb-said{margin:0;font-size:11.5px;line-height:1.5;opacity:.75;padding:8px 11px;border-radius:8px;background:rgba(0,0,0,.05);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}",
-  "html[data-theme=dark] .mb-said{background:rgba(255,255,255,.07)}",
-  ".mb-fine{margin:0;font-size:11.5px;opacity:.6;line-height:1.5}"
+  ".mbx{border:1px solid var(--cu-border,#e4e6eb);border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:11px;min-width:0}",
+  "html[data-theme=dark] .mbx{background:#222326;border-color:#3a3d44}",
+  ".mbx-head{display:flex;gap:11px;align-items:flex-start}",
+  ".mbx-logo{flex:0 0 auto;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:rgba(42,120,214,.12);font-size:15px}",
+  ".mbx-head h2{margin:0;font-size:15.5px}",
+  ".mbx-head p{margin:3px 0 0;font-size:12.5px;opacity:.75;line-height:1.5}",
+  ".mbx-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
+  ".mbx-list li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--cu-border,#e4e6eb);border-radius:9px;min-width:0}",
+  ".mbx-text{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}",
+  ".mbx-text strong{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+  ".mbx-text small{font-size:11.5px;opacity:.6}",
+  ".mbx-tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.5;white-space:nowrap}",
+  ".mbx-btn{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;text-decoration:none;align-self:flex-start;display:inline-block}",
+  ".mbx-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}",
+  ".mbx-btn--danger{color:#d03b3b}.mbx-btn--danger:hover{border-color:#d03b3b}",
+  ".mbx-note{margin:0;font-size:12.5px;padding:8px 11px;border-radius:8px;background:rgba(123,104,238,.12)}",
+  ".mbx-row-actions{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}",
+  ".mbx-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
+  ".mbx-said{margin:0;font-size:11.5px;line-height:1.5;opacity:.75;padding:8px 11px;border-radius:8px;background:rgba(0,0,0,.05);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}",
+  "html[data-theme=dark] .mbx-said{background:rgba(255,255,255,.07)}",
+  ".mbx-fine{margin:0;font-size:11.5px;opacity:.6;line-height:1.5}"
 ].join("");
