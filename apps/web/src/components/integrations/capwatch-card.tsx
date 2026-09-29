@@ -37,6 +37,14 @@ export function CapwatchCard({ status: initial, mayManage }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
+  /**
+   * Whether to show what is being typed right now.
+   *
+   * This reveals only what the person in front of the keyboard has just entered, in their own browser,
+   * before it is sent anywhere - which is how anyone checks a password they cannot see. It is not a way to
+   * read the stored credential: that never leaves the server, and nothing here can ask for it.
+   */
+  const [showTyped, setShowTyped] = useState(false);
 
   async function send(body: Record<string, unknown>, key: string) {
     setBusy(key);
@@ -54,6 +62,7 @@ export function CapwatchCard({ status: initial, mayManage }: {
       if (response.ok) {
         // Gone from the browser the instant it has been used, whatever else happens.
         setPassword("");
+        setShowTyped(false);
         setReplacing(false);
       }
     } catch {
@@ -62,7 +71,10 @@ export function CapwatchCard({ status: initial, mayManage }: {
     } finally {
       setBusy(null);
       // Never leave a typed password sitting in state after a failed attempt either.
-      if (body.action === "save") setPassword("");
+      if (body.action === "save") {
+        setPassword("");
+        setShowTyped(false);
+      }
     }
   }
 
@@ -150,18 +162,28 @@ export function CapwatchCard({ status: initial, mayManage }: {
               </label>
               <label>
                 <span>eServices password</span>
-                <input
-                  type="password"
-                  value={password}
-                  autoComplete="new-password"
-                  onChange={(event) => setPassword(event.target.value)}
-                />
+                <span className="cw-secret">
+                  <input
+                    type={showTyped ? "text" : "password"}
+                    value={password}
+                    autoComplete="new-password"
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="cw-peek"
+                    onClick={() => setShowTyped(!showTyped)}
+                    aria-label={showTyped ? "Hide the password" : "Show the password so you can check it"}
+                  >
+                    {showTyped ? "Hide" : "Show"}
+                  </button>
+                </span>
               </label>
               <button type="submit" className="cw-btn cw-btn--primary" disabled={busy !== null || !password}>
                 {busy === "save" ? "Checking with CAP…" : "Save and test"}
               </button>
               {status.configured ? (
-                <button type="button" className="cw-btn" onClick={() => { setReplacing(false); setPassword(""); }}>
+                <button type="button" className="cw-btn" onClick={() => { setReplacing(false); setPassword(""); setShowTyped(false); }}>
                   Cancel
                 </button>
               ) : null}
@@ -219,6 +241,9 @@ const cwCss = [
   ".cw-form label span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.55}",
   ".cw-form input{font:inherit;font-size:13px;padding:8px 10px;border-radius:8px;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);color:inherit;min-width:0}",
   "html[data-theme=dark] .cw-form input{background:#2a2b2f;border-color:#3a3d44}",
+  ".cw-secret{display:flex;gap:6px;align-items:stretch;min-width:0}",
+  ".cw-secret input{flex:1;min-width:0}",
+  ".cw-peek{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:11.5px;font-weight:600;padding:0 11px;border-radius:8px;cursor:pointer;white-space:nowrap}",
   ".cw-fine{margin:0;font-size:11.5px;opacity:.65;line-height:1.5;flex:1 0 100%}",
   ".cw-closed{opacity:.55}"
 ].join("");
