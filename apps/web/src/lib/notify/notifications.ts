@@ -27,6 +27,8 @@ export interface NotificationPrefs {
   onDueSoon: boolean;
   onOverdue: boolean;
   onStatus: boolean;
+  /** Recurring prompts about the member's own professional development. Off unless asked for. */
+  onDevelopment: boolean;
   cadence: "IMMEDIATE" | "DAILY";
   /** Which daily pass carries the digest. Most squadron work gets dealt with in the evening. */
   digestWhen: "EVENING" | "MORNING";
@@ -40,6 +42,7 @@ export const DEFAULT_PREFS: NotificationPrefs = {
   onDueSoon: true,
   onOverdue: true,
   onStatus: false,
+  onDevelopment: false,
   cadence: "DAILY",
   digestWhen: "EVENING",
   leadDays: 3
@@ -73,9 +76,9 @@ function missingTable(error: unknown): boolean {
 export async function getPrefs(userId: string): Promise<NotificationPrefs> {
   try {
     const row = await getDatabase()
-      .prepare("SELECT email_enabled, on_assigned, on_comment, on_due_soon, on_overdue, on_status, cadence, digest_when, lead_days FROM notification_prefs WHERE user_id = ?")
+      .prepare("SELECT email_enabled, on_assigned, on_comment, on_due_soon, on_overdue, on_status, COALESCE(on_development, 0) AS on_development, cadence, digest_when, lead_days FROM notification_prefs WHERE user_id = ?")
       .bind(userId)
-      .first<{ email_enabled: number; on_assigned: number; on_comment: number; on_due_soon: number; on_overdue: number; on_status: number; cadence: string; digest_when: string; lead_days: number }>();
+      .first<{ email_enabled: number; on_assigned: number; on_comment: number; on_due_soon: number; on_overdue: number; on_status: number; on_development: number; cadence: string; digest_when: string; lead_days: number }>();
     if (!row) return DEFAULT_PREFS;
     return {
       emailEnabled: Boolean(row.email_enabled),
@@ -84,6 +87,7 @@ export async function getPrefs(userId: string): Promise<NotificationPrefs> {
       onDueSoon: Boolean(row.on_due_soon),
       onOverdue: Boolean(row.on_overdue),
       onStatus: Boolean(row.on_status),
+      onDevelopment: Boolean(row.on_development),
       cadence: row.cadence === "IMMEDIATE" ? "IMMEDIATE" : "DAILY",
       digestWhen: row.digest_when === "MORNING" ? "MORNING" : "EVENING",
       leadDays: row.lead_days

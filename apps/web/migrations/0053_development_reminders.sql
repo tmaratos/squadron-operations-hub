@@ -1,0 +1,14 @@
+-- Whether the Hub nags a member about professional development, which is theirs to decide.
+--
+-- Automatic development reminders are the kind of thing that is useful to some people and an irritation to
+-- others, and an irritating notification does more harm than a missing one: people stop reading all of them,
+-- including the ones that matter. So it is a setting, and it is off by default.
+--
+-- Off by default on purpose. Nobody agreed to recurring prompts about their own career by installing a task
+-- application, and a squadron that wants them can turn them on member by member. The existing settings in
+-- this table are about work somebody has been given; this one is about the member themselves, which is a
+-- different thing to be messaged about.
+--
+-- A leader's own prod is deliberately NOT governed by this. Turning off recurring nagging is not the same as
+-- refusing to hear from your commander, and if this setting silenced that too, nobody would dare use it.
+ALTER TABLE notification_prefs ADD COLUMN on_development INTEGER NOT NULL DEFAULT 0;
