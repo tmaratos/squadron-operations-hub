@@ -142,7 +142,8 @@ export async function POST(request: Request) {
     ok: true,
     message:
       report.seniorsSeen + " senior members and " + report.cadetsSeen + " cadets. " +
-      report.dutiesRecorded + " duty positions, " + report.developmentUpdated + " development records." +
+      report.dutiesRecorded + " duty positions, " + report.developmentUpdated + " development records, " +
+      report.recordsWritten + " service records." +
       (report.markedNoLongerCurrent
         ? " " + report.markedNoLongerCurrent + " no longer listed by CAPWATCH."
         : "") +

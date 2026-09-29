@@ -46,6 +46,7 @@ export interface ReconcileReport {
   cadetsAdded: number;
   developmentUpdated: number;
   dutiesRecorded: number;
+  recordsWritten: number;
   dutiesUnmapped: string[];
   markedNoLongerCurrent: number;
   /** Members CAPWATCH no longer lists who still hold Hub access, for an administrator to look at. */
@@ -71,6 +72,7 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
     cadetsAdded: 0,
     developmentUpdated: 0,
     dutiesRecorded: 0,
+    recordsWritten: 0,
     dutiesUnmapped: [],
     markedNoLongerCurrent: 0,
     needingReview: []
@@ -140,6 +142,42 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
         .run();
       report.cadetsAdded += 1;
     }
+  }
+
+  // ---------------------------------------------------------------- the account records follow
+  //
+  // A member's name and grade live in three places: the roster, their Hub account, and the organisation
+  // chart. CAP is right about all three, so a sync that updated only the roster would leave somebody
+  // promoted on one page and not on another - which is worse than not syncing at all, because now the Hub
+  // disagrees with itself and nobody knows which page to believe.
+  //
+  // Only the facts CAP owns. Email, role, status and everything the squadron decided are untouched.
+  for (const senior of extract.seniors) {
+    await db
+      .prepare(
+        "UPDATE users SET full_name = ?, updated_at = ? WHERE capid = ? AND full_name <> ?"
+      )
+      .bind(senior.fullName, now, senior.capid, senior.fullName)
+      .run();
+  }
+
+  // The organisation chart names its incumbents from personnel_members, so pointing each position at the
+  // right member keeps the chart, the roster and the duty list telling the same story.
+  for (const duty of extract.duties) {
+    if (duty.isAssistant) continue;
+    const member = await db
+      .prepare("SELECT id FROM personnel_members WHERE capid = ?")
+      .bind(duty.capid)
+      .first<{ id: string }>();
+    if (!member) continue;
+    await db
+      .prepare(
+        "UPDATE personnel_positions SET incumbent_id = ?, assignment_status = 'FILLED', updated_at = ? " +
+        "WHERE lower(title) = lower(?) AND (incumbent_id IS NULL OR incumbent_id <> ?)"
+      )
+      .bind(member.id, now, duty.duty, member.id)
+      .run()
+      .catch(() => undefined);
   }
 
   // ---------------------------------------------------------------- professional development
@@ -219,6 +257,28 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
     }
   }
 
+  // ---------------------------------------------------------------- service record
+  //
+  // Safety briefings, courses, achievements, awards and task qualifications. All of it about adults, all of
+  // it the member's own record of service. The parser never reads the columns the unit told CAP it would not
+  // hold, so nothing sensitive can arrive here even if this loop were changed carelessly later.
+  for (const record of extract.records) {
+    await db
+      .prepare(
+        "INSERT INTO member_records (capid, kind, code, title, functional_area, completed_on, expires_on, " +
+        "status, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CAPWATCH', ?) " +
+        "ON CONFLICT(capid, kind, code) DO UPDATE SET title = excluded.title, " +
+        "functional_area = excluded.functional_area, completed_on = excluded.completed_on, " +
+        "expires_on = excluded.expires_on, status = excluded.status, updated_at = excluded.updated_at"
+      )
+      .bind(
+        record.capid, record.kind, record.code, record.title, record.functionalArea,
+        record.completedOn, record.expiresOn, record.status, now
+      )
+      .run();
+    report.recordsWritten += 1;
+  }
+
   // ---------------------------------------------------------------- who CAPWATCH no longer lists
   const present = new Set(extract.seniors.map((senior) => senior.capid));
   const held = await db
@@ -250,7 +310,7 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
     entityId: "capwatch",
     summary:
       "CAPWATCH sync: " + report.seniorsSeen + " senior members, " + report.cadetsSeen + " cadets, " +
-      report.dutiesRecorded + " duty positions, " + report.developmentUpdated + " development records",
+      report.dutiesRecorded + " duty positions, " + report.developmentUpdated + " development records, " + report.recordsWritten + " service records",
     metadata: {
       seniorsAdded: report.seniorsAdded,
       cadetsAdded: report.cadetsAdded,

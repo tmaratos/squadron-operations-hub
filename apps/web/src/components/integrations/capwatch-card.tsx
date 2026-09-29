@@ -46,6 +46,27 @@ export function CapwatchCard({ status: initial, mayManage }: {
    */
   const [showTyped, setShowTyped] = useState(false);
 
+  /** A real sync: downloads the extract and writes the roster. Separate endpoint, separate permission. */
+  async function syncNow() {
+    setBusy("sync");
+    setNote(null);
+    try {
+      const response = await fetch("/api/capwatch/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+      const data = (await response.json()) as { ok?: boolean; message?: string; skipped?: boolean };
+      setNote(data.message ?? "Done.");
+      setFailed(!response.ok && !data.skipped);
+    } catch {
+      setNote("The sync could not be started.");
+      setFailed(true);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function send(body: Record<string, unknown>, key: string) {
     setBusy(key);
     setNote(null);
@@ -135,6 +156,14 @@ export function CapwatchCard({ status: initial, mayManage }: {
             >
               {busy === "test" ? "Testing…" : "Test connection"}
             </button>
+            <button
+              type="button"
+              className="cw-btn cw-btn--primary"
+              disabled={!status.configured || busy !== null}
+              onClick={syncNow}
+            >
+              {busy === "sync" ? "Syncing…" : "Sync now"}
+            </button>
             {status.configured && !replacing ? (
               <button type="button" className="cw-btn" onClick={() => setReplacing(true)}>
                 Replace credential
@@ -207,8 +236,8 @@ export function CapwatchCard({ status: initial, mayManage }: {
       )}
 
       <p className="cw-fine cw-closed">
-        CAP closes CAPWATCH between midnight and 02:30 Central every day. The Hub does not attempt a download
-        in that window, so a run skipped overnight is not a fault.
+        Syncs on its own on the 12th and 28th each month. CAP closes CAPWATCH between midnight and 02:30
+        Central daily, so a run skipped overnight is not a fault.
       </p>
     </section>
   );
@@ -244,6 +273,10 @@ const cwCss = [
   ".cw-secret{display:flex;gap:6px;align-items:stretch;min-width:0}",
   ".cw-secret input{flex:1;min-width:0}",
   ".cw-peek{border:1px solid var(--cu-border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:11.5px;font-weight:600;padding:0 11px;border-radius:8px;cursor:pointer;white-space:nowrap}",
-  ".cw-fine{margin:0;font-size:11.5px;opacity:.65;line-height:1.5;flex:1 0 100%}",
+  // No flex here. .cw is a column, so flex-basis:100% would mean 100% of the card's HEIGHT and the
+  // paragraph would spill out of the bottom over whatever is below it. Inside .cw-form, which wraps in
+  // a row, 100% is what puts the note on its own line - so the rule belongs there and only there.
+  ".cw-fine{margin:0;font-size:11.5px;opacity:.65;line-height:1.5}",
+  ".cw-form .cw-fine{flex:1 0 100%}",
   ".cw-closed{opacity:.55}"
 ].join("");

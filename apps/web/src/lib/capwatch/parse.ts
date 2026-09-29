@@ -49,12 +49,25 @@ export interface DevelopmentRecord {
   rating: string | null;
 }
 
+/** One thing a member has done: a briefing, a course, an achievement, an award, a task qualification. */
+export interface MemberRecord {
+  capid: string;
+  kind: "SAFETY" | "TRAINING" | "ACHIEVEMENT" | "AWARD" | "TASK";
+  code: string;
+  title: string | null;
+  functionalArea: string | null;
+  completedOn: string | null;
+  expiresOn: string | null;
+  status: string | null;
+}
+
 export interface Extract {
   downloadedOn: string | null;
   seniors: SeniorRecord[];
   cadets: CadetRecord[];
   duties: DutyRecord[];
   development: DevelopmentRecord[];
+  records: MemberRecord[];
   /** Every table the archive held, for reporting rather than for reading. */
   tableCount: number;
 }
@@ -122,6 +135,27 @@ async function table(entries: ZipEntry[], name: string, required = true): Promis
     return [];
   }
   return parseTable(asText(await entry.bytes()));
+}
+
+/**
+ * A date, unless CAP means "never".
+ *
+ * CAP writes 01/01/1900 where something does not expire. Stored as a date it would make every permanent
+ * qualification in the squadron look decades lapsed, so it becomes null - which is what it means.
+ */
+function onlyRealDate(value: string | undefined): string | null {
+  const said = (value ?? "").trim();
+  if (!said) return null;
+
+  // CAP writes a date in 1900 where something does not expire, and not always the same one - 01/01/1900 and
+  // 01/31/1900 both appear in TN-170's own extract. Matching the literal string caught one and missed two
+  // hundred records, so this rejects the whole era instead: nothing real in a CAP service record predates
+  // the organisation, and a placeholder stored as a date would make every permanent qualification in the
+  // squadron read as decades lapsed.
+  const year = Number(said.match(/(\d{4})/)?.[1]);
+  if (Number.isFinite(year) && year < 1950) return null;
+
+  return said;
 }
 
 function nameOf(row: Record<string, string>): string {
@@ -220,6 +254,99 @@ export async function parseExtract(archive: ArrayBuffer): Promise<Extract> {
     rating: tracks.get(capid)?.rating ?? null
   })).filter((record) => record.level || record.track);
 
+  // ---------------------------------------------------------------- service record
+  //
+  // Everything below is keyed by CAPID and filtered to senior members, which is what keeps cadet records -
+  // and with them any question about holding data on minors - out of this entirely.
+  const records: MemberRecord[] = [];
+
+  const achievementNames = new Map<string, { name: string; area: string | null }>();
+  for (const row of await table(entries, "Achievements.txt", false)) {
+    const id = (row.AchvID ?? "").trim();
+    if (id) achievementNames.set(id, { name: (row.Achv ?? "").trim(), area: (row.FunctionalArea ?? "").trim() || null });
+  }
+
+  const taskNames = new Map<string, { name: string; area: string | null }>();
+  for (const row of await table(entries, "Tasks.txt", false)) {
+    const id = (row.TaskID ?? "").trim();
+    if (id) taskNames.set(id, { name: (row.TaskName ?? "").trim(), area: (row.FunctionalArea ?? "").trim() || null });
+  }
+
+  for (const row of await table(entries, "SafetyBriefingsMonthly.txt", false)) {
+    const capid = (row.CAPID ?? "").trim();
+    if (!seniorIds.has(capid)) continue;
+    const code = (row.BriefingID ?? "").trim();
+    if (!code) continue;
+    records.push({
+      capid,
+      kind: "SAFETY",
+      code,
+      title: (row.Title ?? "").trim() || (row.OtherBriefings ?? "").trim() || null,
+      functionalArea: null,
+      completedOn: onlyRealDate(row.DateCompleted),
+      expiresOn: onlyRealDate(row.ExpirationDate),
+      status: null
+    });
+  }
+
+  for (const row of await table(entries, "Training.txt", false)) {
+    const capid = (row.CAPID ?? "").trim();
+    if (!seniorIds.has(capid)) continue;
+    const code = (row.TypeCrs ?? "").trim();
+    if (!code) continue;
+    records.push({
+      capid, kind: "TRAINING", code,
+      title: code,
+      functionalArea: (row.HowComplete ?? "").trim() || null,
+      completedOn: onlyRealDate(row.Completed),
+      expiresOn: null,
+      status: null
+    });
+  }
+
+  for (const row of await table(entries, "MbrAchievements.txt", false)) {
+    const capid = (row.CAPID ?? "").trim();
+    if (!seniorIds.has(capid)) continue;
+    const code = (row.AchvID ?? "").trim();
+    if (!code) continue;
+    const known = achievementNames.get(code);
+    records.push({
+      capid, kind: "ACHIEVEMENT", code,
+      title: known?.name ?? null,
+      functionalArea: known?.area ?? null,
+      completedOn: onlyRealDate(row.Completed) ?? onlyRealDate(row.OriginallyAccomplished),
+      expiresOn: onlyRealDate(row.Expiration),
+      status: (row.Status ?? "").trim() || null
+    });
+  }
+
+  for (const row of await table(entries, "SeniorAwards.txt", false)) {
+    const capid = (row.CAPID ?? "").trim();
+    if (!seniorIds.has(capid)) continue;
+    const code = (row.Award ?? "").trim();
+    if (!code) continue;
+    records.push({
+      capid, kind: "AWARD", code, title: code, functionalArea: null,
+      completedOn: onlyRealDate(row.Completed), expiresOn: null, status: null
+    });
+  }
+
+  for (const row of await table(entries, "MbrTasks.txt", false)) {
+    const capid = (row.CAPID ?? "").trim();
+    if (!seniorIds.has(capid)) continue;
+    const code = (row.TaskID ?? "").trim();
+    if (!code) continue;
+    const known = taskNames.get(code);
+    records.push({
+      capid, kind: "TASK", code,
+      title: known?.name ?? null,
+      functionalArea: known?.area ?? null,
+      completedOn: onlyRealDate(row.Completed),
+      expiresOn: onlyRealDate(row.Expiration),
+      status: (row.Status ?? "").trim() || null
+    });
+  }
+
   let downloadedOn: string | null = null;
   const stamp = entries.find((entry) => entry.name.toLowerCase() === "downloaddate.txt");
   if (stamp) {
@@ -227,5 +354,5 @@ export async function parseExtract(archive: ArrayBuffer): Promise<Extract> {
     downloadedOn = lines.length > 1 ? lines[1].trim() : null;
   }
 
-  return { downloadedOn, seniors, cadets, duties, development, tableCount: entries.length };
+  return { downloadedOn, seniors, cadets, duties, development, records, tableCount: entries.length };
 }
