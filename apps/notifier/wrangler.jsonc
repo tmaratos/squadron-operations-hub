@@ -13,7 +13,10 @@
     "crons": ["0 * * * *"]
   },
   "vars": {
-    "NOTIFY_FROM": "TN-170 Operations Hub <hub@tristanmaratos.com>"
+    "NOTIFY_FROM": "TN-170 Operations Hub <hub@tristanmaratos.com>",
+    // Where to ask for a CAPWATCH sync on the 12th and 28th. The credential and the rules live in the Hub;
+    // this worker only decides when.
+    "APP_URL": "https://tn170adminhub.tristanmaratos.com"
   },
   "d1_databases": [
     {

@@ -44,6 +44,8 @@ interface CloudflareEnv {
   CF_ACCOUNT_ID?: string;
   /** The reusable Access policy the Hub keeps in step with its own authorised members. */
   CF_ACCESS_POLICY_ID?: string;
+  /** Shared with the notifier so it can ask for a scheduled CAPWATCH sync. Secret, not a var. */
+  INTERNAL_SYNC_TOKEN?: string;
   RESEND_API_KEY?: string;
   BREVO_API_KEY?: string;
 }

@@ -56,8 +56,10 @@ async function run(event, env) {
   // Once a day, in the evening pass. The security controls the squadron attested to CAP are tested against
   // the running system, and nothing is said unless one has stopped holding.
   const security = digest === "EVENING" ? await checkSecurityControls(env, new Date().toISOString()) : 0;
+  // CAPWATCH twice a month, so the roster never drifts more than a fortnight from CAP's own record.
+  const capwatch = await syncCapwatchIfDue(env);
   const sent = await deliver(env, digest);
-  return { generated, routines, raised, security, sent, digest, squadronHour: hour, cron: event.cron ?? null };
+  return { generated, routines, raised, security, capwatch, sent, digest, squadronHour: hour, cron: event.cron ?? null };
 }
 
 // ---------------------------------------------------------------- deadlines
@@ -602,4 +604,43 @@ function nameOf(value) {
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character]);
+}
+
+
+/**
+ * Asks the Hub to pull CAPWATCH, on the 12th and the 28th.
+ *
+ * Twice a month rather than nightly because the roster changes slowly and every run is somebody's live
+ * eServices credential being used; fortnightly keeps it current without hammering CAP. The 28th rather than
+ * the 30th so that February behaves like every other month.
+ *
+ * Ten in the morning squadron time, which is comfortably outside the midnight to 02:30 Central window when
+ * CAP closes CAPWATCH, and inside working hours - if it fails, somebody is awake to see the alert rather
+ * than finding it three days later.
+ *
+ * The work itself belongs to the Hub, which has the credential, the parser and the rules about what may be
+ * written. This only decides when.
+ */
+async function syncCapwatchIfDue(env) {
+  const now = new Date();
+  const day = Number(new Intl.DateTimeFormat("en-US", {
+    timeZone: SQUADRON_TIME_ZONE, day: "numeric"
+  }).format(now));
+
+  if (day !== 12 && day !== 28) return null;
+  if (squadronHour(now) !== 10) return null;
+  if (!env.APP_URL || !env.INTERNAL_SYNC_TOKEN) return null;
+
+  try {
+    const response = await fetch(env.APP_URL.replace(/\/$/, "") + "/api/capwatch/sync", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.INTERNAL_SYNC_TOKEN }
+    });
+    const body = await response.json().catch(() => ({}));
+    // Reported either way. A sync that quietly stopped working is how a member directory goes stale for
+    // months without anybody noticing.
+    return { day, ok: response.ok, message: body.message ?? ("HTTP " + response.status) };
+  } catch (error) {
+    return { day, ok: false, message: String(error).slice(0, 200) };
+  }
 }
