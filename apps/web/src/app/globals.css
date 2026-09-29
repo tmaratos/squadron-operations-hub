@@ -331,6 +331,16 @@ kbd { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; bac
 .auth-google-button { min-height: 54px; padding: 0 18px; display: grid; grid-template-columns: 24px 1fr 18px; align-items: center; gap: 12px; border: 1px solid #cfd8e8; border-radius: 12px; color: #15213a; background: #fff; font-size: 14px; font-weight: 750; box-shadow: 0 7px 20px rgba(29,51,88,.08); transition: 160ms ease; }
 .auth-google-button:hover { border-color: #9fb6e7; background: #f8faff; transform: translateY(-1px); box-shadow: 0 10px 24px rgba(29,51,88,.12); }
 .auth-google-button:focus-visible { outline: 3px solid rgba(79,130,255,.25); outline-offset: 2px; }
+
+/* The second way in, beside the Google one rather than instead of it. Deliberately quieter: most members
+   still arrive through Google, and this is the door for when that one will not open. */
+.auth-or { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin: 14px 0; }
+.auth-or::before, .auth-or::after { content: ""; height: 1px; background: #e3e9f4; }
+.auth-or span { font-size: 12px; font-weight: 650; color: #7c8aa5; text-transform: uppercase; letter-spacing: .06em; }
+.auth-access-button { min-height: 54px; padding: 0 18px; display: grid; grid-template-columns: 24px 1fr 18px; align-items: center; gap: 12px; border: 1px solid #cfd8e8; border-radius: 12px; color: #15213a; background: #fff; font-size: 14px; font-weight: 750; transition: 160ms ease; }
+.auth-access-button:hover { border-color: #9fb6e7; background: #f8faff; transform: translateY(-1px); box-shadow: 0 10px 24px rgba(29,51,88,.12); }
+.auth-access-button:focus-visible { outline: 3px solid rgba(79,130,255,.25); outline-offset: 2px; }
+.auth-access-hint { margin: 10px 2px 0; font-size: 12.5px; line-height: 1.55; color: #6b7a94; }
 .auth-google-button > svg:last-child { color: #8290a8; }
 .auth-google-mark { width: 22px; height: 22px; }
 .auth-access-note { padding: 15px; display: flex; align-items: flex-start; gap: 11px; border: 1px solid #dce6f7; border-radius: 12px; color: #47607f; background: #f7faff; }

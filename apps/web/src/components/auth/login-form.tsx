@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { Check, ExternalLink, FolderLock, ShieldCheck } from "lucide-react";
+import { Check, ExternalLink, FolderLock, Mail, ShieldCheck } from "lucide-react";
 
 export function LoginForm({ error }: { error?: string }) {
   return (
@@ -47,6 +47,19 @@ export function LoginForm({ error }: { error?: string }) {
           <ExternalLink size={16} />
         </a>
 
+        {/* The second door. Both work; neither is going away until the first has been proved unnecessary. */}
+        <div className="auth-or"><span>or</span></div>
+
+        <a className="auth-access-button" href="/api/auth/access/login">
+          <Mail size={18} />
+          <span>Sign in with your personal email</span>
+          <ExternalLink size={16} />
+        </a>
+        <p className="auth-access-hint">
+          Cloudflare emails you a one-time code. Use this if your CAP Google account is unavailable &mdash; an
+          administrator has to have granted you access first.
+        </p>
+
         <div className="auth-access-note">
           <ShieldCheck size={18} />
           <p><strong>Two ways in.</strong><span>A CAP address gets you in to read. Being on the squadron Shared Drive is what lets you change things — ask command staff to grant that, then sign in again.</span></p>
@@ -74,5 +87,26 @@ function errorMessage(error: string): string {
   if (error === "drive_access") return "This account is neither a CAP address nor a member of the squadron Shared Drive. Sign in with your CAP address, or ask command staff to grant you Drive access.";
   if (error === "google_denied") return "Google sign-in was canceled or denied.";
   if (error === "configuration") return "Google sign-in is not configured.";
+
+  // The personal-email door. Each of these is a different problem with a different person able to fix it,
+  // so they are not collapsed into one message.
+  if (error === "access_not_granted") {
+    return "Your identity was verified, but no administrator has granted you Hub access yet. Ask command staff.";
+  }
+  if (error === "access_restricted") {
+    return "Your Hub access has been restricted. Your records are intact; ask command staff if this is wrong.";
+  }
+  if (error === "access_unknown_member") {
+    return "That address is not recorded as anybody's Hub login. Ask command staff to add it to your member record.";
+  }
+  if (error === "access_no_account") {
+    return "You are authorized, but you have no Hub account yet. Ask command staff to finish setting it up.";
+  }
+  if (error === "access_account_closed") return "This Hub account is suspended or closed.";
+  if (error === "access_no_token" || error === "access_not_configured") {
+    return "Personal email sign-in is not switched on yet. Use Google for now.";
+  }
+  if (error === "access_token_invalid") return "That sign-in could not be verified. Please try again.";
+
   return "Google sign-in could not be completed. Please try again.";
 }
