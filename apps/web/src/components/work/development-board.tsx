@@ -27,7 +27,22 @@ interface Step {
   confidence: string;
 }
 
-const LEVELS = ["I", "II", "III", "IV", "V"];
+// CAPWATCH writes the level as LV1..LV5 and that is what the database holds, so this list speaks the same
+// vocabulary rather than a prettier one of its own.
+//
+// It did not, and each of the three places a level is used was wrong in a different way: the dropdown compared
+// "I" against a stored "LV1" and so showed every synced member as having no level at all, choosing one would
+// have overwritten CAP's own value with a word CAP does not use, and the line beside it read "Nothing recorded
+// after Level LV1". The names below are only ever for display.
+const LEVELS = ["LV1", "LV2", "LV3", "LV4", "LV5"] as const;
+
+const LEVEL_NAME: Record<string, string> = {
+  LV1: "Level I", LV2: "Level II", LV3: "Level III", LV4: "Level IV", LV5: "Level V"
+};
+
+function levelName(level: string | null): string {
+  return level ? LEVEL_NAME[level] ?? level : "";
+}
 
 export function DevelopmentBoard() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -39,13 +54,15 @@ export function DevelopmentBoard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [paste, setPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
-  const [newStep, setNewStep] = useState({ fromLevel: "I", toLevel: "II", title: "", sourceCitation: "" });
+  const [loading, setLoading] = useState(true);
+  const [newStep, setNewStep] = useState({ fromLevel: "LV1", toLevel: "LV2", title: "", sourceCitation: "" });
 
   useEffect(() => {
     fetch("/api/development")
       .then((response) => response.json() as Promise<{ members?: Member[]; steps?: Step[]; canEdit?: boolean; useChart?: boolean }>)
       .then((data) => { setMembers(data.members ?? []); setSteps(data.steps ?? []); setCanEdit(Boolean(data.canEdit)); setUseChart(data.useChart !== false); })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => setLoading(false));
   }, []);
 
   async function send(body: Record<string, unknown>, key: string) {
@@ -67,6 +84,7 @@ export function DevelopmentBoard() {
 
   const known = members.filter((member) => member.pdLevel).length;
   const positioned = members.filter((member) => member.dutyPosition).length;
+  const fromCap = known > 0 || positioned > 0;
 
   return (
     <div className="dv">
@@ -74,11 +92,19 @@ export function DevelopmentBoard() {
 
       <section className="dv-card">
         <h2>What the Hub knows</h2>
-        <p>
-          <strong>{positioned} of {members.length}</strong> members have a duty position recorded, and{" "}
-          <strong>{known}</strong> have a professional development level. CAP keeps both in eServices, and squadron
-          accounts cannot read that automatically — so it comes from a paste or from you setting it here.
-        </p>
+        {loading ? (
+          // Before the numbers arrive they are both zero, and a card that states "0 of 0 members" as though it
+          // were a finding reads as the Hub knowing nothing about the squadron. It waits instead.
+          <p>Reading what CAP has on file…</p>
+        ) : (
+          <p>
+            <strong>{positioned} of {members.length}</strong> members have a duty position recorded, and{" "}
+            <strong>{known}</strong> have a professional development level.{" "}
+            {fromCap
+              ? "Both come from CAPWATCH, which the Hub syncs on the 12th and 28th of each month, so this follows eServices without anybody retyping it. Anything corrected here overrides it."
+              : "Nothing has come from CAPWATCH yet, so this is only what has been set here."}
+          </p>
+        )}
         {canEdit ? (
           <div className="dv-actions">
             <button type="button" className="dv-btn" onClick={() => setShowPaste(!showPaste)}>{showPaste ? "Close" : "Paste duty positions"}</button>
@@ -128,12 +154,12 @@ export function DevelopmentBoard() {
           <form className="dv-new" onSubmit={(event) => { event.preventDefault(); send({ action: "step", ...newStep }, "step"); setNewStep({ ...newStep, title: "", sourceCitation: "" }); }}>
             <label>From
               <select value={newStep.fromLevel} onChange={(event) => setNewStep({ ...newStep, fromLevel: event.target.value })}>
-                {LEVELS.map((level) => <option key={level} value={level}>Level {level}</option>)}
+                {LEVELS.map((level) => <option key={level} value={level}>{levelName(level)}</option>)}
               </select>
             </label>
             <label>To
               <select value={newStep.toLevel} onChange={(event) => setNewStep({ ...newStep, toLevel: event.target.value })}>
-                {LEVELS.map((level) => <option key={level} value={level}>Level {level}</option>)}
+                {LEVELS.map((level) => <option key={level} value={level}>{levelName(level)}</option>)}
               </select>
             </label>
             <label className="dv-grow">What has to be done
@@ -209,12 +235,12 @@ export function DevelopmentBoard() {
                   onChange={(event) => send({ action: "member", capid: member.capid, pdLevel: event.target.value || null }, member.capid)}
                 >
                   <option value="">Level?</option>
-                  {LEVELS.map((level) => <option key={level} value={level}>Level {level}</option>)}
+                  {LEVELS.map((level) => <option key={level} value={level}>{levelName(level)}</option>)}
                 </select>
                 <span className="dv-next">
                   {!member.pdLevel ? "Level not recorded"
-                    : next.length ? next.length + " step" + (next.length === 1 ? "" : "s") + " to Level " + next[0].toLevel
-                    : "Nothing recorded after Level " + member.pdLevel}
+                    : next.length ? next.length + " step" + (next.length === 1 ? "" : "s") + " to " + levelName(next[0].toLevel)
+                    : "Nothing recorded after " + levelName(member.pdLevel)}
                 </span>
                 {canEdit && next.length ? (
                   <button type="button" className="dv-btn" disabled={busy === "prompt" + member.capid} onClick={() => send({ action: "prompt", capid: member.capid }, "prompt" + member.capid)}>

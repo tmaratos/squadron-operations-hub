@@ -23,20 +23,47 @@ import type { Extract } from "./parse";
  * misleading. An unmapped duty is still recorded against the member by title; it simply does not become a
  * routing assignment, and somebody can place it deliberately.
  */
-const AREAS: Record<string, string> = {
-  AE: "aerospace-education",
-  CP: "cadet-programs",
-  DP: "professional-development",
-  PD: "professional-development",
-  FM: "finance",
-  IT: "it-systems",
-  LG: "logistics",
-  PA: "public-affairs",
-  SE: "safety",
-  EX: "command",
-  DC: "command",
-  CD: "command"
-};
+// Which section of the Hub a duty belongs to, decided by its title.
+//
+// This used to be a table of CAP's two-letter functional-area codes, and three of them were guesses. The
+// squadron's four communications officers and its health services officer were filed under Command, because
+// whichever codes those carry happened to be among the ones guessed at - while the Hub's own Communications,
+// Transportation, Administration and Personnel sections sat empty and unused.
+//
+// The title is used instead because it is unambiguous and it is CAP's own words: "Communications Officer"
+// needs no lookup table to place, and there is no second reading of it to get wrong. Ordered most specific
+// first, since "Emergency Services Training Officer" is emergency services rather than training.
+const AREA_BY_TITLE: Array<[RegExp, string]> = [
+  [/deputy commander|^commander$|unit commander|vice commander/i, "command"],
+  [/emergency services|incident commander|ground team|mission (pilot|observer|scanner)|sUAS|unmanned/i, "emergency-services"],
+  [/communication/i, "communications"],
+  [/transportation|vehicle/i, "transportation"],
+  [/aerospace|cyber education|model rocketry/i, "aerospace-education"],
+  [/cadet|leadership officer|character development|activities officer|fitness/i, "cadet-programs"],
+  [/finance|fundrais|budget/i, "finance"],
+  [/logistic|supply|facilit/i, "logistics"],
+  [/public affairs|historian/i, "public-affairs"],
+  [/safety/i, "safety"],
+  [/information technolog|web security|IT officer|webmaster/i, "it-systems"],
+  [/recruit|retention/i, "recruiting-retention"],
+  [/personnel/i, "personnel"],
+  [/administra/i, "administration"],
+  [/professional development|education and training|testing|training officer/i, "professional-development"]
+];
+
+/**
+ * Where a duty belongs, or null.
+ *
+ * Null matters. The previous version had no way to say "CAP lists this and the Hub has no section for it", so
+ * anything it could not place confidently was placed wrongly instead, and a member reading the staff page had
+ * no way to tell the difference. An unplaced duty is now reported by the sync and left out, which is visible.
+ */
+function areaFor(title: string): string | null {
+  for (const [pattern, area] of AREA_BY_TITLE) {
+    if (pattern.test(title)) return area;
+  }
+  return null;
+}
 
 export interface ReconcileReport {
   seniorsSeen: number;
@@ -227,12 +254,20 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
   // Kept apart from the rest because assigned_by is required and references a real user; an
   // unattended sync has nobody to name, so these are attempted separately and a refusal costs the
   // assignments rather than the whole sync.
-  const dutyWrites: D1PreparedStatement[] = [];
+  //
+  // What this sync wrote last time is cleared first, so a duty the Hub once filed under the wrong section is
+  // actually corrected rather than merely joined by a second, better row. Only rows this sync wrote are
+  // touched; anything entered by a person stands.
+  const dutyWrites: D1PreparedStatement[] = [
+    db.prepare("DELETE FROM duty_assignments WHERE source = 'CAPWATCH'")
+  ];
 
   for (const duty of extract.duties) {
-    const area = AREAS[duty.functionalArea.toUpperCase()];
+    const area = areaFor(duty.duty);
     if (!area) {
-      if (!report.dutiesUnmapped.includes(duty.functionalArea)) report.dutiesUnmapped.push(duty.functionalArea);
+      // Reported by the duty's name rather than its code, because the name is what somebody reading the report
+      // can act on - a bare "HS" tells nobody which position went missing from the staff page.
+      if (!report.dutiesUnmapped.includes(duty.duty)) report.dutiesUnmapped.push(duty.duty);
       continue;
     }
 
@@ -244,8 +279,8 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
       dutyWrites.push(db
         .prepare(
           "INSERT INTO duty_assignments (id, user_id, personnel_member_id, functional_area_key, duty_title, " +
-          "is_primary, starts_on, assigned_by, created_at, updated_at) " +
-          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING"
+          "is_primary, starts_on, assigned_by, created_at, updated_at, source) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CAPWATCH') ON CONFLICT DO NOTHING"
         )
         .bind(
           crypto.randomUUID(),
