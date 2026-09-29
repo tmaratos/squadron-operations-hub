@@ -38,6 +38,12 @@
     "GOOGLE_REDIRECT_URI": "https://tn170adminhub.tristanmaratos.com/api/auth/google/callback",
     "GOOGLE_SHARED_DRIVE_ID": "0ALYSj1KARR19Uk9PVA",
     "ALLOWED_EMAIL_DOMAINS": "cap.gov",
+    // Cloudflare Access, for signing in with a personal address. Neither of these is a secret: the team
+    // domain is where Cloudflare publishes its signing keys, and the audience is the identifier of the
+    // Access application. Both are checked on every token so that one minted for another organisation,
+    // or for a different application of ours, is refused.
+    "CF_ACCESS_TEAM_DOMAIN": "aviationministries.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "65355037e9680227c01d0d21c9e8adaeffb17c854c1c9daf94e64ccf73795d6a",
     "GOOGLE_DRIVE_MAX_UPLOAD_MB": "10",
     "NOTIFY_FROM": "TN-170 Operations Hub <hub@tristanmaratos.com>"
   }
