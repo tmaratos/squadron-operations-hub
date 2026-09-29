@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node scripts/check-source-characters.mjs && next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "echo \"No tests configured yet\"",
@@ -12,7 +12,8 @@
     "cf:preview": "opennextjs-cloudflare build && wrangler dev",
     "cf:deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
     "db:migrate:local": "wrangler d1 migrations apply squadron-operations-hub --local",
-    "db:migrate:remote": "wrangler d1 migrations apply squadron-operations-hub --remote"
+    "db:migrate:remote": "wrangler d1 migrations apply squadron-operations-hub --remote",
+    "check:chars": "node scripts/check-source-characters.mjs"
   },
   "dependencies": {
     "@opennextjs/cloudflare": "^1.20.1",
