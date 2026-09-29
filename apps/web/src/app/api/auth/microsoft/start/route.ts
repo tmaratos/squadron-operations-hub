@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { getCurrentUser } from "@/lib/auth/session";
-import { isMicrosoftConfigured, microsoftAuthorizeUrl } from "@/lib/microsoft/graph";
+import { isMicrosoftConfigured, microsoftAuthorizeUrl, type MicrosoftAccountKind } from "@/lib/microsoft/graph";
 import { createRandomToken } from "@/lib/security/crypto";
 
 // Sends somebody to Microsoft to connect a mailbox.
@@ -18,6 +18,19 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/connections?mail=microsoft_unavailable#mail", request.url));
   }
 
+  // Which kind of account, said by the member rather than guessed by Microsoft. The same address can be
+  // both a personal account and a work one - it is in this squadron - and letting Microsoft choose connected
+  // the wrong mailbox silently.
+  const asked = new URL(request.url).searchParams;
+  const wanted = asked.get("kind");
+  const kind: MicrosoftAccountKind =
+    wanted === "work" ? "WORK" : wanted === "personal" ? "PERSONAL" : "EITHER";
+
+  // For a tenant that federates sign-in elsewhere, this sends the member straight to the gate that holds
+  // their password instead of through a chooser that cannot help them.
+  const domain = (asked.get("domain") ?? "").trim().toLowerCase();
+  const domainHint = /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : null;
+
   // Tied to this browser, so a callback that did not start here is refused.
   const state = createRandomToken(32);
   const store = await cookies();
@@ -29,5 +42,5 @@ export async function GET(request: Request) {
     maxAge: 600
   });
 
-  return NextResponse.redirect(microsoftAuthorizeUrl(state));
+  return NextResponse.redirect(microsoftAuthorizeUrl(state, kind, domainHint));
 }

@@ -12,7 +12,25 @@ import type { ScanMode } from "@/lib/google/gmail";
 // Read-only by construction: the only permission asked for is Mail.Read. Nothing here can send, delete,
 // move or mark anything, and a member can withdraw it from their own Microsoft account at any time.
 
-const AUTHORIZE = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
+// Which kind of Microsoft account a member is connecting.
+//
+// The same address can exist twice at Microsoft, and TN-170 has a live example: tristanstuff@denjess.com is
+// both a personal Microsoft account somebody created, and a work account in a Microsoft 365 tenant that
+// GoDaddy manages. Asking /common lets Microsoft choose, and it chose the personal one - an almost empty
+// mailbox that looked like a working connection and found nothing.
+//
+// So the member says which they mean, and the endpoint enforces it. /consumers cannot return a work
+// account and /organizations cannot return a personal one, which makes the ambiguity impossible rather
+// than merely unlikely.
+export type MicrosoftAccountKind = "PERSONAL" | "WORK" | "EITHER";
+
+const TENANT: Record<MicrosoftAccountKind, string> = {
+  PERSONAL: "consumers",
+  WORK: "organizations",
+  EITHER: "common"
+};
+
+const AUTHORIZE_BASE = "https://login.microsoftonline.com";
 const TOKEN = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
@@ -37,7 +55,19 @@ function credentials() {
   };
 }
 
-export function microsoftAuthorizeUrl(state: string): string {
+export function microsoftAuthorizeUrl(
+  state: string,
+  kind: MicrosoftAccountKind = "EITHER",
+  /**
+   * The mailbox's domain, for a tenant that hands sign-in to somebody else.
+   *
+   * TN-170's own case: denjess.com is a Microsoft 365 tenant that GoDaddy manages, so Microsoft does not
+   * hold the password - it federates to sso.godaddy.com. Without this hint the member is asked to pick
+   * between a personal and a work account with the same address, then bounced to GoDaddy anyway. With it
+   * they go straight to the gate that can actually let them in.
+   */
+  domainHint?: string | null
+): string {
   const { clientId, redirectUri } = credentials();
   const params = new URLSearchParams({
     client_id: clientId,
@@ -50,7 +80,8 @@ export function microsoftAuthorizeUrl(state: string): string {
     // one they are already signed in to.
     prompt: "select_account"
   });
-  return AUTHORIZE + "?" + params.toString();
+  if (domainHint) params.set("domain_hint", domainHint);
+  return AUTHORIZE_BASE + "/" + TENANT[kind] + "/oauth2/v2.0/authorize?" + params.toString();
 }
 
 interface TokenReply {
@@ -138,7 +169,7 @@ export async function refreshMicrosoftToken(refreshToken: string): Promise<Token
  * straight from Microsoft. Its claims are read without verifying the signature, which is safe only because
  * of where it came from - this is never read from anything a browser handed us.
  */
-function claimsOf(idToken: string): { sub?: string; email?: string; preferred_username?: string; oid?: string } {
+function claimsOf(idToken: string): { sub?: string; email?: string; preferred_username?: string; oid?: string; tid?: string } {
   const payload = idToken.split(".")[1];
   if (!payload) return {};
   const padded = payload.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(payload.length / 4) * 4, "=");
@@ -146,14 +177,22 @@ function claimsOf(idToken: string): { sub?: string; email?: string; preferred_us
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
-export async function microsoftProfile(accessToken: string, idToken?: string): Promise<{ id: string; email: string }> {
+/**
+ * Microsoft's own identifier for "a personal account", used as the tenant on every consumer sign-in.
+ *
+ * Worth naming rather than leaving as a magic string: it is how the Hub can tell a member they have
+ * connected their personal Outlook when they meant their squadron mailbox.
+ */
+export const PERSONAL_ACCOUNT_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad";
+
+export async function microsoftProfile(accessToken: string, idToken?: string): Promise<{ id: string; email: string; tenantId: string | null }> {
   if (idToken) {
     try {
       const claims = claimsOf(idToken);
       // preferred_username is what a personal account carries; work accounts put the address in email too.
       const email = (claims.email || claims.preferred_username || "").toLowerCase();
       const id = claims.oid || claims.sub || "";
-      if (email && id) return { id, email };
+      if (email && id) return { id, email, tenantId: claims.tid ?? null };
     } catch {
       // Fall through and ask Graph, which may still be allowed.
     }
@@ -170,7 +209,7 @@ export async function microsoftProfile(accessToken: string, idToken?: string): P
     );
   }
   const data = await response.json<{ id: string; mail?: string; userPrincipalName?: string }>();
-  return { id: data.id, email: (data.mail || data.userPrincipalName || "").toLowerCase() };
+  return { id: data.id, email: (data.mail || data.userPrincipalName || "").toLowerCase(), tenantId: null };
 }
 
 /**

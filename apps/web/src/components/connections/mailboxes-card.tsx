@@ -24,6 +24,8 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [why, setWhy] = useState<string | null>(null);
+  /** The work mailbox somebody is about to connect, used only to work out its domain. */
+  const [workAddress, setWorkAddress] = useState("");
   /** Which mailbox's settings are on show. One at a time, chosen above them. */
   const [picked, setPicked] = useState<string>("__sign_in");
   /** What the sign-in account is read as, which is also the default every other mailbox falls back to. */
@@ -253,13 +255,48 @@ export function MailboxesCard({ signedInAs, accounts: initial, microsoftReady = 
       <div className="mbx-add">
         <a className="mbx-btn mbx-btn--primary" href="/api/auth/google/start?add=mailbox">Connect a Gmail mailbox</a>
         {microsoftReady ? (
-          <a className="mbx-btn mbx-btn--primary" href="/api/auth/microsoft/start">Connect an Outlook or CAP mailbox</a>
+          <a className="mbx-btn mbx-btn--primary" href="/api/auth/microsoft/start?kind=personal">
+            Connect an Outlook or Hotmail mailbox
+          </a>
         ) : (
           <span className="mbx-fine">
             Outlook, Hotmail and CAP mailboxes need setting up once by an administrator before anybody can connect one.
           </span>
         )}
       </div>
+      {microsoftReady ? (
+        <form
+          className="mbx-work"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const at = workAddress.indexOf("@");
+            const domain = at > 0 ? workAddress.slice(at + 1).trim().toLowerCase() : "";
+            // The domain is what lets Microsoft send somebody straight to whoever actually holds their
+            // password, instead of asking them to choose between two accounts with the same address.
+            window.location.href = "/api/auth/microsoft/start?kind=work"
+              + (domain ? "&domain=" + encodeURIComponent(domain) : "");
+          }}
+        >
+          <label>
+            <span>Work or school mailbox (Microsoft 365, including a CAP address)</span>
+            <input
+              type="email"
+              value={workAddress}
+              autoComplete="off"
+              placeholder="you@yourdomain.com"
+              onChange={(event) => setWorkAddress(event.target.value)}
+            />
+          </label>
+          <button type="submit" className="mbx-btn mbx-btn--primary">Connect it</button>
+          <p className="mbx-fine">
+            Typing the address first matters when the same one exists twice at Microsoft &mdash; once as a
+            personal account and once as a work account &mdash; or when your organisation hands sign-in to
+            somebody else, as GoDaddy-managed Microsoft 365 does. It takes you to the right gate rather than
+            letting Microsoft guess.
+          </p>
+        </form>
+      ) : null}
+
       <p className="mbx-fine">
         You will be asked which account to use. Pick a different one from the list &mdash; choosing the account you are
         already signed in with simply re-confirms the one you have.
@@ -295,6 +332,11 @@ const mbCss = [
   ".mbx-scope select{font:inherit;font-size:11.5px;padding:5px 8px;border-radius:7px;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);color:inherit;max-width:100%}",
   "html[data-theme=dark] .mbx-scope select{background:#2a2b2f;border-color:#3a3d44}",
   ".mbx-row-actions{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}",
+  ".mbx-work{display:flex;gap:9px;align-items:flex-end;flex-wrap:wrap;padding-top:10px;border-top:1px dashed var(--cu-border,#e4e6eb)}",
+  ".mbx-work label{display:flex;flex-direction:column;gap:3px;flex:1;min-width:200px}",
+  ".mbx-work label span{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;opacity:.55;line-height:1.4}",
+  ".mbx-work input{font:inherit;font-size:13px;padding:8px 10px;border-radius:8px;border:1px solid var(--cu-border,#e4e6eb);background:var(--cu-bg,#fff);color:inherit;min-width:0}",
+  "html[data-theme=dark] .mbx-work input{background:#2a2b2f;border-color:#3a3d44}",
   ".mbx-add{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
   ".mbx-said{margin:0;font-size:11.5px;line-height:1.5;opacity:.75;padding:8px 11px;border-radius:8px;background:rgba(0,0,0,.05);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-word}",
   "html[data-theme=dark] .mbx-said{background:rgba(255,255,255,.07)}",
