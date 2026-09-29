@@ -39,6 +39,11 @@ interface CloudflareEnv {
   CF_ACCESS_TEAM_DOMAIN?: string;
   /** The Access application this Hub expects tokens for. A token for another app is refused. */
   CF_ACCESS_AUD?: string;
+  /** Cloudflare API token with Access edit rights. Secret: never a var, never in the repository. */
+  CF_API_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
+  /** The reusable Access policy the Hub keeps in step with its own authorised members. */
+  CF_ACCESS_POLICY_ID?: string;
   RESEND_API_KEY?: string;
   BREVO_API_KEY?: string;
 }

@@ -1,6 +1,7 @@
 import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
 import type { GlobalRole } from "@/lib/auth/types";
+import { syncAccessList } from "./cloudflare-sync";
 
 // Who may use the Hub, decided by a person and kept apart from whether CAP says they are a member.
 //
@@ -257,7 +258,15 @@ export async function grantAccess(input: {
     metadata: { capid: input.capid, loginEmail: row.login_email, previous: row.status }
   });
 
-  return { ok: true, message: "Access granted." };
+  // Cloudflare is told after the Hub has decided, never before, and a failure here does not undo the
+  // decision - it only means the door list is briefly behind.
+  const synced = await syncAccessList({ actorId: input.actorId });
+  return {
+    ok: true,
+    message: synced.ok
+      ? "Access granted."
+      : "Access granted. " + synced.message + " They may not be able to sign in until that is fixed."
+  };
 }
 
 /**
@@ -299,7 +308,15 @@ export async function restrictAccess(input: {
     metadata: { capid: input.capid, previous: row?.status ?? null, reason: input.reason ?? null }
   });
 
-  return { ok: true, message: "Access restricted. The member's records and history are unchanged." };
+  const synced = await syncAccessList({ actorId: input.actorId });
+  return {
+    ok: true,
+    // The restriction is already in force whatever Cloudflare says: the Hub refuses this member on every
+    // request. A failed sync leaves them able to reach the door, not to come through it.
+    message: synced.ok
+      ? "Access restricted. The member's records and history are unchanged."
+      : "Access restricted and denied by the Hub immediately. " + synced.message
+  };
 }
 
 /**
