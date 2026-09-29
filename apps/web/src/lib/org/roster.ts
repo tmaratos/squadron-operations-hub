@@ -250,18 +250,29 @@ export async function saveMemberEmails(
 }
 
 /** Every address a member should be reached on. The CAP address is implied by the CAPID, so it is always included. */
+/**
+ * Where this member has asked to be reached.
+ *
+ * This used to begin with CAPID@tncap.us and add to it, so the CAP address received everything whether or not
+ * the member reads it. It is now purely the member's list - see lib/notify/addresses.ts, which is where a
+ * member switches each address on and off and where the rules about doing so live.
+ *
+ * The fallback below is not that old behaviour returning. It covers a member who has no rows at all: someone
+ * on the roster the Hub has never seen sign in. Their CAP address is the one thing CAP guarantees exists, and
+ * sending there beats sending nowhere.
+ */
 export async function addressesForCapid(capid: string): Promise<string[]> {
-  const addresses = new Set<string>([capid + "@tncap.us"]);
+  const fallback = [capid + "@tncap.us"];
   try {
     const rows = await getDatabase()
-      .prepare("SELECT email FROM member_email_links WHERE capid = ? AND notify = 1")
+      .prepare("SELECT email FROM member_email_links WHERE capid = ? AND notify = 1 AND verified_at IS NOT NULL")
       .bind(capid)
       .all<{ email: string }>();
-    rows.results.forEach((row) => addresses.add(row.email.toLowerCase()));
+    const chosen = [...new Set(rows.results.map((row) => row.email.toLowerCase()))];
+    return chosen.length ? chosen : fallback;
   } catch {
-    // The CAP address on its own still reaches them.
+    return fallback;
   }
-  return [...addresses];
 }
 
 export async function emailsByCapid(): Promise<Map<string, string[]>> {

@@ -24,13 +24,12 @@ const KIND_LABEL: Record<string, { icon: string; label: string; tone: string }> 
 export function NotificationCenter({
   initialNotifications,
   initialPrefs,
-  emailAddress,
-  extraAddresses = 0
+  addressesOn
 }: {
   initialNotifications: NotificationRecord[];
   initialPrefs: NotificationPrefs;
-  emailAddress: string;
-  extraAddresses?: number;
+  /** How many addresses this member has switched on, which the list below this card is where they change. */
+  addressesOn: number;
 }) {
   const [notifications, setNotifications] = useState(initialNotifications);
   const [prefs, setPrefs] = useState(initialPrefs);
@@ -121,8 +120,8 @@ export function NotificationCenter({
           <span>
             <strong>Email me the daily summary</strong>
             <small>
-              Goes to {emailAddress}
-              {extraAddresses ? " and your other address on file with CAP" : ""}. Turn it off and everything still appears here.
+              Goes to {addressesOn === 1 ? "the address" : "the " + addressesOn + " addresses"} you have switched on
+              below. Turn this off and everything still appears here.
             </small>
           </span>
         </label>

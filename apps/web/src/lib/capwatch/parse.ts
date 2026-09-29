@@ -70,6 +70,14 @@ export interface Extract {
   records: MemberRecord[];
   /** Every table the archive held, for reporting rather than for reading. */
   tableCount: number;
+  /**
+   * Every file the archive held, whether or not the Hub reads it.
+   *
+   * Kept because "does CAPWATCH contain X" keeps being asked - the van, aircraft, equipment - and answering it
+   * from memory is how a feature gets built on a table that was never in the download. This makes the answer
+   * something the health page can show rather than something somebody has to remember.
+   */
+  tableNames: string[];
 }
 
 /** A CAPWATCH text file: comma separated, quoted fields, CRLF, with a header row. */
@@ -354,5 +362,9 @@ export async function parseExtract(archive: ArrayBuffer): Promise<Extract> {
     downloadedOn = lines.length > 1 ? lines[1].trim() : null;
   }
 
-  return { downloadedOn, seniors, cadets, duties, development, records, tableCount: entries.length };
+  return {
+    downloadedOn, seniors, cadets, duties, development, records,
+    tableCount: entries.length,
+    tableNames: entries.map((entry) => entry.name).sort()
+  };
 }

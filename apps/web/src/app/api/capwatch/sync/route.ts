@@ -65,15 +65,15 @@ export async function POST(request: Request) {
   const startedAt = new Date().toISOString();
 
   const finish = async (status: string, message: string, extra?: {
-    bytes?: number; tables?: number; members?: number;
+    bytes?: number; tables?: number; members?: number; tableNames?: string[];
   }) => {
     await db
       .prepare(
         "UPDATE capwatch_syncs SET finished_at = ?, status = ?, message = ?, bytes_downloaded = ?, " +
-        "tables_found = ?, members_seen = ? WHERE id = ?"
+        "tables_found = ?, members_seen = ?, table_names = ? WHERE id = ?"
       )
       .bind(new Date().toISOString(), status, message, extra?.bytes ?? null, extra?.tables ?? null,
-            extra?.members ?? null, runId)
+            extra?.members ?? null, extra?.tableNames ? extra.tableNames.join(",") : null, runId)
       .run();
   };
 
@@ -135,6 +135,7 @@ export async function POST(request: Request) {
   await finish("OK", "Synced by " + actorName + ".", {
     bytes: attempt.archive.byteLength,
     tables: extract.tableCount,
+    tableNames: extract.tableNames,
     members: extract.seniors.length + extract.cadets.length
   });
 

@@ -17,6 +17,7 @@ import {
   Settings,
   ShieldCheck,
   Target,
+  Truck,
   UserCog,
   Users
 } from "lucide-react";
@@ -206,6 +207,12 @@ export const sections: Section[] = [
           { label: "Committees", href: "/staff#committees", icon: Users, hint: "Finance, awards, membership" },
           { label: "Professional development", href: "/development", icon: Gauge, hint: "Levels and what comes next" }
         ]
+      },
+      {
+        label: "What the squadron holds",
+        items: [
+          { label: "Vehicles and equipment", href: "/assets", icon: Truck, hint: "Who has the van, and what is coming due" }
+        ]
       }
     ]
   },
@@ -298,6 +305,7 @@ export function sectionFor(pathname: string, search?: string): SectionKey {
     ["/communications", "command"],
     ["/staff", "squadron"],
     ["/duties", "squadron"],
+    ["/assets", "squadron"],
     ["/development", "squadron"],
     ["/connections", "connect"],
     ["/integrations", "connect"],
