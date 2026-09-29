@@ -33,6 +33,12 @@ interface CloudflareEnv {
   EMAIL_INTAKE_ADDRESS?: string;
   // Outgoing mail. NOTIFY_FROM is a plain var; the provider key is a secret.
   NOTIFY_FROM?: string;
+  // Cloudflare Access, for the identity path that will replace Google sign-in. Present as configuration
+  // only until it is proved; nothing reads them in the login path yet.
+  /** e.g. aviationministries.cloudflareaccess.com - where Access publishes its signing keys. */
+  CF_ACCESS_TEAM_DOMAIN?: string;
+  /** The Access application this Hub expects tokens for. A token for another app is refused. */
+  CF_ACCESS_AUD?: string;
   RESEND_API_KEY?: string;
   BREVO_API_KEY?: string;
 }
