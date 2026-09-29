@@ -30,6 +30,7 @@ export async function AssetsPage() {
     : null;
 
   const totalMiles = miles.reduce((sum, row) => sum + row.miles, 0);
+  const trips = miles.reduce((sum, row) => sum + row.trips, 0);
 
   return (
     <div className="page-stack">
@@ -42,7 +43,7 @@ export async function AssetsPage() {
       {totalMiles > 0 ? (
         <p className="ap-miles">
           <strong>{totalMiles.toLocaleString()} miles</strong> this month across{" "}
-          {miles.reduce((sum, row) => sum + row.trips, 0)} completed trips
+          {trips === 1 ? "one completed trip" : trips + " completed trips"}
           {miles.length > 1 ? " on " + miles.length + " vehicles" : ""}.
           <span> This is the figure a monthly return asks for, and it is the sum of odometer readings rather than anything typed in afterwards.</span>
         </p>

@@ -95,7 +95,11 @@ export function AddressBook({ initial, canManage }: { initial: MemberAddress[]; 
               <span className="nab-who">
                 <strong>{address.email}</strong>
                 <small>
-                  {address.kind === "CAP" ? "Your CAP address" : address.label || "Added by you"}
+                  {address.kind === "CAP"
+                    ? "Your CAP address"
+                    // An address staff entered from the eServices roster is not one the member added, and
+                    // saying so put words in their mouth about a setting they never touched.
+                    : address.label || (address.addedByMember ? "Added by you" : "On file with CAP")}
                   {address.verified ? "" : " — not confirmed yet"}
                 </small>
               </span>
