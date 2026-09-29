@@ -64,6 +64,36 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
   const db = getDatabase();
   const now = new Date().toISOString();
 
+  // Everything the loops below would otherwise ask the database for, one member at a time.
+  //
+  // A sync touches around three thousand rows. Asking for each member's id as it came to them meant three
+  // thousand sequential round trips in a single request - fifteen seconds of pure waiting at a generous
+  // five milliseconds each, and a sync that would not finish before the Worker gave up. These are read once
+  // and held.
+  const memberIdByCapid = new Map<string, string>();
+  const memberIdByName = new Map<string, string>();
+  const userIdByCapid = new Map<string, string>();
+
+  const known = await db
+    .prepare("SELECT id, capid, full_name, member_type FROM personnel_members")
+    .all<{ id: string; capid: string | null; full_name: string; member_type: string }>();
+  for (const row of known.results) {
+    if (row.capid) memberIdByCapid.set(row.capid, row.id);
+    if (row.member_type === "CADET") memberIdByName.set(row.full_name.toLowerCase(), row.id);
+  }
+
+  const accounts = await db
+    .prepare("SELECT id, capid FROM users WHERE capid IS NOT NULL")
+    .all<{ id: string; capid: string }>();
+  for (const row of accounts.results) userIdByCapid.set(row.capid, row.id);
+
+  /** Sends statements in batches rather than one at a time. D1 runs each batch as a single round trip. */
+  const inBatches = async (statements: D1PreparedStatement[]) => {
+    for (let at = 0; at < statements.length; at += 40) {
+      await db.batch(statements.slice(at, at + 40));
+    }
+  };
+
   const report: ReconcileReport = {
     seniorsSeen: extract.seniors.length,
     seniorsAdded: 0,
@@ -79,33 +109,31 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
   };
 
   // ---------------------------------------------------------------- senior members, matched by CAPID
-  for (const senior of extract.seniors) {
-    const existing = await db
-      .prepare("SELECT id FROM personnel_members WHERE capid = ?")
-      .bind(senior.capid)
-      .first<{ id: string }>();
+  const writes: D1PreparedStatement[] = [];
 
+  for (const senior of extract.seniors) {
+    const existing = memberIdByCapid.get(senior.capid) ? { id: memberIdByCapid.get(senior.capid)! } : null;
     const status = senior.status === "ACTIVE" ? "ACTIVE" : "INACTIVE";
 
     if (existing) {
       // Only CAP's own fields. status_note, and anything a person set, is left alone.
-      await db
+      writes.push(db
         .prepare(
           "UPDATE personnel_members SET full_name = ?, rank = ?, status = ?, member_type = 'SENIOR', " +
           "source = 'CAPWATCH', capwatch_synced_at = ?, updated_at = ? WHERE id = ?"
         )
-        .bind(senior.fullName, senior.rank, status, now, now, existing.id)
-        .run();
+        .bind(senior.fullName, senior.rank, status, now, now, existing.id));
       report.seniorsUpdated += 1;
     } else {
-      await db
+      const id = crypto.randomUUID();
+      memberIdByCapid.set(senior.capid, id);
+      writes.push(db
         .prepare(
           "INSERT INTO personnel_members (id, capid, full_name, rank, status, member_type, source, " +
           "capwatch_synced_at, source_date, created_at, updated_at) " +
           "VALUES (?, ?, ?, ?, ?, 'SENIOR', 'CAPWATCH', ?, ?, ?, ?)"
         )
-        .bind(crypto.randomUUID(), senior.capid, senior.fullName, senior.rank, status, now, now, now, now)
-        .run();
+        .bind(id, senior.capid, senior.fullName, senior.rank, status, now, now, now, now));
       report.seniorsAdded += 1;
     }
   }
@@ -116,30 +144,24 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
   // who changes their name reads as a new person until somebody tidies it; the alternative was holding
   // identifiers for minors that the squadron said it would not hold.
   for (const cadet of extract.cadets) {
-    const existing = await db
-      .prepare("SELECT id FROM personnel_members WHERE full_name = ? COLLATE NOCASE AND member_type = 'CADET'")
-      .bind(cadet.fullName)
-      .first<{ id: string }>();
-
+    const existingId = memberIdByName.get(cadet.fullName.toLowerCase()) ?? null;
     const status = cadet.status === "ACTIVE" ? "ACTIVE" : "INACTIVE";
 
-    if (existing) {
-      await db
+    if (existingId) {
+      writes.push(db
         .prepare(
           "UPDATE personnel_members SET rank = ?, status = ?, source = 'CAPWATCH', capwatch_synced_at = ?, " +
           "updated_at = ? WHERE id = ?"
         )
-        .bind(cadet.rank, status, now, now, existing.id)
-        .run();
+        .bind(cadet.rank, status, now, now, existingId));
     } else {
-      await db
+      writes.push(db
         .prepare(
           "INSERT INTO personnel_members (id, capid, full_name, rank, status, member_type, source, " +
           "capwatch_synced_at, source_date, created_at, updated_at) " +
           "VALUES (?, NULL, ?, ?, ?, 'CADET', 'CAPWATCH', ?, ?, ?, ?)"
         )
-        .bind(crypto.randomUUID(), cadet.fullName, cadet.rank, status, now, now, now, now)
-        .run();
+        .bind(crypto.randomUUID(), cadet.fullName, cadet.rank, status, now, now, now, now));
       report.cadetsAdded += 1;
     }
   }
@@ -153,31 +175,24 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
   //
   // Only the facts CAP owns. Email, role, status and everything the squadron decided are untouched.
   for (const senior of extract.seniors) {
-    await db
-      .prepare(
-        "UPDATE users SET full_name = ?, updated_at = ? WHERE capid = ? AND full_name <> ?"
-      )
-      .bind(senior.fullName, now, senior.capid, senior.fullName)
-      .run();
+    if (!userIdByCapid.has(senior.capid)) continue;
+    writes.push(db
+      .prepare("UPDATE users SET full_name = ?, updated_at = ? WHERE capid = ? AND full_name <> ?")
+      .bind(senior.fullName, now, senior.capid, senior.fullName));
   }
 
   // The organisation chart names its incumbents from personnel_members, so pointing each position at the
   // right member keeps the chart, the roster and the duty list telling the same story.
   for (const duty of extract.duties) {
     if (duty.isAssistant) continue;
-    const member = await db
-      .prepare("SELECT id FROM personnel_members WHERE capid = ?")
-      .bind(duty.capid)
-      .first<{ id: string }>();
-    if (!member) continue;
-    await db
+    const memberId = memberIdByCapid.get(duty.capid);
+    if (!memberId) continue;
+    writes.push(db
       .prepare(
         "UPDATE personnel_positions SET incumbent_id = ?, assignment_status = 'FILLED', updated_at = ? " +
         "WHERE lower(title) = lower(?) AND (incumbent_id IS NULL OR incumbent_id <> ?)"
       )
-      .bind(member.id, now, duty.duty, member.id)
-      .run()
-      .catch(() => undefined);
+      .bind(memberId, now, duty.duty, memberId));
   }
 
   // ---------------------------------------------------------------- professional development
@@ -188,7 +203,7 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
   }
 
   for (const record of extract.development) {
-    await db
+    writes.push(db
       .prepare(
         "INSERT INTO member_development (capid, duty_position, pd_level, specialty_track, track_rating, " +
         "source, updated_at) VALUES (?, ?, ?, ?, ?, 'ESERVICES', ?) " +
@@ -204,12 +219,16 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
         record.track,
         record.rating,
         now
-      )
-      .run();
+      ));
     report.developmentUpdated += 1;
   }
 
   // ---------------------------------------------------------------- duty positions
+  // Kept apart from the rest because assigned_by is required and references a real user; an
+  // unattended sync has nobody to name, so these are attempted separately and a refusal costs the
+  // assignments rather than the whole sync.
+  const dutyWrites: D1PreparedStatement[] = [];
+
   for (const duty of extract.duties) {
     const area = AREAS[duty.functionalArea.toUpperCase()];
     if (!area) {
@@ -217,19 +236,12 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
       continue;
     }
 
-    const member = await db
-      .prepare("SELECT id FROM personnel_members WHERE capid = ?")
-      .bind(duty.capid)
-      .first<{ id: string }>();
-    if (!member) continue;
-
-    const user = await db
-      .prepare("SELECT id FROM users WHERE capid = ?")
-      .bind(duty.capid)
-      .first<{ id: string }>();
+    const memberId = memberIdByCapid.get(duty.capid);
+    if (!memberId) continue;
+    const userId = userIdByCapid.get(duty.capid) ?? null;
 
     try {
-      await db
+      dutyWrites.push(db
         .prepare(
           "INSERT INTO duty_assignments (id, user_id, personnel_member_id, functional_area_key, duty_title, " +
           "is_primary, starts_on, assigned_by, created_at, updated_at) " +
@@ -237,8 +249,8 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
         )
         .bind(
           crypto.randomUUID(),
-          user?.id ?? null,
-          member.id,
+          userId,
+          memberId,
           area,
           duty.duty,
           duty.isAssistant ? 0 : 1,
@@ -247,8 +259,7 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
           actorId ?? null,
           now,
           now
-        )
-        .run();
+        ));
       report.dutiesRecorded += 1;
     } catch {
       // assigned_by is required and references a user; when the sync runs unattended there is nobody to
@@ -263,7 +274,7 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
   // it the member's own record of service. The parser never reads the columns the unit told CAP it would not
   // hold, so nothing sensitive can arrive here even if this loop were changed carelessly later.
   for (const record of extract.records) {
-    await db
+    writes.push(db
       .prepare(
         "INSERT INTO member_records (capid, kind, code, title, functional_area, completed_on, expires_on, " +
         "status, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'CAPWATCH', ?) " +
@@ -274,9 +285,17 @@ export async function reconcile(extract: Extract, actorId?: string | null): Prom
       .bind(
         record.capid, record.kind, record.code, record.title, record.functionalArea,
         record.completedOn, record.expiresOn, record.status, now
-      )
-      .run();
+      ));
     report.recordsWritten += 1;
+  }
+
+  // Everything above has only been prepared. This is where it lands, in batches rather than one at a time.
+  await inBatches(writes);
+
+  try {
+    await inBatches(dutyWrites);
+  } catch {
+    report.dutiesRecorded = 0;
   }
 
   // ---------------------------------------------------------------- who CAPWATCH no longer lists
