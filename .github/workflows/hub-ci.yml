@@ -1,0 +1,93 @@
+# Checks the Hub before it reaches fifty people.
+#
+# Pushing to main deploys straight to production - Workers Builds picks it up and there is no gate in front of
+# it. Until now the only thing between a bad commit and a live squadron was whoever pushed it remembering to
+# typecheck first, and the existing workflows only ever watched cloudflare/worker, a path the Hub does not use.
+#
+# This does not stop a deploy by itself; Workers Builds runs whether or not this passes. What it gives is a
+# red mark against the commit that broke something, and something for branch protection to require once that
+# is switched on - which is the actual gate and is a repository setting rather than a file.
+name: Hub CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/**"
+      - ".github/workflows/hub-ci.yml"
+  push:
+    branches: ["main"]
+    paths:
+      - "apps/**"
+      - ".github/workflows/hub-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hub-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    name: Web app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      # Runs before anything else because it is the cheapest and catches the one class of fault that is
+      # invisible everywhere else: a control character written into source by an escape that was taken
+      # literally. One of those cost two hundred service records their expiry dates and could not be seen in
+      # an editor, in grep, or by the compiler.
+      - name: No invisible control characters
+        run: node scripts/check-source-characters.mjs
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A migration that is edited after it has been applied will never run again, so the database and the
+      # file disagree for ever and nothing says so. Applying one by hand caused exactly this in September and
+      # broke deploys for two days.
+      - name: Applied migrations are not edited
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "No base commit to compare against; nothing to check."
+            exit 0
+          fi
+          changed=$(git diff --name-only --diff-filter=MD "$base" HEAD -- apps/web/migrations || true)
+          if [ -n "$changed" ]; then
+            echo "These migrations were changed or deleted rather than added:"
+            echo "$changed"
+            echo ""
+            echo "A migration that has already run will not run again. Add a new migration instead."
+            exit 1
+          fi
+          echo "Migrations are additions only."
