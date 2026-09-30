@@ -5,10 +5,13 @@ import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { getPrefs, listNotifications } from "@/lib/notify/notifications";
 import { listAddresses } from "@/lib/notify/addresses";
+import { memberChoice, notificationLevel } from "@/lib/notify/squadron-switch";
 
 export async function NotificationsPage() {
   const user = await requireUser();
-  const [notifications, prefs] = await Promise.all([listNotifications(user.id), getPrefs(user.id)]);
+  const [notifications, prefs, choice, level] = await Promise.all([
+    listNotifications(user.id), getPrefs(user.id), memberChoice(user.id), notificationLevel()
+  ]);
   const addresses = user.capid ? await listAddresses(user.capid) : [];
 
   return (
@@ -23,6 +26,8 @@ export async function NotificationsPage() {
         initialNotifications={notifications}
         initialPrefs={prefs}
         addressesOn={addresses.filter((address) => address.notify && address.verified).length}
+        initialChoice={choice}
+        squadronQuiet={level !== "EVERYTHING"}
       />
       <AddressBook initial={addresses} canManage={Boolean(user.capid)} />
     </div>

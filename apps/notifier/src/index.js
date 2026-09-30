@@ -59,14 +59,13 @@ async function run(event, env) {
   // CAPWATCH twice a month, so the roster never drifts more than a fortnight from CAP's own record.
   const capwatch = await syncCapwatchIfDue(env);
   const regs = await readDocumentsIfAny(env);
-  // The squadron-wide switch. This worker sends on its own schedule and would otherwise keep emailing
-  // members after an administrator had switched email off in the Hub - which, to whoever asked for it, is
-  // indistinguishable from the setting not working.
+  // The squadron-wide switch is applied per member inside deliver(), not to the run as a whole: a member who
+  // has asked to be emailed anyway still is, and one who has asked not to be still is not.
   //
-  // The work above still happens: duties are still generated, deadlines still raised, notices still written.
-  // Turning email off is not turning the squadron off, and everything still appears on the Hub's own pages.
+  // The work above happens regardless. Duties are still generated, deadlines still raised, notices still
+  // written. Turning email off is not turning the squadron off, and it all still appears in the Hub.
   const level = await notificationLevel(env);
-  const sent = level === "EVERYTHING" ? await deliver(env, digest) : 0;
+  const sent = await deliver(env, digest, level);
   return { generated, routines, raised, security, capwatch, regs, sent, emailLevel: level, digest, squadronHour: hour, cron: event.cron ?? null };
 }
 
@@ -452,7 +451,7 @@ async function revivePendingSends(env) {
 
 // ---------------------------------------------------------------- delivery
 
-async function deliver(env, digestWindow) {
+async function deliver(env, digestWindow, level) {
   // A notice that could not be sent because nothing was configured to send it has not failed - it has not
   // been tried. Marking those FAILED burned them permanently: the key was added later and the member never
   // heard about the work anyway. They are put back in the queue instead.
@@ -462,7 +461,8 @@ async function deliver(env, digestWindow) {
     `SELECT n.id, n.user_id, n.kind, n.title, n.body, n.url, n.created_at,
             u.email AS email, u.full_name AS full_name,
             COALESCE(p.cadence, 'DAILY') AS cadence,
-            COALESCE(p.digest_when, 'EVENING') AS digest_when
+            COALESCE(p.digest_when, 'EVENING') AS digest_when,
+            COALESCE(p.email_choice, 'FOLLOW') AS email_choice
      FROM notifications n
      JOIN users u ON u.id = n.user_id
      LEFT JOIN notification_prefs p ON p.user_id = n.user_id
@@ -475,6 +475,10 @@ async function deliver(env, digestWindow) {
   for (const row of rows.results || []) {
     // Immediate notices are sent by the Hub itself; anything of theirs still sitting here is a catch-up.
     if (row.cadence === "DAILY" && row.digest_when !== digestWindow) continue;
+    // The member's own answer, then the squadron's. A notice nobody is going to be emailed is left PENDING
+    // rather than marked sent, so it goes out if the setting changes before it stops being relevant.
+    if (row.email_choice === "NEVER") continue;
+    if (row.email_choice !== "ALWAYS" && level !== "EVERYTHING") continue;
     if (!byUser.has(row.user_id)) byUser.set(row.user_id, []);
     byUser.get(row.user_id).push(row);
   }

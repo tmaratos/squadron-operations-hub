@@ -71,6 +71,7 @@ export async function sendAnnouncement(input: {
     const to = person.capid ? await addressesForCapid(person.capid) : [person.email.toLowerCase()];
     const result = await sendMail({
       to,
+      forUserId: person.id,
       purpose: "ALERT",
       subject: input.subject,
       name: person.full_name,

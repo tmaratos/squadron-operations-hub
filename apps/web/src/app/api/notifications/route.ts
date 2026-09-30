@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { clearNotifications, listNotifications, markRead, savePrefs, sendTestEmail, type NotificationPrefs, unreadCount } from "@/lib/notify/notifications";
 import { assertSameOrigin } from "@/lib/security/origin";
+import { setMemberChoice } from "@/lib/notify/squadron-switch";
 
 export async function GET() {
   try {
@@ -33,7 +34,9 @@ const schema = z.union([
       leadDays: z.number().int().min(0).max(30)
     })
   }),
-  z.object({ action: z.literal("test") })
+  z.object({ action: z.literal("test") }),
+  // The member's own answer about email, which beats the squadron-wide setting in both directions.
+  z.object({ action: z.literal("emailChoice"), choice: z.enum(["FOLLOW", "ALWAYS", "NEVER"]) })
 ]);
 
 export async function POST(request: Request) {
@@ -55,6 +58,19 @@ export async function POST(request: Request) {
         message: input.ids?.length
           ? "Cleared."
           : cleared + (cleared === 1 ? " notification cleared." : " notifications cleared.") + " The work they were about is untouched."
+      });
+    }
+
+    if (input.action === "emailChoice") {
+      await setMemberChoice(user.id, input.choice);
+      return NextResponse.json({
+        choice: input.choice,
+        message:
+          input.choice === "ALWAYS"
+            ? "You will be emailed even when the squadron has email switched off."
+            : input.choice === "NEVER"
+              ? "You will not be emailed. Everything still appears on this page."
+              : "You will follow whatever the squadron is doing."
       });
     }
 

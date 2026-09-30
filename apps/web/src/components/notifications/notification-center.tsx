@@ -4,6 +4,14 @@ import Link from "next/link";
 import { useState } from "react";
 import type { NotificationPrefs, NotificationRecord } from "@/lib/notify/notifications";
 
+type EmailChoice = "FOLLOW" | "ALWAYS" | "NEVER";
+
+const EMAIL_CHOICES: Array<{ value: EmailChoice; label: string; detail: string }> = [
+  { value: "FOLLOW", label: "Whatever the squadron is doing", detail: "The usual. If command switches email off for everybody, yours goes quiet too." },
+  { value: "ALWAYS", label: "Always email me", detail: "You keep getting the daily summary even when the squadron has email switched off." },
+  { value: "NEVER", label: "Never email me", detail: "Nothing by email. Everything still appears on this page." }
+];
+
 // What the Hub told you, and one switch.
 //
 // There used to be five checkboxes and two dropdowns here. Nobody in a squadron wants to design their own
@@ -24,19 +32,53 @@ const KIND_LABEL: Record<string, { icon: string; label: string; tone: string }> 
 export function NotificationCenter({
   initialNotifications,
   initialPrefs,
-  addressesOn
+  addressesOn,
+  initialChoice = "FOLLOW",
+  squadronQuiet = false
 }: {
   initialNotifications: NotificationRecord[];
   initialPrefs: NotificationPrefs;
   /** How many addresses this member has switched on, which the list below this card is where they change. */
   addressesOn: number;
+  /** The member's own answer, which overrides the squadron-wide setting in both directions. */
+  initialChoice?: EmailChoice;
+  /** Whether the squadron has email switched off, so a member on FOLLOW can be told why it is quiet. */
+  squadronQuiet?: boolean;
 }) {
   const [notifications, setNotifications] = useState(initialNotifications);
   const [prefs, setPrefs] = useState(initialPrefs);
+  const [choice, setChoice] = useState<EmailChoice>(initialChoice);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const unread = notifications.filter((notice) => !notice.readAt).length;
+
+  async function chooseEmail(next: EmailChoice) {
+    if (next === choice || busy) return;
+    const before = choice;
+    setChoice(next);
+    setBusy(true);
+    setNote(null);
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "emailChoice", choice: next })
+      });
+      const data = (await response.json()) as { message?: string };
+      if (!response.ok) {
+        setChoice(before);
+        setNote(data.message ?? "That could not be saved.");
+        return;
+      }
+      setNote(data.message ?? "Saved.");
+    } catch {
+      setChoice(before);
+      setNote("That did not reach the Hub. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function markAllRead() {
     setNotifications(notifications.map((notice) => ({ ...notice, readAt: notice.readAt ?? new Date().toISOString() })));
@@ -115,17 +157,37 @@ export function NotificationCenter({
           When someone gives you a job, it appears on this page straight away. <strong>Once a day at 6pm</strong> we
           email you everything that needs you — new jobs, anything due soon, anything late. One email, not one per job.
         </p>
-        <label className="nc-switch">
-          <input type="checkbox" checked={prefs.emailEnabled} disabled={busy} onChange={(event) => setEmail(event.target.checked)} />
-          <span>
-            <strong>Email me the daily summary</strong>
-            <small>
-              Goes to {addressesOn === 1 ? "the address" : "the " + addressesOn + " addresses"} you have switched on
-              below. Turn this off and everything still appears here.
-            </small>
-          </span>
-        </label>
-        {prefs.emailEnabled ? (
+        {/* Three answers rather than a checkbox, because the squadron can now switch email off for everybody
+            and a member needs to be able to disagree with that in either direction. */}
+        <div className="nc-choices" role="radiogroup" aria-label="Email me">
+          {EMAIL_CHOICES.map((option) => (
+            <label key={option.value} className={"nc-switch" + (choice === option.value ? " is-on" : "")}>
+              <input
+                type="radio"
+                name="email-choice"
+                checked={choice === option.value}
+                disabled={busy}
+                onChange={() => chooseEmail(option.value)}
+              />
+              <span>
+                <strong>{option.label}</strong>
+                <small>{option.detail}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+        {choice !== "NEVER" ? (
+          <p className="nc-goes">
+            Goes to {addressesOn === 1 ? "the address" : "the " + addressesOn + " addresses"} you have switched on below.
+          </p>
+        ) : null}
+        {squadronQuiet && choice === "FOLLOW" ? (
+          <p className="nc-quiet">
+            Command has email switched off for the whole squadron at the moment, so nothing is being sent to
+            you. Choose <strong>Always email me</strong> if you would rather keep getting it.
+          </p>
+        ) : null}
+        {choice !== "NEVER" ? (
           <button type="button" className="nc-test-link" disabled={busy} onClick={sendTest}>
             {busy ? "Sending…" : "Send me one now to check it works"}
           </button>
@@ -209,6 +271,11 @@ const ncCss = [
   ".nc-switch span{display:flex;flex-direction:column;gap:3px}",
   ".nc-switch strong{font-size:15px}",
   ".nc-switch small{font-size:13px;color:var(--cu-muted,#656f7d);line-height:1.5}",
+  ".nc-choices{display:grid;gap:8px;margin-top:14px}",
+  ".nc-choices .nc-switch{margin-top:0}",
+  ".nc-switch.is-on{border-color:#7b68ee;background:rgba(123,104,238,.07)}",
+  ".nc-goes{margin:10px 0 0;font-size:13px;color:var(--cu-muted,#656f7d)}",
+  ".nc-quiet{margin:10px 0 0;font-size:13px;line-height:1.55;padding:10px 12px;border-radius:9px;background:rgba(229,154,0,.13)}",
   ".nc-test-link{margin-top:10px;border:0;background:none;padding:0;color:#7b68ee;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;text-decoration:underline}",
   ".nc-test-link:disabled{opacity:.6;cursor:default}",
   ".nc-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}",

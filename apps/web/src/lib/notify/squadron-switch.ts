@@ -90,3 +90,74 @@ export function whyHeldBack(level: NotificationLevel): string {
     ? "Email to members is switched off for the whole squadron, so nothing was sent."
     : "Automated email is switched off for the whole squadron, so nothing was sent. It is still in the Hub.";
 }
+
+// ---------------------------------------------------------------- the member's own answer
+
+/**
+ * FOLLOW: whatever the squadron is doing, which is where everybody starts.
+ * ALWAYS: email me even when the squadron has switched it off.
+ * NEVER:  do not email me even when the squadron has it on.
+ */
+export type MemberChoice = "FOLLOW" | "ALWAYS" | "NEVER";
+
+export const MEMBER_CHOICES: Array<{ value: MemberChoice; label: string; detail: string }> = [
+  { value: "FOLLOW", label: "Whatever the squadron is doing", detail: "The usual. If command turns email off for everybody, yours goes quiet too." },
+  { value: "ALWAYS", label: "Always email me", detail: "You get the daily summary even when the squadron has email switched off." },
+  { value: "NEVER", label: "Never email me", detail: "Nothing by email, ever. Everything still appears on this page." }
+];
+
+export async function memberChoice(userId: string): Promise<MemberChoice> {
+  try {
+    const row = await getDatabase()
+      .prepare("SELECT email_choice FROM notification_prefs WHERE user_id = ?")
+      .bind(userId)
+      .first<{ email_choice: string }>();
+    const said = row?.email_choice as MemberChoice | undefined;
+    return said === "ALWAYS" || said === "NEVER" ? said : "FOLLOW";
+  } catch {
+    return "FOLLOW";
+  }
+}
+
+export async function setMemberChoice(userId: string, choice: MemberChoice): Promise<void> {
+  const now = new Date().toISOString();
+  await getDatabase()
+    .prepare(
+      "INSERT INTO notification_prefs (user_id, email_choice, email_enabled, updated_at) VALUES (?, ?, ?, ?) " +
+      // email_enabled is kept in step rather than left behind, because it is still read elsewhere - including
+      // by the notifier worker - and two columns that disagree about the same question is how a member ends up
+      // being emailed by one code path and not another.
+      "ON CONFLICT(user_id) DO UPDATE SET email_choice = excluded.email_choice, " +
+      "email_enabled = excluded.email_enabled, updated_at = excluded.updated_at"
+    )
+    .bind(userId, choice, choice === "NEVER" ? 0 : 1, now)
+    .run();
+}
+
+/**
+ * Whether this particular member may be emailed this particular kind of message.
+ *
+ * The member's answer wins in both directions, which is the point: a squadron-wide switch that a member cannot
+ * opt back into is one person's complaint imposed on everybody, and one they cannot opt out of is no answer to
+ * the complaint at all.
+ *
+ * ALWAYS does not override NOTHING for an alert, and that is deliberate - see below.
+ */
+export async function mayEmail(userId: string | null, purpose: MailPurpose): Promise<boolean> {
+  if (purpose === "TRANSACTIONAL") return true;
+
+  const level = await notificationLevel();
+  if (!userId) return allowed(level, purpose);
+
+  const choice = await memberChoice(userId);
+  if (choice === "NEVER") return false;
+  if (choice === "ALWAYS") return true;
+  return allowed(level, purpose);
+}
+
+/** Why nothing was sent to this member, for a page that has to explain itself. */
+export async function whyNotSent(userId: string | null): Promise<string> {
+  const choice = userId ? await memberChoice(userId) : "FOLLOW";
+  if (choice === "NEVER") return "You have asked not to be emailed. Everything still appears here.";
+  return whyHeldBack(await notificationLevel());
+}

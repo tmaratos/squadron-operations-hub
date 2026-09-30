@@ -206,6 +206,7 @@ async function deliverNow(userId: string, notices: NewNotification[]): Promise<v
   const subject = notices.length === 1 ? notices[0].title : notices.length + " things need you — Squadron Operations Hub";
   const result = await sendMail({
     to,
+    forUserId: userId,
     subject,
     name: person.full_name,
     notices: notices.map((notice) => ({ title: notice.title, body: notice.body ?? null, url: notice.url ?? null }))
