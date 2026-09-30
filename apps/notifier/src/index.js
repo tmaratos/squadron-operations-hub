@@ -58,8 +58,9 @@ async function run(event, env) {
   const security = digest === "EVENING" ? await checkSecurityControls(env, new Date().toISOString()) : 0;
   // CAPWATCH twice a month, so the roster never drifts more than a fortnight from CAP's own record.
   const capwatch = await syncCapwatchIfDue(env);
+  const regs = await readDocumentsIfAny(env);
   const sent = await deliver(env, digest);
-  return { generated, routines, raised, security, capwatch, sent, digest, squadronHour: hour, cron: event.cron ?? null };
+  return { generated, routines, raised, security, capwatch, regs, sent, digest, squadronHour: hour, cron: event.cron ?? null };
 }
 
 // ---------------------------------------------------------------- deadlines
@@ -642,5 +643,31 @@ async function syncCapwatchIfDue(env) {
     return { day, ok: response.ok, message: body.message ?? ("HTTP " + response.status) };
   } catch (error) {
     return { day, ok: false, message: String(error).slice(0, 200) };
+  }
+}
+
+/**
+ * Works through any unread squadron documents, a batch an hour.
+ *
+ * The library used to be fillable only by a signed-in person pressing a button and keeping the tab open, which
+ * is why two hundred regulations sat unread and everything built on top of them had nothing to work from. This
+ * asks the Hub to take a bite every hour instead. Once the backlog is gone it does nothing, and a document
+ * added to the Drive later is picked up the same way without anybody being told to go and press something.
+ */
+async function readDocumentsIfAny(env) {
+  if (!env.APP_URL || !env.INTERNAL_SYNC_TOKEN) return null;
+
+  try {
+    const response = await fetch(env.APP_URL.replace(/\/$/, "") + "/api/regs/catch-up", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + env.INTERNAL_SYNC_TOKEN }
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) return { ok: false, message: body.message ?? ("HTTP " + response.status) };
+    // Nothing left to do is the ordinary case once the backlog has cleared, and is not worth reporting.
+    if (!body.read && !body.remaining) return null;
+    return { ok: true, read: body.read ?? 0, failed: body.failed ?? 0, remaining: body.remaining ?? 0 };
+  } catch (error) {
+    return { ok: false, message: String(error).slice(0, 200) };
   }
 }
