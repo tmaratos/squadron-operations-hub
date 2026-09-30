@@ -1,0 +1,45 @@
+# Keeping dependencies from quietly rotting.
+#
+# Nobody was watching. Dependabot alerts are switched off for this repository, so a published vulnerability in
+# anything the Hub depends on would have gone unnoticed indefinitely - there is no other place that would have
+# said so. The Hub holds a squadron's membership record and runs on one person's accounts; "nobody noticed"
+# is not a position it can afford.
+#
+# Weekly rather than daily, and grouped, because a stream of single-package pull requests is how updating
+# becomes something nobody does. One batch a week is a thing a person can actually look at.
+#
+# This file covers version updates. Security *alerts* are a repository setting and have to be switched on in
+# Settings > Code security - this config does not turn them on by itself.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Patches and minors together: these are the ones that are usually safe and usually ignored.
+      routine:
+        update-types:
+          - patch
+          - minor
+    # A major version of Next or React is a change to think about rather than merge, so it arrives on its own.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+    commit-message:
+      prefix: "deps"
+
+  # The workflows themselves pin actions by tag, and a compromised action runs with the repository's
+  # credentials. Worth updating on the same footing as the code.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "ci"

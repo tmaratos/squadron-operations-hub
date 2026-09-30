@@ -1,0 +1,55 @@
+# Static analysis, because reading every route by hand does not scale past one person doing it once.
+#
+# Code scanning was never set up. The sweep that found the From-header fault was done by hand, and a hand
+# sweep only catches what somebody thought to look for on the day - it does not run again next month when
+# somebody adds a route in a hurry. CodeQL does, on every change and once a week whether or not anything
+# changed, because a vulnerability can be published against a pattern that was fine when it was written.
+#
+# Security-and-quality rather than the default suite: the default set is tuned for a low false-positive rate
+# across every repository on the platform, and this one is small enough to read whatever it reports.
+name: CodeQL
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    # Mondays, early. Matched to the Dependabot day so the week starts with one pile of findings, not two.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyse:
+    name: Analyse
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      # Writing the findings back is the whole point; without it the run passes and reports to nobody.
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-and-quality
+
+      # No build step. CodeQL reads JavaScript and TypeScript without compiling, and a build here would want
+      # the Cloudflare credentials that builds were just stopped from needing.
+      - name: Analyse
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript-typescript"
