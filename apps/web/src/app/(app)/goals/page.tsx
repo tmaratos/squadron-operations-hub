@@ -4,15 +4,21 @@ import { requireUser } from "@/lib/auth/session";
 import { listGoals } from "@/lib/goals/goals";
 import { listUsers } from "@/lib/auth/repository";
 import { getWorkspaceTree } from "@/lib/work/structure";
+import { getDatabase } from "@/lib/cloudflare";
 
 export const dynamic = "force-dynamic";
 
 export default async function GoalsPage() {
   const user = await requireUser();
-  const [goals, spaces, users] = await Promise.all([
+  const [goals, spaces, users, areas] = await Promise.all([
     listGoals(),
     getWorkspaceTree().catch(() => []),
-    listUsers().catch(() => [])
+    listUsers().catch(() => []),
+    getDatabase()
+      .prepare("SELECT key, name FROM functional_areas ORDER BY name COLLATE NOCASE")
+      .all<{ key: string; name: string }>()
+      .then((rows) => rows.results)
+      .catch(() => [])
   ]);
 
   return (
@@ -27,6 +33,7 @@ export default async function GoalsPage() {
         canEdit={user.globalRole !== "READ_ONLY"}
         lists={spaces.flatMap((space) => space.lists.map((list) => ({ id: list.id, name: list.name, spaceName: space.name })))}
         people={users.filter((entry) => entry.status === "APPROVED").map((entry) => ({ userId: entry.id, fullName: entry.fullName }))}
+        areas={areas}
       />
     </div>
   );

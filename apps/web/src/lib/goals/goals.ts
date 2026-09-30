@@ -53,6 +53,9 @@ export interface Goal {
   targetDate: string | null;
   ownerUserId: string | null;
   ownerName: string | null;
+  /** The department this belongs to, which outlasts whoever currently holds the post. */
+  areaKey: string | null;
+  areaName: string | null;
   status: GoalStatus;
   targets: GoalTarget[];
   steps: GoalStep[];
@@ -74,8 +77,10 @@ export async function listGoals(): Promise<Goal[]> {
   try {
     const [goalRows, targetRows] = await Promise.all([
       db.prepare(
-        "SELECT g.id, g.name, g.detail, g.horizon, g.target_date, g.owner_user_id, g.status, u.full_name AS owner_name " +
+        "SELECT g.id, g.name, g.detail, g.horizon, g.target_date, g.owner_user_id, g.status, u.full_name AS owner_name, " +
+        "g.functional_area_key, a.name AS area_name " +
         "FROM goals g LEFT JOIN users u ON u.id = g.owner_user_id " +
+        "LEFT JOIN functional_areas a ON a.key = g.functional_area_key " +
         "WHERE g.workspace_id = ? ORDER BY g.horizon, g.target_date IS NULL, g.target_date, g.name COLLATE NOCASE"
       ).bind(WORKSPACE_ID).all<Record<string, unknown>>(),
       db.prepare("SELECT * FROM goal_targets ORDER BY display_order, rowid").all<Record<string, unknown>>()
@@ -184,6 +189,8 @@ export async function listGoals(): Promise<Goal[]> {
         targetDate,
         ownerUserId: (row.owner_user_id as string | null) ?? null,
         ownerName: (row.owner_name as string | null) ?? null,
+        areaKey: (row.functional_area_key as string | null) ?? null,
+        areaName: (row.area_name as string | null) ?? null,
         status: row.status as GoalStatus,
         targets,
         steps,
@@ -206,17 +213,18 @@ export async function createGoal(input: {
   horizon: Horizon;
   targetDate?: string | null;
   ownerUserId?: string | null;
+  areaKey?: string | null;
   userId: string;
 }): Promise<string> {
   const id = crypto.randomUUID();
   const now = nowIso();
   await getDatabase()
     .prepare(
-      "INSERT INTO goals (id, workspace_id, name, detail, horizon, target_date, owner_user_id, status, created_by, created_at, updated_at) " +
-      "VALUES (?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?)"
+      "INSERT INTO goals (id, workspace_id, name, detail, horizon, target_date, owner_user_id, functional_area_key, status, created_by, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?)"
     )
     .bind(id, WORKSPACE_ID, input.name.trim().slice(0, 160), input.detail?.trim().slice(0, 2000) || null,
-      input.horizon, input.targetDate || null, input.ownerUserId || null, input.userId, now, now)
+      input.horizon, input.targetDate || null, input.ownerUserId || null, input.areaKey || null, input.userId, now, now)
     .run();
   return id;
 }
@@ -227,6 +235,7 @@ export async function updateGoal(id: string, input: {
   horizon?: Horizon;
   targetDate?: string | null;
   ownerUserId?: string | null;
+  areaKey?: string | null;
   status?: GoalStatus;
 }): Promise<void> {
   const sets: string[] = [];
@@ -237,6 +246,7 @@ export async function updateGoal(id: string, input: {
   if (input.horizon !== undefined) set("horizon", input.horizon);
   if (input.targetDate !== undefined) set("target_date", input.targetDate || null);
   if (input.ownerUserId !== undefined) set("owner_user_id", input.ownerUserId || null);
+  if (input.areaKey !== undefined) set("functional_area_key", input.areaKey || null);
   if (input.status !== undefined) set("status", input.status);
   if (!sets.length) return;
   set("updated_at", nowIso());

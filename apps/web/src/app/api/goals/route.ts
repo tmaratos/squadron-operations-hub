@@ -15,6 +15,7 @@ const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional();
 const schema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("create"),
+    areaKey: z.string().trim().max(60).nullable().optional(),
     name: z.string().trim().min(3).max(160),
     detail: z.string().trim().max(2000).optional(),
     horizon,
@@ -23,6 +24,7 @@ const schema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("update"),
+    areaKey: z.string().trim().max(60).nullable().optional(),
     id: z.string().trim().min(1).max(80),
     name: z.string().trim().min(3).max(160).optional(),
     detail: z.string().trim().max(2000).nullable().optional(),

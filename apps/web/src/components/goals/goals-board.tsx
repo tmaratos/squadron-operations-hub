@@ -35,17 +35,20 @@ interface Source {
   quote: string;
 }
 
-export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
+export function GoalsBoard({ goals: initial, canEdit, lists, people, areas = [] }: {
   goals: Goal[];
   canEdit: boolean;
   lists: Array<{ id: string; name: string; spaceName: string }>;
   people: Array<{ userId: string; fullName: string }>;
+  /** The squadron's departments, so a goal can belong to a post rather than only to a person. */
+  areas?: Array<{ key: string; name: string }>;
 }) {
   const [goals, setGoals] = useState(initial);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [filling, setFilling] = useState<string | null>(null);
   const [sources, setSources] = useState<{ goalId: string; list: Source[] } | null>(null);
+  const [area, setArea] = useState<string>("");
   const [adding, setAdding] = useState<{ horizon: Horizon; name?: string; detail?: string } | null>(null);
   const [targetFor, setTargetFor] = useState<string | null>(null);
   // Describing a goal out loud. The draft sits here, edited freely, until somebody presses the button.
@@ -144,6 +147,7 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
         <div className="gl-head">
           <h3>{goal.name}</h3>
           <p className="gl-meta">
+            {goal.areaName ? <><strong className="gl-area">{goal.areaName}</strong> · </> : null}
             {goal.ownerName ?? "No owner"} · <span className={goal.daysLeft !== null && goal.daysLeft < 0 ? "gl-late" : ""}>{whenText(goal)}</span>
             {goal.status !== "OPEN" ? " · " + goal.status.toLowerCase() : ""}
           </p>
@@ -323,7 +327,9 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
   );
 
   const section = (horizon: Horizon, title: string, blurb: string) => {
-    const mine = goals.filter((goal) => goal.horizon === horizon);
+    // Filtered here rather than in the query, because the whole set is already loaded and switching between
+    // departments should not cost a round trip.
+    const mine = goals.filter((goal) => goal.horizon === horizon && (!area || goal.areaKey === area));
     return (
       <section className="gl-section">
         <div className="gl-section-head">
@@ -346,7 +352,8 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
                 name: String(form.get("name") ?? "").trim(),
                 detail: String(form.get("detail") ?? "").trim(),
                 targetDate: String(form.get("targetDate") ?? "") || null,
-                ownerUserId: String(form.get("ownerUserId") ?? "") || null
+                ownerUserId: String(form.get("ownerUserId") ?? "") || null,
+                areaKey: String(form.get("areaKey") ?? "") || null
               });
             }}
           >
@@ -367,6 +374,16 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
                   {people.map((person) => <option key={person.userId} value={person.userId}>{person.fullName}</option>)}
                 </select>
               </label>
+              {areas.length ? (
+                <label>
+                  {/* The department outlasts whoever holds the post, which is the point of asking. */}
+                  Which department
+                  <select name="areaKey" defaultValue="">
+                    <option value="">The squadron as a whole</option>
+                    {areas.map((area) => <option key={area.key} value={area.key}>{area.name}</option>)}
+                  </select>
+                </label>
+              ) : null}
             </div>
             <div className="gl-form-actions">
               <button type="button" className="gl-btn" onClick={() => setAdding(null)}>Cancel</button>
@@ -520,6 +537,26 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
       <style>{glCss}</style>
       {note ? <p className="gl-note" role="status">{note}</p> : null}
       {composer}
+      {areas.length ? (
+        <div className="gl-filter">
+          <label>
+            Department
+            <select value={area} onChange={(event) => setArea(event.target.value)}>
+              <option value="">Everything</option>
+              {areas.map((entry) => (
+                <option key={entry.key} value={entry.key}>
+                  {entry.name} ({goals.filter((goal) => goal.areaKey === entry.key).length})
+                </option>
+              ))}
+            </select>
+          </label>
+          {area ? (
+            <span className="gl-filter-note">
+              Showing what {areas.find((entry) => entry.key === area)?.name} is trying to achieve.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
       {section("SHORT", "This year", "What has to be true by the end of the award or fiscal year. The things a staff meeting is about.")}
       {section("LONG", "Beyond this year", "Where the squadron is going. Read less often, and worth being honest about.")}
     </div>
@@ -538,6 +575,11 @@ const glCss = [
   ".gl-card header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}",
   ".gl-head h3{margin:0;font-size:14.5px;line-height:1.35}",
   ".gl-meta{margin:3px 0 0;font-size:12px;opacity:.65}",
+  ".gl-area{font-weight:700;opacity:.9}",
+  ".gl-filter{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:-12px 0 -8px}",
+  ".gl-filter label{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--cu-muted,#656f7d)}",
+  ".gl-filter select{border:1px solid var(--cu-border,#e4e6eb);border-radius:9px;background:transparent;color:inherit;font:inherit;font-size:13.5px;padding:7px 10px}",
+  ".gl-filter-note{font-size:12.5px;color:var(--cu-muted,#656f7d)}",
   ".gl-late{color:#d03b3b;font-weight:600}",
   ".gl-pct{font-size:19px;font-weight:700;flex:none}",
   ".gl-bar{height:6px;border-radius:999px;background:rgba(123,104,238,.16);overflow:hidden}",
