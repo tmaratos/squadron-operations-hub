@@ -133,3 +133,97 @@ export async function readOneDocument(userId: string, documentId: string): Promi
     return { name: row.name, duties: 0, message: row.name + ": " + message };
   }
 }
+
+/**
+ * Works through the backlog instead of waiting for somebody to click two hundred times.
+ *
+ * The library could only ever be filled one document at a time, by hand, and so it never was: two hundred
+ * regulations sat listed and unread, the search index behind them stayed empty, and every page that could have
+ * answered a question from the squadron's own documents asked a member to type the answer in instead. That is
+ * the whole fault - not that the reading was slow, but that it needed a person to sit and do it.
+ *
+ * Two things keep this inside a Worker's budget. It stops when the time is nearly gone rather than being cut
+ * off mid-document, so a run always ends with the database agreeing with what was actually read. And the text
+ * can be taken without asking a model to find duties in it, which is the slow part: the passages are what make
+ * the library searchable, and they are worth having long before anything is extracted from them.
+ */
+export async function readPendingDocuments(
+  userId: string,
+  options: { limit?: number; withDuties?: boolean; msBudget?: number } = {}
+): Promise<{ read: number; failed: number; skipped: number; remaining: number; names: string[] }> {
+  const db = getDatabase();
+  const limit = options.limit ?? 8;
+  const withDuties = options.withDuties ?? false;
+  const msBudget = options.msBudget ?? 20_000;
+  const startedAt = Date.now();
+
+  const pending = await db
+    .prepare(
+      "SELECT id, drive_file_id, name, mime_type, modified_time FROM reg_documents " +
+      // Oldest first, so a run that stops early has still made definite progress through the backlog rather
+      // than revisiting whatever happens to be newest.
+      "WHERE status = 'PENDING' ORDER BY created_at ASC LIMIT ?"
+    )
+    .bind(limit)
+    .all<{ id: string; drive_file_id: string; name: string; mime_type: string | null; modified_time: string | null }>();
+
+  let read = 0;
+  let failed = 0;
+  let skipped = 0;
+  const names: string[] = [];
+
+  for (const row of pending.results) {
+    // Checked before starting a document rather than after, because a document half-read is a document whose
+    // row would say READ over an empty index.
+    if (Date.now() - startedAt > msBudget) break;
+
+    const file: ReadableFile = {
+      id: row.drive_file_id,
+      name: row.name,
+      mimeType: row.mime_type ?? "application/pdf",
+      modifiedTime: row.modified_time ?? ""
+    };
+
+    try {
+      const text = await readDocumentText(userId, file);
+
+      if (text.trim().length < 400) {
+        await db
+          .prepare("UPDATE reg_documents SET status = 'SKIPPED', characters = ?, error = ?, read_at = ?, reading_since = NULL WHERE id = ?")
+          .bind(text.length, "There was barely any text in it.", new Date().toISOString(), row.id)
+          .run();
+        skipped += 1;
+        continue;
+      }
+
+      await rememberDocument({ driveFileId: row.drive_file_id, documentName: row.name, text });
+
+      let duties = 0;
+      if (withDuties) {
+        const proposals = await proposeDuties({ userId, documentName: row.name, text });
+        duties = await saveProposals({ proposals, documentId: row.drive_file_id, documentName: row.name, userId });
+      }
+
+      await db
+        .prepare("UPDATE reg_documents SET status = 'READ', characters = ?, duties_found = ?, error = NULL, read_at = ?, reading_since = NULL WHERE id = ?")
+        .bind(text.length, duties, new Date().toISOString(), row.id)
+        .run();
+
+      read += 1;
+      names.push(row.name);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "It could not be read.";
+      await db
+        .prepare("UPDATE reg_documents SET status = 'FAILED', error = ?, read_at = ?, reading_since = NULL WHERE id = ?")
+        .bind(message.slice(0, 300), new Date().toISOString(), row.id)
+        .run();
+      failed += 1;
+    }
+  }
+
+  const left = await db
+    .prepare("SELECT COUNT(*) AS n FROM reg_documents WHERE status = 'PENDING'")
+    .first<{ n: number }>();
+
+  return { read, failed, skipped, remaining: left?.n ?? 0, names };
+}

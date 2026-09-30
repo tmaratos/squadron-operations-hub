@@ -59,37 +59,42 @@ export function RegReader() {
 
   // Reads the queue in order, stopping the moment anything goes wrong, so a broken document does not
   // silently burn through the rest.
-  async function readAll(queue: DocumentRow[]) {
+  /**
+   * Works through everything pending, a batch at a time.
+   *
+   * This used to send one document, then poll every eight seconds for up to twenty minutes waiting for a model
+   * to find duties in it, then send the next. With two hundred documents listed that is days of somebody
+   * keeping a tab open, so it was never once run to the end and the library stayed empty - which is why pages
+   * that could have answered from the squadron's own regulations went on asking members to type things in.
+   *
+   * The server now takes a batch per call and says how many are left. Taking the text is the fast part and the
+   * part that makes the library searchable; finding duties is the slow part and is no longer in the way of it.
+   */
+  async function readAll() {
     setReadingAll(true);
     try {
-      for (const document of queue) {
-        await send({ action: "read", id: document.id }, document.id);
-        // One at a time: the squadron server reads with one model and queueing them all at once only
-        // makes every one of them slower.
-        const finished = await waitForRead(document.id);
-        if (!finished) break;
+      // Bounded rather than while(true): a server that stopped making progress would otherwise have this
+      // calling it for ever.
+      for (let round = 0; round < 60; round += 1) {
+        const response = await fetch("/api/regs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "read-pending" })
+        });
+        const data = (await response.json()) as { documents?: DocumentRow[]; message?: string; remaining?: number; read?: number };
+        if (data.documents) setDocuments(data.documents);
+        setNote(data.message ?? null);
+        if (!response.ok) break;
+        if (!data.remaining) break;
+        // A round that read nothing but still reports work left means every document it tried failed, and
+        // going round again would only fail them faster.
+        if (!data.read) break;
       }
+    } catch {
+      setNote("That stopped partway. What was read is kept — press it again to carry on.");
     } finally {
       setReadingAll(false);
     }
-  }
-
-  /** Waits for one document to stop being read. Gives up after twenty minutes rather than hanging forever. */
-  async function waitForRead(id: string): Promise<boolean> {
-    const deadline = Date.now() + 20 * 60000;
-    while (Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 8000));
-      try {
-        const response = await fetch("/api/regs");
-        const data = (await response.json()) as { documents?: DocumentRow[] };
-        setDocuments(data.documents ?? []);
-        const row = (data.documents ?? []).find((entry) => entry.id === id);
-        if (row && !row.reading) return row.status !== "FAILED";
-      } catch {
-        // keep waiting
-      }
-    }
-    return false;
   }
 
   const pending = documents.filter((document) => document.status === "PENDING");
@@ -112,7 +117,7 @@ export function RegReader() {
             {busy === "refresh" ? "Looking…" : "Check the Drive"}
           </button>
           {pending.length ? (
-            <button type="button" className="rr-btn rr-btn--primary" disabled={Boolean(busy) || readingAll} onClick={() => readAll(pending)}>
+            <button type="button" className="rr-btn rr-btn--primary" disabled={Boolean(busy) || readingAll} onClick={() => readAll()}>
               {readingAll ? "Reading…" : "Read all " + pending.length}
             </button>
           ) : null}

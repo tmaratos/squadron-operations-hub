@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
-import { listDocuments, readOneDocument, refreshLibrary } from "@/lib/regs/library";
+import { listDocuments, readOneDocument, readPendingDocuments, refreshLibrary } from "@/lib/regs/library";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 // The squadron's documents, and what the Hub has made of them.
@@ -21,7 +21,9 @@ export async function GET() {
 
 const schema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("refresh") }),
-  z.object({ action: z.literal("read"), id: z.string().trim().min(1).max(80) })
+  z.object({ action: z.literal("read"), id: z.string().trim().min(1).max(80) }),
+  // Reads a batch and says how many are left, so the page can call it again until the backlog is gone.
+  z.object({ action: z.literal("read-pending"), withDuties: z.boolean().optional() })
 ]);
 
 export async function POST(request: Request) {
@@ -39,6 +41,19 @@ export async function POST(request: Request) {
         message: result.added
           ? result.added + " document" + (result.added === 1 ? "" : "s") + " to read, out of " + result.found + " in the Drive."
           : "Nothing new. All " + result.found + " documents have been read."
+      });
+    }
+
+    if (input.action === "read-pending") {
+      const result = await readPendingDocuments(user.id, { withDuties: input.withDuties ?? false });
+      return NextResponse.json({
+        documents: await listDocuments(),
+        ...result,
+        message:
+          (result.read ? "Read " + result.read + " document" + (result.read === 1 ? "" : "s") + ". " : "") +
+          (result.skipped ? result.skipped + " had barely any text. " : "") +
+          (result.failed ? result.failed + " could not be read. " : "") +
+          (result.remaining ? result.remaining + " still to go." : "That is all of them.")
       });
     }
 
