@@ -5,6 +5,7 @@ import { recordAuditEvent } from "@/lib/db/audit";
 import { assertSameOrigin } from "@/lib/security/origin";
 import { addStep, addTarget, createGoal, deleteGoal, listGoals, removeStep, removeTarget, setTargetValue, updateGoal, updateStep } from "@/lib/goals/goals";
 import { draftGoal } from "@/lib/goals/draft";
+import { benchmarksFor } from "@/lib/goals/benchmarks";
 import { createItem, updateItem } from "@/lib/work/items";
 
 const horizon = z.enum(["SHORT", "LONG"]);
@@ -63,7 +64,9 @@ const schema = z.discriminatedUnion("action", [
 
   z.object({ action: z.literal("addStep"), goalId: z.string().trim().min(1).max(80), title: z.string().trim().min(3).max(200), listId: z.string().trim().max(80).nullable().optional(), dueOn: date }),
   z.object({ action: z.literal("renameStep"), stepId: z.string().trim().min(1).max(80), title: z.string().trim().min(3).max(200) }),
-  z.object({ action: z.literal("removeStep"), stepId: z.string().trim().min(1).max(80) })
+  z.object({ action: z.literal("removeStep"), stepId: z.string().trim().min(1).max(80) }),
+  // One press: the Hub reads the regulation and fills the steps in.
+  z.object({ action: z.literal("fillFromRegs"), goalId: z.string().trim().min(1).max(80) })
 ]);
 
 export async function GET() {
@@ -124,6 +127,41 @@ export async function POST(request: Request) {
         message: made
           ? "Set up, and " + made + (made === 1 ? " task was made" : " tasks were made") + " for the steps."
           : "Set up. No step had a list chosen, so no tasks were made yet."
+      });
+    }
+
+    if (input.action === "fillFromRegs") {
+      const goal = (await listGoals()).find((candidate) => candidate.id === input.goalId);
+      if (!goal) return NextResponse.json({ message: "That goal is no longer there." }, { status: 404 });
+
+      const found = await benchmarksFor({ userId: user.id, goalName: goal.name, goalDetail: goal.detail });
+
+      // Filled in rather than offered for approval, because the point of the button is not to hand somebody a
+      // second list to retype. What makes that safe is not trust: every step has already been checked in code
+      // against a passage in the squadron's own documents, and anything that could not be tied to one was
+      // dropped before getting here. Each carries where it came from, and any of them can be removed.
+      const already = new Set(goal.steps.map((step) => step.title.trim().toLowerCase()));
+      let added = 0;
+      for (const benchmark of found.benchmarks) {
+        if (already.has(benchmark.title.trim().toLowerCase())) continue;
+        await addStep({ goalId: input.goalId, title: benchmark.title });
+        added += 1;
+      }
+
+      return NextResponse.json({
+        goals: await listGoals(),
+        sources: found.benchmarks.map((benchmark) => ({
+          title: benchmark.title,
+          source: benchmark.source,
+          webViewLink: benchmark.webViewLink,
+          quote: benchmark.quote
+        })),
+        message: added
+          ? "Filled in " + added + " step" + (added === 1 ? "" : "s") + " from " +
+            [...new Set(found.benchmarks.map((benchmark) => benchmark.source))].join(", ") + "."
+          : found.benchmarks.length
+            ? "Everything the regulations set out for this is already here."
+            : found.message
       });
     }
 

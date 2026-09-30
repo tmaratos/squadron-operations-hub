@@ -27,6 +27,14 @@ function pct(value: number): number {
   return Math.round(value * 100);
 }
 
+/** Where a filled-in step came from, shown so nobody has to take the Hub's word for it. */
+interface Source {
+  title: string;
+  source: string;
+  webViewLink: string | null;
+  quote: string;
+}
+
 export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
   goals: Goal[];
   canEdit: boolean;
@@ -36,6 +44,8 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
   const [goals, setGoals] = useState(initial);
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [filling, setFilling] = useState<string | null>(null);
+  const [sources, setSources] = useState<{ goalId: string; list: Source[] } | null>(null);
   const [adding, setAdding] = useState<{ horizon: Horizon; name?: string; detail?: string } | null>(null);
   const [targetFor, setTargetFor] = useState<string | null>(null);
   // Describing a goal out loud. The draft sits here, edited freely, until somebody presses the button.
@@ -65,6 +75,34 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
       setNote(caught instanceof Error ? caught.message : "That could not be drafted.");
     } finally {
       setDrafting(false);
+    }
+  }
+
+  /**
+   * Fills the steps in from the squadron's own regulations, on one press.
+   *
+   * Nothing here is written by a model unchecked: the server ties each step to a passage in a real document
+   * before it is added, and drops anything it cannot. The sources come back so they are shown beside the goal
+   * rather than taken on trust.
+   */
+  async function fillFromRegs(goalId: string) {
+    setFilling(goalId);
+    setNote(null);
+    try {
+      const response = await fetch("/api/goals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "fillFromRegs", goalId })
+      });
+      const data = (await response.json()) as { goals?: Goal[]; message?: string; sources?: Source[] };
+      if (data.goals) setGoals(data.goals);
+      setSources(data.sources?.length ? { goalId, list: data.sources } : null);
+      setNote(data.message ?? null);
+      router.refresh();
+    } catch {
+      setNote("That did not reach the Hub. Try again.");
+    } finally {
+      setFilling(null);
     }
   }
 
@@ -234,6 +272,14 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
         ) : (
           <div className="gl-actions">
             <button type="button" className="gl-btn" onClick={() => setStepFor(stepFor === goal.id ? null : goal.id)}>+ Add a step</button>
+            <button
+              type="button"
+              className="gl-btn"
+              disabled={busy || filling === goal.id}
+              onClick={() => fillFromRegs(goal.id)}
+            >
+              {filling === goal.id ? "Reading the regs…" : "Fill from the regs"}
+            </button>
             {/* Targets are the older, fiddlier way of measuring a goal and are no longer the front door.
                 They still work, and a goal that uses one still shows it - it is just not the first thing
                 somebody is asked to understand. */}
@@ -254,6 +300,24 @@ export function GoalsBoard({ goals: initial, canEdit, lists, people }: {
             </ConfirmButton>
           </div>
         )
+      ) : null}
+      {sources && sources.goalId === goal.id ? (
+        <details className="gl-sources" open>
+          <summary>Where these came from</summary>
+          <ul>
+            {sources.list.map((entry) => (
+              <li key={entry.title}>
+                <strong>{entry.title}</strong>
+                <em>
+                  {entry.webViewLink
+                    ? <a href={entry.webViewLink} target="_blank" rel="noreferrer">{entry.source}</a>
+                    : entry.source}
+                </em>
+                <span>&ldquo;{entry.quote}&rdquo;</span>
+              </li>
+            ))}
+          </ul>
+        </details>
       ) : null}
     </article>
   );
@@ -486,7 +550,15 @@ const glCss = [
   ".gl-num{width:74px;font:inherit;font-size:12.5px;padding:3px 6px;border-radius:6px;border:1px solid var(--border,#d5d8de);background:transparent;color:inherit}",
   ".gl-x{border:0;background:none;color:inherit;opacity:.45;cursor:pointer;font-size:15px;line-height:1;padding:0 3px}",
   ".gl-x:hover{opacity:1;color:#d03b3b}",
+  ".gl-sources{margin-top:12px;font-size:13px}.gl-sources summary{cursor:pointer;font-weight:600;color:var(--cu-muted,#656f7d)}.gl-sources ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:10px}.gl-sources li{display:grid;gap:3px;padding:10px 12px;border-radius:9px;background:rgba(123,104,238,.08)}.gl-sources strong{font-size:13.5px}.gl-sources em{font-style:normal;font-size:12px;color:var(--cu-muted,#656f7d)}.gl-sources span{font-size:12.5px;line-height:1.5;color:var(--cu-muted,#656f7d)}",
   ".gl-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}",
+  ".gl-sources{margin-top:12px;font-size:13px}",
+  ".gl-sources summary{cursor:pointer;font-weight:600;color:var(--cu-muted,#656f7d)}",
+  ".gl-sources ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:10px}",
+  ".gl-sources li{display:grid;gap:3px;padding:10px 12px;border-radius:9px;background:rgba(123,104,238,.08)}",
+  ".gl-sources strong{font-size:13.5px}",
+  ".gl-sources em{font-style:normal;font-size:12px;color:var(--cu-muted,#656f7d)}",
+  ".gl-sources span{font-size:12.5px;line-height:1.5;color:var(--cu-muted,#656f7d)}",
   ".gl-btn{border:1px solid var(--border,#e4e6eb);background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}",
   ".gl-btn--primary{background:#7b68ee;border-color:#7b68ee;color:#fff}",
   ".gl-btn--danger{color:#d03b3b}.gl-btn--danger:hover{border-color:#d03b3b}",
