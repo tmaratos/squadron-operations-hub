@@ -21,6 +21,24 @@ interface DriveFile {
   webViewLink?: string;
 }
 
+/**
+ * A Drive file id, or nothing.
+ *
+ * Folder ids are interpolated into Drive's own query language, and the previous version escaped single quotes
+ * by putting a backslash in front of them. That is not enough on its own: an id ending in a backslash escapes
+ * the escape, and the rest of the value becomes query rather than data - the same shape of mistake as building
+ * SQL by quoting strings.
+ *
+ * Escaping is the wrong tool here anyway. A Drive id is always letters, digits, dashes and underscores, so
+ * anything else is not an id that needs careful handling, it is not an id at all, and it is refused.
+ */
+function asDriveId(value: string): string {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(value)) {
+    throw new Error("That is not a Drive folder id.");
+  }
+  return value;
+}
+
 function asDocument(file: DriveFile): StoredDocument {
   return {
     id: file.id,
@@ -108,7 +126,7 @@ export class GoogleDriveProvider implements DocumentStorage {
   async list(folderId?: string | null): Promise<StoredDocument[]> {
     const parent = folderId || this.driveId();
     const result = await this.call<{ files?: DriveFile[] }>("/files", {
-      q: "'" + parent.replace(/'/g, "\\'") + "' in parents and trashed = false",
+      q: "'" + asDriveId(parent) + "' in parents and trashed = false",
       corpora: "drive",
       driveId: this.driveId(),
       orderBy: "folder,name",

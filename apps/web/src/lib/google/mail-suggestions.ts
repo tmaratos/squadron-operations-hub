@@ -39,14 +39,36 @@ function today(): string {
  * about - work that already exists, which is what the reminder was reminding somebody of. An assistant
  * listening to its own echo.
  */
+/**
+ * The one address out of a From line, or null.
+ *
+ * "Name <person@example.test>" and a bare address both reduce to the address. Anything with no address in it
+ * at all returns null rather than the whole line, so a caller comparing addresses never accidentally compares
+ * a display name that somebody else chose.
+ */
+function addressIn(value: string): string | null {
+  const angled = value.match(/<([^<>]+)>/);
+  const candidate = (angled ? angled[1] : value).trim().toLowerCase();
+  return /^[^\s@]+@[^\s@]+$/.test(candidate) ? candidate : null;
+}
+
 function fromTheHub(message: MailMessage): boolean {
   const env = getCloudflareEnv() as unknown as { NOTIFY_FROM?: string };
   const sender = (message.from ?? "").toLowerCase();
   const ours = (env.NOTIFY_FROM ?? "").toLowerCase();
   const address = ours.includes("<") ? ours.slice(ours.indexOf("<") + 1, ours.indexOf(">")) : ours;
-  if (address && sender.includes(address)) return true;
+
+  // Compared as a whole address rather than as a substring of the From line.
+  //
+  // This used to ask whether the sender contained "hub@" and contained the Hub's domain anywhere, which is
+  // true of "hub@somewhere-else.example <person@tristanmaratos.com.attacker.test>". Getting that wrong does
+  // not let anybody in; it lets somebody choose to be ignored, which is its own small problem - mail the Hub
+  // believes it sent to itself is mail it will never raise with anybody.
+  const from = addressIn(sender);
+  if (!from) return false;
+  if (address && from === addressIn(address)) return true;
   // Whatever it is called, mail from the Hub about the Hub is the Hub talking to itself.
-  return sender.includes("hub@") && sender.includes("tristanmaratos.com");
+  return from.startsWith("hub@") && from.endsWith("@tristanmaratos.com");
 }
 
 /**

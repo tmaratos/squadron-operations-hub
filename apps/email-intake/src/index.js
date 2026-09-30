@@ -19,6 +19,20 @@
 const INTAKE_LIST_ID = "ls-901421012792"; // Command Intake
 const MAX_BODY = 6000;
 
+// How much of a message is worth looking at, and why there is a limit at all.
+//
+// The parsing below is regular expressions over text a stranger wrote - the worker reads the message before
+// it can know who sent it, so every pattern here runs on input nobody has vouched for. Several of those
+// patterns backtrack badly on input built to make them: a few hundred kilobytes of the right nonsense costs
+// far more time than its length suggests, and it costs it on every message, free, from anywhere.
+//
+// Capping the text is a better answer than making each pattern clever, because it bounds every one of them at
+// once including the ones added later. A megabyte is far past any real squadron email, and a message longer
+// than that still files - the tail is simply not searched for a body.
+const MAX_RAW = 1_000_000;
+// A From line is an address and a name. Anything beyond this is not one.
+const MAX_HEADER = 1000;
+
 /**
  * Whether the message really came from the domain it claims.
  *
@@ -45,9 +59,9 @@ function passedDmarc(message) {
 export default {
   async email(message, env) {
     const to = String(message.to || "").toLowerCase();
-    const fromHeader = message.headers.get("from") || String(message.from || "");
+    const fromHeader = (message.headers.get("from") || String(message.from || "")).slice(0, MAX_HEADER);
     const senderEmail = (extractEmail(fromHeader) || String(message.from || "")).toLowerCase();
-    const subject = decodeHeader(message.headers.get("subject") || "").trim() || "(no subject)";
+    const subject = decodeHeader((message.headers.get("subject") || "").slice(0, MAX_HEADER)).trim() || "(no subject)";
 
     const codeMatch = to.match(/\+([a-z0-9]{4,32})@/);
     const code = codeMatch ? codeMatch[1] : null;
@@ -90,7 +104,7 @@ export default {
       return;
     }
 
-    const raw = await new Response(message.raw).text();
+    const raw = (await new Response(message.raw).text()).slice(0, MAX_RAW);
     const body = extractText(raw).slice(0, MAX_BODY);
     const now = new Date().toISOString();
     const status = await env.DB.prepare("SELECT id FROM list_statuses WHERE list_id = ? ORDER BY display_order LIMIT 1").bind(INTAKE_LIST_ID).first();

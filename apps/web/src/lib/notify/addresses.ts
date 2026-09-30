@@ -51,10 +51,24 @@ async function hash(code: string): Promise<string> {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-/** Six digits, from the platform's own randomness rather than Math.random. */
+/**
+ * Six digits, from the platform's own randomness rather than Math.random.
+ *
+ * Taking a random 32-bit number modulo a million does not give a million equally likely codes: 2^32 is not a
+ * multiple of 10^6, so the first 967,296 codes come up very slightly more often than the rest. The bias is
+ * tiny and nobody would guess a code by exploiting it, but a skewed code is free to avoid - the draw is simply
+ * repeated when it lands in the remainder, which leaves every code exactly as likely as every other.
+ */
 function newCode(): string {
-  const bytes = crypto.getRandomValues(new Uint32Array(1));
-  return String(bytes[0] % 1000000).padStart(6, "0");
+  // The largest multiple of a million that fits in 32 bits. Anything at or above it is discarded.
+  const ceiling = Math.floor(0x1_0000_0000 / 1_000_000) * 1_000_000;
+  const draw = new Uint32Array(1);
+  let value: number;
+  do {
+    crypto.getRandomValues(draw);
+    value = draw[0];
+  } while (value >= ceiling);
+  return String(value % 1_000_000).padStart(6, "0");
 }
 
 /**
