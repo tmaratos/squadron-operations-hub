@@ -59,8 +59,15 @@ async function run(event, env) {
   // CAPWATCH twice a month, so the roster never drifts more than a fortnight from CAP's own record.
   const capwatch = await syncCapwatchIfDue(env);
   const regs = await readDocumentsIfAny(env);
-  const sent = await deliver(env, digest);
-  return { generated, routines, raised, security, capwatch, regs, sent, digest, squadronHour: hour, cron: event.cron ?? null };
+  // The squadron-wide switch. This worker sends on its own schedule and would otherwise keep emailing
+  // members after an administrator had switched email off in the Hub - which, to whoever asked for it, is
+  // indistinguishable from the setting not working.
+  //
+  // The work above still happens: duties are still generated, deadlines still raised, notices still written.
+  // Turning email off is not turning the squadron off, and everything still appears on the Hub's own pages.
+  const level = await notificationLevel(env);
+  const sent = level === "EVERYTHING" ? await deliver(env, digest) : 0;
+  return { generated, routines, raised, security, capwatch, regs, sent, emailLevel: level, digest, squadronHour: hour, cron: event.cron ?? null };
 }
 
 // ---------------------------------------------------------------- deadlines
@@ -669,5 +676,23 @@ async function readDocumentsIfAny(env) {
     return { ok: true, read: body.read ?? 0, failed: body.failed ?? 0, remaining: body.remaining ?? 0 };
   } catch (error) {
     return { ok: false, message: String(error).slice(0, 200) };
+  }
+}
+
+/**
+ * What the squadron has asked the Hub to send, read from the same row the Hub's own settings page writes.
+ *
+ * Defaults to sending. A missing row, an unreadable table or a value nobody recognises must not silence the
+ * squadron by accident - going quiet should always be somebody's decision, never a failure.
+ */
+async function notificationLevel(env) {
+  try {
+    const row = await env.DB
+      .prepare("SELECT value FROM hub_settings WHERE key = 'notify.level'")
+      .first();
+    const said = row && row.value;
+    return said === "ONLY_ALERTS" || said === "NOTHING" ? said : "EVERYTHING";
+  } catch {
+    return "EVERYTHING";
   }
 }

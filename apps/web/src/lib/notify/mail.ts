@@ -1,4 +1,5 @@
 import { getCloudflareEnv } from "@/lib/cloudflare";
+import { allowed, notificationLevel, whyHeldBack, type MailPurpose } from "./squadron-switch";
 
 // Sending email from the Hub itself, so "as things happen" means now rather than at the next quarter hour,
 // and so a member can prove their setup works without waiting for tomorrow morning.
@@ -10,11 +11,30 @@ export interface MailNotice {
   url?: string | null;
 }
 
-export async function sendMail(input: { to: string[]; subject: string; name?: string; notices: MailNotice[] }): Promise<{ ok: boolean; provider: string | null; error: string | null }> {
+export async function sendMail(input: {
+  to: string[];
+  subject: string;
+  name?: string;
+  notices: MailNotice[];
+  /**
+   * What this message is for. Left out it counts as a notification, which is the cautious reading: a caller
+   * added later and not thought about here is held back by the squadron switch rather than escaping it.
+   */
+  purpose?: MailPurpose;
+}): Promise<{ ok: boolean; provider: string | null; error: string | null; heldBack?: boolean }> {
   const env = getCloudflareEnv();
   const from = env.NOTIFY_FROM;
   if (!from) return { ok: false, provider: null, error: "No sending address is configured yet." };
   if (!input.to.length) return { ok: false, provider: null, error: "There is nowhere to send it." };
+
+  // The squadron-wide switch, checked in the one place every message passes through rather than at each of
+  // the five call sites - a rule enforced in five places is a rule with five chances to be forgotten.
+  const purpose = input.purpose ?? "NOTIFICATION";
+  const level = await notificationLevel();
+  if (!allowed(level, purpose)) {
+    // Not an error. Nothing went wrong and nothing should be retried; the squadron asked for silence.
+    return { ok: false, provider: null, error: whyHeldBack(level), heldBack: true };
+  }
 
   const html = renderEmail(input.name ?? "", input.notices);
   const text = input.notices.map((notice) => "- " + notice.title + (notice.url ? "\n  " + notice.url : "")).join("\n\n");

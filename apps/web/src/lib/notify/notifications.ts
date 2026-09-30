@@ -232,6 +232,8 @@ export async function sendTestEmail(userId: string): Promise<{ ok: boolean; mess
   const to = person.capid ? await addressesForCapid(person.capid) : [person.email.toLowerCase()];
   const result = await sendMail({
     to,
+    // They pressed "send me one now". Answering that is not a notification.
+    purpose: "TRANSACTIONAL",
     subject: "Test from the TN-170 Operations Hub",
     name: person.full_name,
     notices: [{ title: "This is a test", body: "If you are reading this, the Hub can reach you. Real notices look like this one.", url: null }]

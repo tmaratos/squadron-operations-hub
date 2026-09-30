@@ -151,6 +151,9 @@ export async function startAdding(capid: string, email: string, label: string | 
 
   const sent = await sendMail({
     to: [address],
+    // Transactional: somebody is looking at the page right now waiting for this code. The squadron-wide
+    // switch is about notices nobody asked for, and holding this back would only strand them.
+    purpose: "TRANSACTIONAL",
     subject: "Confirm this address for the TN-170 Operations Hub",
     name: memberName,
     notices: [

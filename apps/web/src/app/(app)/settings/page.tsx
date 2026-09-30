@@ -3,12 +3,15 @@ import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
 import { isGoogleDriveConfigured } from "@/lib/drive/google-auth";
 import { requireUser } from "@/lib/auth/session";
+import { SquadronEmail } from "@/components/settings/squadron-email";
+import { LEVELS, notificationLevel } from "@/lib/notify/squadron-switch";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const user = await requireUser();
   const owner = ["SYSTEM_OWNER", "ACCOUNT_APPROVER"].includes(user.globalRole);
+  const emailLevel = await notificationLevel();
   const integrations = [
     { name: "Cloudflare D1", detail: "Connected as the application database", state: "Connected" },
     { name: "Google OAuth and Shared Drive", detail: isGoogleDriveConfigured() ? "Member sign-in and TN 170 Command storage are connected" : "Google OAuth secrets, token encryption key, redirect URI, and drive ID are required", state: isGoogleDriveConfigured() ? "Connected" : "Needs setup" }
@@ -17,6 +20,14 @@ export default async function SettingsPage() {
   return (
     <div className="page-stack">
       <PageHeader eyebrow="Administration" title="Settings" description="Review the squadron profile, security model, Cloudflare resources, Google Drive storage, and communication integrations." />
+      {/* First, because it is the one setting on this page anybody comes looking for in a hurry. */}
+      <SectionCard title="Squadron email">
+        <SquadronEmail
+          initial={emailLevel}
+          levels={LEVELS}
+          canChange={["SYSTEM_OWNER", "ADMINISTRATOR"].includes(user.globalRole)}
+        />
+      </SectionCard>
       <div className="content-grid content-grid--equal">
         <SectionCard title="Squadron profile">
           <form className="settings-form">
