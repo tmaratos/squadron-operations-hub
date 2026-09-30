@@ -6,6 +6,7 @@ import { assertSameOrigin } from "@/lib/security/origin";
 import { addStep, addTarget, createGoal, deleteGoal, listGoals, removeStep, removeTarget, setTargetValue, updateGoal, updateStep } from "@/lib/goals/goals";
 import { draftGoal } from "@/lib/goals/draft";
 import { benchmarksFor } from "@/lib/goals/benchmarks";
+import { departmentName, tellDepartment, type TellResult } from "@/lib/goals/department";
 import { createItem, updateItem } from "@/lib/work/items";
 
 const horizon = z.enum(["SHORT", "LONG"]);
@@ -150,8 +151,25 @@ export async function POST(request: Request) {
         added += 1;
       }
 
+      // The department is told what it is now expected to do, not merely that a goal exists. Steps appearing
+      // under a goal nobody was told about is how a checklist gets discovered a week before the inspection.
+      let reached: TellResult | null = null;
+      if (added && goal.areaKey && goal.areaName) {
+        reached = await tellDepartment({
+          areaKey: goal.areaKey,
+          areaName: goal.areaName,
+          title: goal.name + ": " + added + " step" + (added === 1 ? "" : "s") + " added from the regulations",
+          body:
+            found.benchmarks.map((benchmark) => "- " + benchmark.title + " (" + benchmark.source + ")").join("\n") +
+            "\n\nEach came from a squadron document and shows which one. Check them in the Hub.",
+          url: "/goals",
+          actorUserId: user.id
+        });
+      }
+
       return NextResponse.json({
         goals: await listGoals(),
+        told: reached?.names ?? [],
         sources: found.benchmarks.map((benchmark) => ({
           title: benchmark.title,
           source: benchmark.source,
@@ -160,7 +178,8 @@ export async function POST(request: Request) {
         })),
         message: added
           ? "Filled in " + added + " step" + (added === 1 ? "" : "s") + " from " +
-            [...new Set(found.benchmarks.map((benchmark) => benchmark.source))].join(", ") + "."
+            [...new Set(found.benchmarks.map((benchmark) => benchmark.source))].join(", ") + "." +
+            (reached?.told ? " " + reached.names.length + " in " + goal.areaName + " emailed." : "")
           : found.benchmarks.length
             ? "Everything the regulations set out for this is already here."
             : found.message
@@ -188,6 +207,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ goals: await listGoals(), message: "Step removed. The task it pointed at is still in its list." });
     }
 
+    let told: TellResult | null = null;
+
     if (input.action === "create") {
       const id = await createGoal({ ...input, userId: user.id });
       await recordAuditEvent({
@@ -198,6 +219,26 @@ export async function POST(request: Request) {
         summary: user.fullName + " set a " + (input.horizon === "LONG" ? "long" : "short") + " term goal: " + input.name,
         metadata: { horizon: input.horizon }
       });
+
+      // A goal given to a department is given to the people holding posts in it, and they are told so. A
+      // department has no inbox of its own and should not have one: post holders change, and a shared address
+      // is how something ends up being nobody's.
+      if (input.areaKey) {
+        const area = await departmentName(input.areaKey);
+        if (area) {
+          told = await tellDepartment({
+            areaKey: input.areaKey,
+            areaName: area,
+            title: area + " has a new goal: " + input.name,
+            body:
+              (input.detail ? input.detail + "\n\n" : "") +
+              "Set by " + user.fullName + "." +
+              (input.targetDate ? " It has to be true by " + input.targetDate + "." : ""),
+            url: "/goals",
+            actorUserId: user.id
+          });
+        }
+      }
     } else if (input.action === "update") {
       await updateGoal(input.id, input);
     } else if (input.action === "delete") {
@@ -218,7 +259,16 @@ export async function POST(request: Request) {
       await removeTarget(input.targetId);
     }
 
-    return NextResponse.json({ goals: await listGoals(), message: "Saved." });
+    return NextResponse.json({
+      goals: await listGoals(),
+      message: told?.told
+        // Said out loud, with the names, because "the department was told" is not something a member can check
+        // and a goal quietly reaching nobody is the failure worth noticing.
+        ? "Saved, and " + told.names.length + " " + (told.names.length === 1 ? "person" : "people") +
+          " in that department told by email: " + told.names.join(", ") + "." +
+          (told.emailedOnly ? " " + told.emailedOnly + " of them have no Hub account, so it went to their CAP address." : "")
+        : "Saved."
+    });
   } catch (error) {
     if (error instanceof z.ZodError) return NextResponse.json({ message: "That goal was not valid." }, { status: 400 });
     console.error(error);
