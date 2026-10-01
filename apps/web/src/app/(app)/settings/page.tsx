@@ -4,6 +4,7 @@ import { SectionCard } from "@/components/section-card";
 import { isGoogleDriveConfigured } from "@/lib/drive/google-auth";
 import { requireUser } from "@/lib/auth/session";
 import { SquadronEmail } from "@/components/settings/squadron-email";
+import { DriveServiceAccount } from "@/components/settings/drive-service-account";
 import { LEVELS, notificationLevel } from "@/lib/notify/squadron-switch";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,9 @@ export default async function SettingsPage() {
           levels={LEVELS}
           canChange={["SYSTEM_OWNER", "ADMINISTRATOR"].includes(user.globalRole)}
         />
+      </SectionCard>
+      <SectionCard title="The Hub's key to the Shared Drive">
+        <DriveServiceAccount driveId={process.env.GOOGLE_SHARED_DRIVE_ID ?? null} />
       </SectionCard>
       <div className="content-grid content-grid--equal">
         <SectionCard title="Squadron profile">

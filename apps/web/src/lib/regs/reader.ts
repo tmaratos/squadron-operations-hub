@@ -1,4 +1,5 @@
 import { getUserGoogleAccessToken } from "@/lib/auth/google-oauth";
+import { accessTokenFor, storedServiceAccountKey } from "@/lib/storage/service-account";
 import { getCloudflareEnv } from "@/lib/cloudflare";
 
 // Getting the words out of a squadron document, whatever form it arrives in.
@@ -8,6 +9,31 @@ import { getCloudflareEnv } from "@/lib/cloudflare";
 // trash immediately afterwards. It is a temporary file in the squadron's own Drive, and nothing else is touched.
 
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
+
+/**
+ * Whose authority to read the squadron's drive with.
+ *
+ * The Hub's own service account when it has one, and a signed-in member's Google account only when it does
+ * not. That ordering is the whole point of the service account: reading the squadron's documents stops being
+ * something that depends on one person still being in the squadron, still having a CAP Google account, and
+ * still having signed in recently enough for a refresh token to work.
+ *
+ * The fallback stays rather than being removed in the same change, because deleting the path that currently
+ * works on the strength of a path that has never run in production is how a working feature gets broken
+ * quietly. It can go once the service account has read the library through at least once.
+ */
+async function driveToken(userId: string): Promise<string> {
+  const key = await storedServiceAccountKey();
+  if (key) {
+    try {
+      return await accessTokenFor(key);
+    } catch {
+      // A key that is present but refused is worth falling back from rather than failing on - the member's
+      // own access still works, and the settings page is where a broken key gets reported and fixed.
+    }
+  }
+  return getUserGoogleAccessToken(userId);
+}
 const GOOGLE_DOC = "application/vnd.google-apps.document";
 
 export interface ReadableFile {
@@ -29,7 +55,7 @@ export async function listCandidateDocuments(userId: string, limit = 200): Promi
   const env = getCloudflareEnv();
   const driveId = env.GOOGLE_SHARED_DRIVE_ID;
   if (!driveId) throw new Error("The squadron Shared Drive is not configured.");
-  const token = await getUserGoogleAccessToken(userId);
+  const token = await driveToken(userId);
 
   const mimeQuery = [...READABLE].map((mime) => "mimeType = '" + mime + "'").join(" or ");
   const params = new URLSearchParams({
@@ -50,7 +76,7 @@ export async function listCandidateDocuments(userId: string, limit = 200): Promi
 }
 
 export async function readDocumentText(userId: string, file: ReadableFile): Promise<string> {
-  const token = await getUserGoogleAccessToken(userId);
+  const token = await driveToken(userId);
 
   if (file.mimeType === GOOGLE_DOC) return exportAsText(token, file.id);
 
