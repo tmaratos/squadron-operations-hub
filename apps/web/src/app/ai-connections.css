@@ -28,3 +28,6 @@
 .ai-connect-panel a{color:var(--accent)}
 .ai-connect-page :where(a,button,input):focus-visible{outline:3px solid #528af0;outline-offset:2px}
 @media(max-width:650px){.ai-connect-panel,.ai-connect-info{padding:15px;border-radius:13px}.ai-connect-panel h2{font-size:16px}.ai-connect-secret button,.ai-connect-create button{flex:1 1 100%}}
+
+.ai-connect-integration-link{display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:10px 15px;border:1px solid var(--border);border-radius:11px;color:var(--accent);font-weight:800;font-size:13px;text-decoration:none;background:var(--surface-alt)}
+.ai-connect-integration-link:hover{border-color:var(--accent)}
