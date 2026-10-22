@@ -16,16 +16,16 @@
     "check:chars": "node scripts/check-source-characters.mjs"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "^1.20.11",
-    "lucide-react": "^0.468.0",
+    "@opennextjs/cloudflare": "^1.20.12",
+    "lucide-react": "^0.577.0",
     "next": "^16.4.2",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "zod": "^3.24.1"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261019.1",
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.20.5",
     "@types/react": "^19.0.3",
     "@types/react-dom": "^19.0.2",
     "typescript": "^5.7.2",
