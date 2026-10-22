@@ -75,6 +75,16 @@ html[data-theme=dark] .cu-shell.hub-v3 {
 .hub-nav:hover svg { color: #fff; }
 .hub-nav.is-active { background: #2563eb; color: #fff; box-shadow: 0 6px 18px rgba(37, 99, 235, .35); }
 .hub-nav.is-active svg, .hub-nav.is-within, .hub-nav.is-within svg { color: #fff; }
+.hub-nav-row { display: flex; align-items: center; border-radius: 10px; transition: background .15s ease; }
+.hub-nav-row > .hub-nav { flex: 1; min-width: 0; background: none; box-shadow: none; }
+.hub-nav-row:hover { background: rgba(255, 255, 255, .07); }
+.hub-nav-row.is-active { background: #2563eb; box-shadow: 0 6px 18px rgba(37, 99, 235, .35); }
+.hub-nav-row.is-active > .hub-nav, .hub-nav-row.is-active svg, .hub-nav-row.is-within > .hub-nav, .hub-nav-row.is-within svg { color: #fff; }
+.hub-nav-toggle { flex: none; width: 40px; height: 40px; margin-right: 2px; display: grid; place-items: center; border: 0; border-radius: 9px; background: none; color: #9fb3d6; cursor: pointer; }
+.hub-nav-toggle:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+.hub-nav-toggle .hub-chevron { margin-left: 0; }
+.hub-group.is-open > .hub-nav-row .hub-chevron { transform: rotate(90deg); }
+.hub-nav-heading { margin: 16px 14px 6px; font-size: 10.5px; font-weight: 750; letter-spacing: .14em; text-transform: uppercase; color: #7f92b3; }
 .hub-chevron { margin-left: auto; opacity: .7; transition: transform .15s ease; }
 .hub-group.is-open > .hub-nav .hub-chevron { transform: rotate(90deg); }
 .hub-sub { margin: 2px 0 6px 23px; padding-left: 10px; border-left: 1px solid rgba(255, 255, 255, .1); display: grid; gap: 1px; }

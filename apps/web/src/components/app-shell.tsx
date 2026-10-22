@@ -30,8 +30,9 @@ import { CommandPalette } from "@/components/command-palette";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PulseWidget } from "@/components/assist/pulse-widget";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { breadcrumbFor, sidebar, sidebarFooter, type SidebarEntry } from "@/lib/navigation";
+import { breadcrumbFor, sidebar, sidebarFooter, sidebarTools, type SidebarEntry } from "@/lib/navigation";
 import { hubDesignCss } from "@/components/hub-design";
+import { hubPagesCss } from "@/components/hub-pages";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import type { SpaceNode } from "@/lib/work/types";
 
@@ -444,14 +445,17 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
   };
 
   /**
-   * One line of the sidebar: a plain destination, or a group that opens in place.
+   * One line of the sidebar: a plain destination, a group that opens in place, or both - a place whose name
+   * goes there and whose arrow opens what is inside it.
    *
    * A group holding the page somebody is on opens by itself, so the way back is always in sight; after
-   * that it opens and folds as they choose, and the choice is remembered.
+   * that it opens and folds as they choose, and the choice is remembered. Items meant for particular roles
+   * are only shown to them; the pages still check for themselves.
    */
   const sidebarEntry = (entry: SidebarEntry) => {
     const Icon = entry.icon;
-    if (entry.href) {
+    const items = (entry.items ?? []).filter((item) => !item.roles || item.roles.includes(user.globalRole));
+    if (entry.href && !items.length && !entry.dynamic) {
       const here = active(entry.href);
       return (
         <Link
@@ -466,22 +470,47 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         </Link>
       );
     }
-    const holds = (entry.items ?? []).some((item) => itemHere(item.href))
+    const holds = items.some((item) => itemHere(item.href))
       || (entry.dynamic === "spaces" && pathname.startsWith("/lists/"));
     const choice = collapsed["nav-" + entry.key];
     const open = choice === undefined ? holds : !choice;
+    const toggle = () => setCollapsed((current) => ({ ...current, ["nav-" + entry.key]: open }));
+    const here = entry.href ? active(entry.href) : false;
     return (
       <div key={entry.key} className={"hub-group" + (open ? " is-open" : "")}>
-        <button
-          type="button"
-          className={"hub-nav" + (holds ? " is-within" : "")}
-          aria-expanded={open}
-          onClick={() => setCollapsed((current) => ({ ...current, ["nav-" + entry.key]: open }))}
-        >
-          <Icon size={18} aria-hidden="true" />
-          <span>{entry.label}</span>
-          <ChevronRight size={15} className="hub-chevron" aria-hidden="true" />
-        </button>
+        {entry.href ? (
+          <div className={"hub-nav-row" + (here ? " is-active" : holds ? " is-within" : "")}>
+            <Link
+              href={entry.href}
+              className="hub-nav"
+              aria-current={here ? "page" : undefined}
+              onClick={() => setMobileOpen(false)}
+            >
+              <Icon size={18} aria-hidden="true" />
+              <span>{entry.label}</span>
+            </Link>
+            <button
+              type="button"
+              className="hub-nav-toggle"
+              aria-expanded={open}
+              aria-label={(open ? "Hide what is in " : "Show what is in ") + entry.label}
+              onClick={toggle}
+            >
+              <ChevronRight size={15} className="hub-chevron" aria-hidden="true" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={"hub-nav" + (holds ? " is-within" : "")}
+            aria-expanded={open}
+            onClick={toggle}
+          >
+            <Icon size={18} aria-hidden="true" />
+            <span>{entry.label}</span>
+            <ChevronRight size={15} className="hub-chevron" aria-hidden="true" />
+          </button>
+        )}
         {open ? (
           <div className="hub-sub">
             {entry.action === "assistant" ? (
@@ -494,15 +523,15 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
                 <span className="cu-nav-text"><span className="cu-link-label">Ask the assistant</span><small>Tasks, people, documents</small></span>
               </button>
             ) : null}
-            {(entry.items ?? []).map((item) => {
+            {items.map((item) => {
               const ItemIcon = item.icon;
-              const here = itemHere(item.href);
+              const itemIsHere = itemHere(item.href);
               return (
                 <Link
                   key={item.href + item.label}
                   href={item.href}
-                  className={"cu-link cu-nav-item" + (here ? " is-active" : "")}
-                  aria-current={here ? "page" : undefined}
+                  className={"cu-link cu-nav-item" + (itemIsHere ? " is-active" : "")}
+                  aria-current={itemIsHere ? "page" : undefined}
                   onClick={() => setMobileOpen(false)}
                 >
                   <span className="cu-link-icon">{ItemIcon ? <ItemIcon size={15} /> : null}</span>
@@ -528,6 +557,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
       <style>{shellCss}</style>
       <style>{operationsExperienceCss}</style>
       <style>{hubDesignCss}</style>
+      <style>{hubPagesCss}</style>
 
       <aside className={"cu-sidebar" + (mobileOpen ? " is-open" : "")} aria-label="Navigation">
         <div className="hub-logo">
@@ -543,6 +573,8 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         </div>
         <nav className="hub-nav-list" aria-label="Main">
           {sidebar.map(sidebarEntry)}
+          <p className="hub-nav-heading">Tools</p>
+          {sidebarTools.map(sidebarEntry)}
         </nav>
         <nav className="hub-nav-foot" aria-label="Settings and help">
           {sidebarFooter.map(sidebarEntry)}
@@ -678,8 +710,8 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
             className="cu-ctx-item"
             onClick={() => {
               setPageMenu(null);
-              // The form lives in the Departments group, so open it where it can be seen.
-              setCollapsed((current) => ({ ...current, "nav-departments": false }));
+              // The form lives in the Squadron group, so open it where it can be seen.
+              setCollapsed((current) => ({ ...current, "nav-squadron": false }));
               setAddingSpace(true);
             }}
           >
