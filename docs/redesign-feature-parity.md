@@ -79,3 +79,17 @@ Task detail screens; full Calendar; document browser; staff and CAPWATCH pages; 
 - [ ] Admin role-change confirmation, suspend/reactivate, filters, role restrictions and error feedback pass account-by-account testing.
 - [ ] Readiness reports never mistake placeholder sample figures for verified operational scores.
 - [ ] CAPWATCH refresh, test and manual sync work with and without management permissions, never returning credential material to unauthorized users.
+
+
+### Redesign v2 / phase four
+- Settings: convert flat configuration wall into four plain-language sections; existing notification settings, account management, integrations, read-only squadron profile, service infrastructure and secure Shared Drive credential form remain reachable. Advanced connection settings are collapsed by default, not removed.
+- Audit: create a read-only searchable date-grouped explorer of the last 200 audit events with action, actor and record-type filters. No new write/export privileges or exposed metadata are introduced; filtering is limited to the 200 records fetched by the existing query.
+- Professional development: add member search and CAPWATCH level filters, preserve duty corrections, professional development ladder steps and work prompt actions. Do not infer CAPWATCH completeness from blank fields.
+- Command dashboards: visible quick links to Tasks, Compliance, Personnel, Task Calendar, Documents and Finance alongside the existing widget editor, chart views and task drilldowns.
+
+### Phase four QA checks
+- [ ] Test every settings quick link and original form, including Google Shared Drive credential updates and role restriction.
+- [ ] Test audit search/filter, screen reader labels, timezone/date groups, and read-only guarantee.
+- [ ] Test development member search and filters at each level, with and without CAPWATCH data, without modifying CAPWATCH data sources or member access permissions.
+- [ ] Test command dashboard widgets, dashboard switching and editor, chart scrolling and related-destination links on phones and desktops.
+- [ ] Verify keyboard-only operation and motion/contrast at 390px, 768px, 1280px and 1600px.
