@@ -399,7 +399,7 @@ html[data-theme=dark] .mt-empty-icon{background:rgba(22,163,74,.2);color:#6fdc98
 @media (max-width:900px){
   .mt-toolbar{padding:10px;gap:10px}
   .mt-tabs{flex:1 1 100%}
-  .mt-tab{flex:1;justify-content:center;min-height:44px}
+  .mt-tab{flex:1;justify-content:center;min-height:44px;padding:0 6px;gap:6px;white-space:nowrap;font-size:13.5px}
   .mt-select{flex:1 1 100%;justify-content:center}
   .mt-group li{flex-wrap:wrap;padding:6px 10px}
   .mt-done{width:36px;height:36px}
