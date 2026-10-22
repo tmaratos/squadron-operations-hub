@@ -80,18 +80,34 @@ async function checkLogin(browser) {
       const hasGoogle = await page.getByRole("link", { name: /continue with google/i }).count();
       const hasPersonal = await page.getByRole("link", { name: /sign in with your personal email/i }).count();
       const badBrand = await page.locator('img[alt*="Air Force" i],img[alt*="USAF" i],img[src*="air-force" i]').count();
-      // The merged redesign's login-form.tsx specifies a text-only neutral TN mark.
-      // A live emblem here indicates deployment drift, even if its alt text is innocuous.
+      // Distinguish a working layout from deployment drift. A CAP squadron patch is
+      // not automatically an Air Force logo or an authorization violation.
       const neutralMark = page.locator(".auth-brand .hub-neutral-mark");
       const matchesMergedBrand = await neutralMark.count() === 1 &&
         (await neutralMark.innerText()).trim() === "TN";
+      const observedBrand = await page.locator(".auth-brand img, .auth-brand .hub-neutral-mark").evaluateAll(
+        (elements) => elements.slice(0, 3).map((element) => ({
+          tag: element.tagName.toLowerCase(),
+          text: element.tagName === "IMG" ? "" : (element.textContent || "").trim().slice(0, 30),
+          alt: element.tagName === "IMG" ? element.getAttribute("alt") : null,
+          srcPath: element.tagName === "IMG" ? (() => {
+            try { return new URL(element.getAttribute("src") || "", document.baseURI).pathname; }
+            catch { return null; }
+          })() : null
+        }))
+      );
       const status = response?.status() ?? 0;
-      const passed = status >= 200 && status < 400 && hasGoogle > 0 && hasPersonal > 0 &&
-        !badBrand && matchesMergedBrand && visual.overflow <= 3;
-      add("public-visual", v.name, "/login", passed,
-        passed ? "Sign-in, neutral mark and viewport checks passed" : "Login, branding parity or viewport check failed",
-        { httpStatus: status, overflowPx: visual.overflow, missingSignInLinks: hasGoogle < 1 || hasPersonal < 1,
-          badBrandCount: badBrand, neutralBrandMatch: matchesMergedBrand });
+      const layoutPassed = status >= 200 && status < 400 && hasGoogle > 0 && hasPersonal > 0 &&
+        !badBrand && visual.overflow <= 3;
+      add("public-layout", v.name, "/login", layoutPassed,
+        layoutPassed ? "Sign-in and viewport checks passed" : "Login HTTP status, controls, prohibited-brand markers or overflow failed",
+        { httpStatus: status, overflowPx: visual.overflow, signInLinksPresent: hasGoogle > 0 && hasPersonal > 0,
+          prohibitedBrandMarkerCount: badBrand });
+      add("deployment-brand-parity", v.name, "/login", matchesMergedBrand,
+        matchesMergedBrand ? "Live page uses source-defined neutral TN mark" :
+        "Live brand differs from merged source (expected text mark TN): " + JSON.stringify(observedBrand),
+        { expected: "span.hub-neutral-mark with TN", observedBrand });
+
     } catch (error) {
       add("public-visual", v.name, "/login", false, "Browser render failed: " + String(error).slice(0, 220));
     } finally { await context.close(); }
