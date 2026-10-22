@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getCloudflareEnv } from "@/lib/cloudflare";
 import { createRandomToken, sha256 } from "@/lib/security/crypto";
 import { decryptToken, encryptToken } from "./token-encryption";
@@ -57,7 +57,7 @@ interface OAuthRow {
 }
 
 export async function createGoogleAuthorizationUrl(extraScopes: string[] = [], purpose: "SIGN_IN" | "ADD_MAILBOX" = "SIGN_IN"): Promise<string> {
-  const env = requiredOAuthEnv();
+  const env = await requiredOAuthEnv();
   const state = createRandomToken(32);
   const verifier = createRandomToken(64);
   const challenge = base64UrlFromHex(await sha256(verifier));
@@ -103,7 +103,7 @@ export async function exchangeGoogleCode(code: string, state: string): Promise<T
   if (!expectedState || !verifier || !constantTimeEqual(state, expectedState)) {
     throw new Error("Invalid OAuth state.");
   }
-  const env = requiredOAuthEnv();
+  const env = await requiredOAuthEnv();
   const response = await fetch(TOKEN_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -228,7 +228,7 @@ export async function getUserGoogleAccessToken(userId: string): Promise<string> 
   }
   if (!row.refresh_token_encrypted) throw new Error("Google authorization has expired. Sign in again.");
 
-  const env = requiredOAuthEnv();
+  const env = await requiredOAuthEnv();
   const response = await fetch(TOKEN_ENDPOINT, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -251,12 +251,24 @@ export async function getUserGoogleAccessToken(userId: string): Promise<string> 
   return refreshed.access_token;
 }
 
-function requiredOAuthEnv() {
+// Addresses the Hub answers on, each registered with Google as a place sign-in may return to. Sign-in
+// returns to the one the member started on: the cookies that prove the round trip belong to one address,
+// so sending somebody who began on the old address back to the new one failed them with "Invalid state".
+const SIGN_IN_HOSTS = ["tn170hub.faithbasedpilot.com", "tn170adminhub.tristanmaratos.com"];
+
+async function requiredOAuthEnv() {
   const env = getCloudflareEnv();
   if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REDIRECT_URI) {
     throw new Error("Google OAuth environment bindings are not configured.");
   }
-  return { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, redirectUri: env.GOOGLE_REDIRECT_URI };
+  let redirectUri = env.GOOGLE_REDIRECT_URI;
+  try {
+    const host = ((await headers()).get("host") ?? "").toLowerCase();
+    if (SIGN_IN_HOSTS.includes(host)) redirectUri = "https://" + host + "/api/auth/google/callback";
+  } catch {
+    // Outside a request (a scheduled refresh) there is no address to return to; the configured one stands.
+  }
+  return { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET, redirectUri };
 }
 
 function oauthCookieName(kind: "state" | "verifier" | "purpose"): string {

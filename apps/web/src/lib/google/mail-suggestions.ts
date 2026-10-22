@@ -52,6 +52,8 @@ function addressIn(value: string): string | null {
   return /^[^\s@]+@[^\s@]+$/.test(candidate) ? candidate : null;
 }
 
+const HUB_MAIL_DOMAINS = ["tn170hub.faithbasedpilot.com", "tristanmaratos.com"];
+
 function fromTheHub(message: MailMessage): boolean {
   const env = getCloudflareEnv() as unknown as { NOTIFY_FROM?: string };
   const sender = (message.from ?? "").toLowerCase();
@@ -67,8 +69,9 @@ function fromTheHub(message: MailMessage): boolean {
   const from = addressIn(sender);
   if (!from) return false;
   if (address && from === addressIn(address)) return true;
-  // Whatever it is called, mail from the Hub about the Hub is the Hub talking to itself.
-  return from.startsWith("hub@") && from.endsWith("@tristanmaratos.com");
+  // Whatever it is called, mail from the Hub about the Hub is the Hub talking to itself - from its new home,
+  // and from the old one while mail sent before the move is still in people's inboxes.
+  return from.startsWith("hub@") && HUB_MAIL_DOMAINS.some((domain) => from.endsWith("@" + domain));
 }
 
 /**
