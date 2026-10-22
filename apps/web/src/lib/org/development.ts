@@ -122,7 +122,7 @@ export async function saveDevelopment(input: {
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(capid) DO UPDATE SET " +
       (input.clearPosition ? "duty_position = NULL, " : "duty_position = COALESCE(excluded.duty_position, member_development.duty_position), ") +
       (input.ignoreSource === undefined ? "" : "ignore_source = excluded.ignore_source, ") +
-      "pd_level = COALESCE(excluded.pd_level, member_development.pd_level), " +
+      (input.pdLevel === undefined ? "pd_level = member_development.pd_level, " : "pd_level = excluded.pd_level, ") +
       "specialty_track = COALESCE(excluded.specialty_track, member_development.specialty_track), " +
       "track_rating = COALESCE(excluded.track_rating, member_development.track_rating), " +
       "source = excluded.source, updated_by = excluded.updated_by, updated_at = excluded.updated_at"
