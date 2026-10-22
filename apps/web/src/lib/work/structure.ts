@@ -132,6 +132,34 @@ export async function listStatuses(listId: string): Promise<ListStatus[]> {
   return result.results.map((row) => ({ id: row.id, listId: row.list_id, name: row.name, color: row.color, category: row.category, order: row.display_order }));
 }
 
+/**
+ * For each list, the section a task moves to when it is ticked done, and the one it goes back to when it is
+ * reopened - the same choice the list itself makes. Lets a page that shows work from many lists finish a
+ * task without loading every list first.
+ */
+export async function doneAndOpenStatuses(listIds: string[]): Promise<Record<string, { done: string | null; open: string | null }>> {
+  const unique = [...new Set(listIds)];
+  const result: Record<string, { done: string | null; open: string | null }> = {};
+  const rows: Array<{ id: string; list_id: string; category: StatusCategory }> = [];
+  // In slices, well inside D1's limit on bound values.
+  for (let start = 0; start < unique.length; start += 80) {
+    const slice = unique.slice(start, start + 80);
+    if (!slice.length) continue;
+    const found = await getDatabase()
+      .prepare("SELECT id, list_id, category FROM list_statuses WHERE list_id IN (" + slice.map(() => "?").join(",") + ") ORDER BY display_order ASC")
+      .bind(...slice)
+      .all<{ id: string; list_id: string; category: StatusCategory }>();
+    rows.push(...found.results);
+  }
+  for (const listId of unique) {
+    const own = rows.filter((row) => row.list_id === listId);
+    const done = own.find((row) => row.category === "DONE") ?? own.find((row) => row.category === "CLOSED");
+    const open = own.find((row) => row.category === "NOT_STARTED") ?? own[0];
+    result[listId] = { done: done?.id ?? null, open: open?.id ?? null };
+  }
+  return result;
+}
+
 export async function listFields(listId: string, spaceId: string): Promise<CustomField[]> {
   const result = await getDatabase()
     .prepare(
