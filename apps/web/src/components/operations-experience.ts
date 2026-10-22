@@ -226,4 +226,99 @@ html[data-theme=dark] .cu-brand-mark { background: #274a77; color: #eef5ff; bord
 @media (prefers-reduced-motion: reduce) {
   .cu-shell .cu-sidebar { transition: none; }
 }
+/* Workspaces and task details: retain every advanced action but make the common path readable. */
+.cu-shell .lw{margin:0;min-width:0;background:var(--cu-bg);border:1px solid var(--cu-border);border-radius:18px;overflow:hidden}
+.cu-shell .lw-head{padding:21px 24px 15px;gap:11px;background:var(--surface)}
+.cu-shell .lw-head h1{font-size:22px;letter-spacing:-.035em;font-weight:750;color:var(--text)}
+.cu-shell .lw-space-badge{width:34px;height:34px;border-radius:10px;background:#e8f0ff;color:#2459bd;font-size:13px}
+.cu-shell .lw-head-count{color:var(--muted-strong);font-size:13px}
+.cu-shell .lw-views{padding:0 18px;gap:6px;background:var(--surface);min-height:48px}
+.cu-shell .lw-views>button{font-size:13px;min-height:43px;padding:9px 13px;border-radius:10px 10px 0 0}
+.cu-shell .lw-views>button.is-active{color:var(--accent);border-bottom-color:var(--accent);background:var(--surface-alt)}
+.cu-shell .lw-toolbar{background:var(--surface);padding:13px 20px;gap:12px}
+.cu-shell .lw-chips{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.cu-shell .lw-tools{display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.cu-shell .lw-chip{min-height:40px;padding:8px 13px;border-radius:10px;font-size:12px;border-color:var(--border)}
+.cu-shell .lw-chip--on{background:var(--cu-active);border-color:var(--cu-border);color:var(--accent)}
+.cu-shell .lw-chip--select select{font-size:12px}
+.cu-shell .lw-icon-btn,.cu-shell .lw-ghost{min-height:40px;border-radius:10px;padding:8px 12px;background:var(--surface);font-size:12px}
+.cu-shell .lw-primary{min-height:42px;padding:10px 17px;border-radius:10px;background:#2459bd;font-size:13px;font-weight:750}
+.cu-shell .lw-groups{padding:22px 22px 42px;gap:23px}
+.cu-shell .lw-pill{border-radius:9px;font-size:11px;padding:7px 12px}
+.cu-shell .lw-row{min-height:50px}
+.cu-shell .lw-title{font-size:13.5px;font-weight:600}
+.cu-shell .lw-board{gap:14px;padding:20px 22px 42px}
+.cu-shell .lw-column{border-radius:15px;padding:11px}
+.cu-shell .lw-card{border-radius:12px;padding:13px;box-shadow:var(--shadow)}
+.cu-shell .lw-why{font-size:13px;background:var(--surface-high);padding:14px 20px}
+.cu-shell .tp{
+  --tp-bg:var(--surface);--tp-side:var(--surface-alt);
+  --tp-border:var(--border);--tp-muted:var(--muted-strong);
+  --tp-hover:var(--surface-high);
+  width:min(1020px,100%);background:var(--surface);
+  box-shadow:-18px 0 55px rgba(5,22,44,.2);
+}
+html[data-theme=dark] .cu-shell .tp{
+  --tp-bg:var(--surface);--tp-side:var(--surface-alt);
+  --tp-border:var(--border);--tp-muted:var(--muted-strong);
+  --tp-hover:var(--surface-high);color:var(--text);
+}
+.cu-shell .tp-top{height:auto;min-height:65px;padding:12px 22px;gap:11px;background:var(--surface);flex-wrap:wrap}
+.cu-shell .tp-crumbs{font-size:12px;max-width:100%;flex:1 1 260px}
+.cu-shell .tp-saving{color:var(--muted-strong);font-size:12px}
+.cu-shell .tp-watch{font-size:12px;border-radius:10px;padding:9px 12px}
+.cu-shell .tp-icon{width:40px;height:40px;border-radius:10px;font-size:17px}
+.cu-shell .tp-body{grid-template-columns:minmax(0,1fr) minmax(260px,315px)}
+.cu-shell .tp-main{padding:30px clamp(20px,3vw,38px) 60px;gap:23px;min-width:0}
+.cu-shell .tp-title{font-size:clamp(22px,2vw,28px);font-weight:750;line-height:1.35;color:var(--text);border-radius:9px}
+.cu-shell .tp-desc{
+  width:100%;margin:0;min-height:100px;
+  border:1px solid var(--border);border-radius:12px;
+  background:var(--surface-alt);padding:13px 14px;
+  font-size:14px;line-height:1.65;
+}
+.cu-shell .tp-desc:focus{border-color:var(--accent);background:var(--surface)}
+.cu-shell .tp-props{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.cu-shell .tp-prop{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0;min-height:79px;padding:12px;border:1px solid var(--border);border-radius:12px;background:var(--surface-alt)}
+.cu-shell .tp-label{font-size:12px;letter-spacing:0;text-transform:none;font-weight:700;color:var(--muted-strong)}
+.cu-shell .tp-value{min-width:0;flex-wrap:wrap}
+.cu-shell .tp-date{min-height:36px;border-radius:9px;font-size:11px}
+.cu-shell .tp-section{gap:12px}
+.cu-shell .tp-h{font-size:15px;letter-spacing:-.01em;text-transform:none;color:var(--text);font-weight:750}
+.cu-shell .tp-list{border-radius:12px}
+.cu-shell .tp-sub{min-height:50px}
+.cu-shell .tp-side{background:var(--surface-alt);border-left:1px solid var(--border)}
+.cu-shell .tp-side-head{padding:22px 18px 10px}
+.cu-shell .tp-feed{padding:12px 18px 16px}
+.cu-shell .tp-comment-card{border-radius:11px;background:var(--surface)}
+.cu-shell .tp-compose{padding:15px;border-top:1px solid var(--border)}
+.cu-shell .tp-ai{border-color:var(--border);background:var(--surface-alt);border-radius:12px}
+@media(max-width:900px){
+  .cu-shell .lw{border-radius:15px}
+  .cu-shell .lw-head{padding:14px}
+  .cu-shell .lw-toolbar{flex-wrap:wrap;overflow-x:visible;padding:12px}
+  .cu-shell .lw-chips{flex:1 1 100%;flex-wrap:wrap}
+  .cu-shell .lw-tools{flex:1 1 100%;flex-wrap:wrap;justify-content:flex-start}
+  .cu-shell .lw-views{overflow-x:auto;white-space:nowrap;padding:0 10px}
+  .cu-shell .lw-groups{padding:12px 12px 50px}
+  .cu-shell .lw-board{padding:14px 12px 60px}
+  .cu-shell .tp-body{grid-template-columns:minmax(0,1fr)}
+  .cu-shell .tp-main{padding:18px 16px 28px;overflow-y:visible}
+  .cu-shell .tp{overflow-y:auto}
+  .cu-shell .tp-side{max-height:none;border-left:0;border-top:1px solid var(--border)}
+  .cu-shell .tp-feed{overflow-y:visible}
+  .cu-shell .tp-top{position:sticky;top:0;z-index:9;padding:9px 12px;min-height:60px}
+}
+@media(max-width:540px){
+  .cu-shell .lw-head h1{font-size:18px}
+  .cu-shell .lw-head-count{font-size:12px}
+  .cu-shell .lw-tools .lw-primary{flex:1}
+  .cu-shell .lw-chip{font-size:11.5px}
+  .cu-shell .tp-props{grid-template-columns:minmax(0,1fr);gap:8px}
+  .cu-shell .tp-prop{min-height:0}
+  .cu-shell .tp-main{gap:19px}
+  .cu-shell .tp-title{font-size:22px}
+  .cu-shell .tp-crumbs{font-size:11px}
+}
+
 `;
