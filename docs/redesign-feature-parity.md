@@ -63,3 +63,19 @@ Additional routes and hidden modals must be inventoried from the actual page and
 Task detail screens; full Calendar; document browser; staff and CAPWATCH pages; dashboards and analytics; finance; command/admin settings; accessible onboarding; comprehensive branding audit; MCP/ChatGPT/Claude integration (separate, permission-scoped workstream).
 
 **Do not merge this PR until every release gate is satisfied and end-to-end behavior has been verified.**
+
+
+### Redesign v1 / phase three
+- Finance: move existing real financial summary cards ahead of data-entry and AI-assisted draft forms. Preserve fiscal-year, ledger, owed, budget, committee, status-transition and reconciliation tools.
+- Compliance: add searchable and filterable recurring-requirements register, labeled pause/activate actions; preserve database-backed recurrence and permission controls.
+- Account administration: add account search and status filters; confirm permission changes before sending existing role-update calls; improve network-failure notices.
+- Readiness: explicitly distinguish hardcoded demonstration figures from verified operational status. Do not represent sample readiness, finding counts or evidence coverage as factual unit data.
+- Integrations/CAPWATCH: introduce clear connection-health cards, a neutral data icon, and safe Refresh status via existing authenticated GET endpoint; retain credential protection and original sync/test controls.
+- Keep desktop and mobile layouts consistent with the rest of the new design system.
+
+### Phase three QA checks
+- [ ] Finance values reconcile with original ledger and the fiscal-year selector, and all entry/void/clearing actions work with their original permissions.
+- [ ] Compliance search, all status filters, pause/activate/retire/delete and creation forms work without losing current records.
+- [ ] Admin role-change confirmation, suspend/reactivate, filters, role restrictions and error feedback pass account-by-account testing.
+- [ ] Readiness reports never mistake placeholder sample figures for verified operational scores.
+- [ ] CAPWATCH refresh, test and manual sync work with and without management permissions, never returning credential material to unauthorized users.
