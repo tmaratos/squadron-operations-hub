@@ -26,8 +26,8 @@ importers:
   apps/web:
     dependencies:
       '@opennextjs/cloudflare':
-        specifier: ^1.20.11
-        version: 1.20.11(next@16.4.2(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.152.0(@cloudflare/workers-types@5.20261022.1)(@types/node@22.20.3))
+        specifier: ^1.20.13
+        version: 1.20.13(next@16.4.2(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.152.0(@cloudflare/workers-types@5.20261022.1)(@types/node@22.20.3))
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.3.0)
@@ -768,17 +768,17 @@ packages:
     resolution: {integrity: sha512-aC1+mhKTP3IMa2VcuGl3ui92LO/7CPQWldNGzu3BVGKiMNJ70AKJW/R6huuYCSuQyHDGM9oFwiVClsZnFxn67g==}
     engines: {node: '>=18.0.0'}
 
-  '@opennextjs/aws@4.1.10':
-    resolution: {integrity: sha512-5/86E8ZPH/Va9KY0UPa7J245vceZvT2YH8MZzJj0poX9ELFF6h5/sqYik1MI1K16wAGbQdgiNJ332McRDwPfFA==}
+  '@opennextjs/aws@4.1.12':
+    resolution: {integrity: sha512-tZm1rBTRY6MVOOPCxvx0oZIg3b2Z5u0TzDm9D4Wy1cZpMp8Rjfex20gRQeEn0o6dsXpVQCE8q65TjsCFJA5Fpw==}
     hasBin: true
     peerDependencies:
-      next: '>=15.5.27 <16 || >=16.3.8'
+      next: '>=15.5.28 <16 || >=16.4.1'
 
-  '@opennextjs/cloudflare@1.20.11':
-    resolution: {integrity: sha512-NVzPivHxaxWuV4mtSUMJOvxpdJVBir9mGjHLlze8em0KojledQR6rGWPnDEuYz1p6yikOLCBr9py1hJHLMftwQ==}
+  '@opennextjs/cloudflare@1.20.13':
+    resolution: {integrity: sha512-Rhcvsx/PlQzOslleCBttG+r2o16lOFazKbULxiN33CYexm8S1Fd00mn3tU2w76PIaqO9evzgVKInOpR/fTMc0Q==}
     hasBin: true
     peerDependencies:
-      next: '>=15.5.27 <16 || >=16.3.8'
+      next: '>=15.5.28 <16 || >=16.4.1'
       rclone.js: ^0.6.6
       wrangler: ^4.148.0
     peerDependenciesMeta:
@@ -2699,7 +2699,7 @@ snapshots:
     dependencies:
       gzip-size: 6.0.0
 
-  '@opennextjs/aws@4.1.10(next@16.4.2(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))':
+  '@opennextjs/aws@4.1.12(next@16.4.2(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))':
     dependencies:
       '@ast-grep/napi': 0.45.3
       '@aws-sdk/client-cloudfront': 3.984.0
@@ -2722,11 +2722,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@opennextjs/cloudflare@1.20.11(next@16.4.2(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.152.0(@cloudflare/workers-types@5.20261022.1)(@types/node@22.20.3))':
+  '@opennextjs/cloudflare@1.20.13(next@16.4.2(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(wrangler@4.152.0(@cloudflare/workers-types@5.20261022.1)(@types/node@22.20.3))':
     dependencies:
       '@ast-grep/napi': 0.45.3
       '@dotenvx/dotenvx': 2.38.2
-      '@opennextjs/aws': 4.1.10(next@16.4.2(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))
+      '@opennextjs/aws': 4.1.12(next@16.4.2(@types/node@22.20.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))
       ci-info: 4.4.0
       cloudflare: 4.5.0
       comment-json: 4.6.2
