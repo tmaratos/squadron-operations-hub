@@ -4,7 +4,7 @@
  * can be compared or rolled back without touching operational features.
  * No Air Force insignia or third-party institutional logos are used here.
  */
-export const operationsExperienceCss = String.raw\`
+export const operationsExperienceCss = String.raw`
 .cu-shell {
   --cu-bg: #f5f7fb;
   --cu-side: #fff;
@@ -226,4 +226,4 @@ html[data-theme=dark] .cu-brand-mark { background: #274a77; color: #eef5ff; bord
 @media (prefers-reduced-motion: reduce) {
   .cu-shell .cu-sidebar { transition: none; }
 }
-\`;
+`;
