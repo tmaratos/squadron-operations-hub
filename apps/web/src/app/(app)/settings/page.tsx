@@ -64,6 +64,10 @@ export default async function SettingsPage() {
                 <ArrowUpRight size={18} aria-hidden="true" />
               </Link>
             ) : null}
+            <Link className="action-card" href="/settings/ai-connections">
+              <span><strong>Connect ChatGPT or Claude</strong><small>Set up your personal read-only AI connection and revoke old keys.</small></span>
+              <ArrowUpRight size={18} aria-hidden="true" />
+            </Link>
             <Link className="action-card" href="/audit">
               <span><strong>Activity history</strong><small>Review recorded security and administrative actions.</small></span>
               <ArrowUpRight size={18} aria-hidden="true" />
