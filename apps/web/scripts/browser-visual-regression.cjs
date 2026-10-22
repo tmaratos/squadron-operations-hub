@@ -113,6 +113,60 @@ async function checkProtected(browser) {
   } finally { await context.close(); }
 }
 
+// Client-side, read-only UI interactions. Does not submit forms or invoke write endpoints.
+async function testReadOnlyInteractions(page, viewport, route) {
+  const interactions = {
+    "/staff": { selector: "#staff-member-search", value: "test" },
+    "/compliance": { selector: "#compliance-search", value: "test" },
+    "/development": { selector: "#dv-member-search", value: "test" },
+    "/audit": { selector: "#audit-search", value: "test" }
+  };
+  const entry = interactions[route];
+  if (entry) {
+    const input = page.locator(entry.selector);
+    if (await input.count()) {
+      await input.fill(entry.value);
+      const value = await input.inputValue();
+      add("staging-readonly-interaction", viewport, route, value === entry.value,
+        value === entry.value ? "Search control accepts input" : "Search control did not retain input");
+    } else {
+      add("staging-readonly-interaction", viewport, route, false, "Expected search control missing: " + entry.selector);
+    }
+  }
+  if (route === "/settings") {
+    const details = page.locator("details.settings-advanced");
+    if (await details.count()) {
+      await details.locator("summary").click();
+      const opened = await details.evaluate((node) => node.open);
+      add("staging-readonly-interaction", viewport, route, opened,
+        opened ? "Advanced configuration expands without submitting" : "Advanced configuration did not open");
+    } else add("staging-readonly-interaction", viewport, route, false, "Advanced configuration disclosure missing");
+  }
+  if (route === "/calendar") {
+    const agenda = page.locator(".cx-agenda");
+    const month = page.locator(".cx-month");
+    const passed = (await agenda.count()) > 0 && (await month.count()) > 0;
+    add("staging-readonly-interaction", viewport, route, passed,
+      passed ? "Month and accessible agenda both rendered" : "Calendar month grid or agenda missing");
+  }
+  if (route === "/dashboards") {
+    const links = page.locator(".cd-quick-actions a");
+    const count = await links.count();
+    add("staging-readonly-interaction", viewport, route, count >= 5,
+      count >= 5 ? "Operational report drilldown links available" : "Reporting shortcuts missing", { linkCount: count });
+  }
+  if (route === "/" && Number(viewport.match(/\d+/)?.[0] ?? 1000) < 900) {
+    const more = page.getByRole("button", { name: "Open all features" });
+    if (await more.count()) {
+      await more.click();
+      const menu = page.getByRole("navigation", { name: "Main destinations" });
+      const visible = (await menu.count()) > 0 && await menu.first().isVisible();
+      add("staging-readonly-interaction", viewport, route, visible,
+        visible ? "All-features navigation drawer opens on mobile" : "Mobile drawer not visible after opening");
+    } else add("staging-readonly-interaction", viewport, route, false, "More navigation control missing on mobile");
+  }
+}
+
 async function checkAuthenticatedStaging(browser) {
   if (!statePath) {
     console.log("SKIP authenticated routes: TN170_AUTH_STATE_PATH not supplied; staging coverage outstanding.");
@@ -144,6 +198,7 @@ async function checkAuthenticatedStaging(browser) {
           add("staging-authenticated-readonly", v.name, route, passed,
             passed ? "Page loaded without horizontal overflow or uncaught errors" : "Page access, rendering or layout failed",
             { httpStatus: response?.status() ?? null, overflowPx: visual.overflow, runtimeErrorCount: exceptions.length, redirectedToLogin: unauthorized });
+          if (passed) await testReadOnlyInteractions(page, v.name, route);
         } catch (error) {
           add("staging-authenticated-readonly", v.name, route, false, "Route failed: " + String(error).slice(0, 180));
         }
