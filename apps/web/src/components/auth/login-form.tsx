@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { Check, ExternalLink, FolderLock, Mail, ShieldCheck } from "lucide-react";
 
 export function LoginForm({ error }: { error?: string }) {
@@ -6,7 +5,7 @@ export function LoginForm({ error }: { error?: string }) {
     <section className="auth-shell">
       <aside className="auth-brand-panel">
         <div className="auth-brand">
-          <Image src="/tn170-logo.png" alt="TN-170 emblem" width={64} height={64} priority />
+          <span className="hub-neutral-mark" aria-hidden="true">TN</span>
           <div>
             <strong>TN-170 Oak Ridge</strong>
             <span>Composite Squadron</span>

@@ -2018,24 +2018,7 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
             {fields.length ? (
               <section className="tp-section">
                 <h3 className="tp-h">Custom fields</h3>
-                <div className="tp-props">
-                  {fields.map((field) => (
-                    <div key={field.id + item.updatedAt} className="tp-prop">
-                      <span className="tp-label" title={FIELD_TYPE_LABELS[field.type]}><i>⊞</i>{field.name}</span>
-                      <span className="tp-value tp-field">
-                        <FieldInput field={field} value={item.fieldValues[field.id]} people={people} disabled={!canEdit} onSave={(value) => save({ fieldValues: { [field.id]: value } })} />
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ) : null}
-
-            <section className="tp-section">
-              <RemindersPanel itemId={item.id} dueOn={item.dueOn ?? null} canEdit={canEdit} />
-            </section>
-
-            <section className="tp-section">
+                <section className="tp-section">
               <h3 className="tp-h">
                 Description
                 {canEdit ? (
@@ -2060,6 +2043,23 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
                 onChange={(event) => { setDescription(event.target.value); grow(event.target); }}
                 onBlur={() => { if (description !== (item.description ?? "")) save({ description }); }}
               />
+            </section>
+
+            <div className="tp-props">
+                  {fields.map((field) => (
+                    <div key={field.id + item.updatedAt} className="tp-prop">
+                      <span className="tp-label" title={FIELD_TYPE_LABELS[field.type]}><i>⊞</i>{field.name}</span>
+                      <span className="tp-value tp-field">
+                        <FieldInput field={field} value={item.fieldValues[field.id]} people={people} disabled={!canEdit} onSave={(value) => save({ fieldValues: { [field.id]: value } })} />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            <section className="tp-section">
+              <RemindersPanel itemId={item.id} dueOn={item.dueOn ?? null} canEdit={canEdit} />
             </section>
 
             <section className="tp-section">

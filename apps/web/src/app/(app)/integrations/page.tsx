@@ -16,7 +16,7 @@ export default async function IntegrationsPage() {
   const mayManageCapwatch = user.globalRole === "SYSTEM_OWNER" || user.globalRole === "ADMINISTRATOR";
 
   return (
-    <div className="page-stack">
+    <div className="page-stack integrations-experience">
       <PageHeader
         eyebrow="Workspace"
         title="Integrations"

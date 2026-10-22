@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { taskExperienceCss } from "./task-experience";
 import { useEffect, useMemo, useState } from "react";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "./inline-pickers";
 import type { ItemPriority } from "@/lib/work/types";
@@ -50,7 +51,7 @@ function whenLabel(dueOn: string | null): string {
   return new Date(dueOn + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function MyTasks({ items: initialItems, userId, filterLabel, showEveryone }: { items: TaskRow[]; userId: string; filterLabel?: string; showEveryone?: boolean }) {
+export function MyTasks({ items: initialItems, userId, filterLabel, showEveryone, canEdit = true }: { items: TaskRow[]; userId: string; filterLabel?: string; showEveryone?: boolean; canEdit?: boolean }) {
   const [items, setItems] = useState(initialItems);
   // Arriving from a dashboard number means asking a question about the squadron, not about yourself.
   // Defaulting to Mine answered it with your own work - usually none of it - so the five overdue tasks
@@ -128,6 +129,7 @@ export function MyTasks({ items: initialItems, userId, filterLabel, showEveryone
   return (
     <section className="mt">
       <style>{mtCss}</style>
+      <style>{taskExperienceCss}</style>
 
       <div className="mt-tabs" role="tablist">
         {TABS.map((entry) => (
@@ -152,7 +154,7 @@ export function MyTasks({ items: initialItems, userId, filterLabel, showEveryone
         />
       </div>
 
-      {picked.length ? (
+      {picked.length && canEdit ? (
         <div className="mt-bar">
           <strong>{picked.length} selected</strong>
           <select value={owner} onChange={(event) => setOwner(event.target.value)} aria-label="Give these to">
@@ -184,6 +186,7 @@ export function MyTasks({ items: initialItems, userId, filterLabel, showEveryone
                     type="checkbox"
                     className="mt-pick"
                     checked={picked.includes(item.id)}
+                    disabled={!canEdit}
                     aria-label={"Select " + item.title}
                     onChange={() => toggle(item.id)}
                   />
@@ -200,14 +203,14 @@ export function MyTasks({ items: initialItems, userId, filterLabel, showEveryone
                       itemId={item.id}
                       title={item.title}
                       priority={(item.priority as ItemPriority | null) ?? null}
-                      canEdit
+                      canEdit={canEdit}
                       onSaved={(priority) => setItems((current) => current.map((entry) => (entry.id === item.id ? { ...entry, priority } : entry)))}
                     />
                     <InlineAssignee
                       itemId={item.id}
                       title={item.title}
                       assignees={item.assigneeIds.map((id, index) => ({ id, fullName: item.assignees[index] ?? "Member" }))}
-                      canEdit
+                      canEdit={canEdit}
                       onSaved={(assignees) => setItems((current) => current.map((entry) => (entry.id === item.id
                         ? { ...entry, assigneeIds: assignees.map((person) => person.id), assignees: assignees.map((person) => person.fullName) }
                         : entry)))}

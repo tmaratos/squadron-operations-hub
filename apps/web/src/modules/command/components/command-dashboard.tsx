@@ -1,146 +1,161 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { ArrowRight, CalendarDays, CheckCircle2, ClipboardCheck, Clock3, FileText, LayoutDashboard, Search, ShieldAlert, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { AlertTriangle, ArrowRight, CalendarDays, ClipboardList, Users } from "lucide-react";
 import { OffersCard } from "@/components/work/offers-card";
 import { InlineAssignee, InlinePriority, inlinePickerCss } from "@/components/work/inline-pickers";
 import type { ItemPriority } from "@/lib/work/types";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import { loadDashboardItems, type DashboardItem } from "@/lib/work/dashboards";
+import { dashboardExperienceCss } from "./dashboard-experience";
 
-// The everyday landing page: what needs this member, today. The command dashboard answers the other
-// question - how the squadron as a whole is doing - and the two should not try to be each other.
+/**
+ * Member home, not the command-wide dashboard.
+ * Keep the same data and inline actions; replace only their presentation.
+ */
 export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
-  const items = await loadDashboardItems();
-  const open = items.filter((item) => !item.closed);
-  const todayIso = today();
-  const weekIso = addDays(7);
-
-  const dueThisWeek = open.filter((item) => item.dueOn && item.dueOn >= todayIso && item.dueOn <= weekIso);
-  const overdue = open.filter((item) => item.dueOn && item.dueOn < todayIso);
-  const unassigned = open.filter((item) => item.assignees.length === 0);
-
-  const upcoming = open
-    .filter((item) => item.dueOn && item.dueOn >= todayIso)
-    .sort((left, right) => (left.dueOn || "").localeCompare(right.dueOn || ""))
-    .slice(0, 6);
-  const attention = [...overdue]
-    .sort((left, right) => (left.dueOn || "").localeCompare(right.dueOn || ""))
-    .slice(0, 6);
-
+  const open = (await loadDashboardItems()).filter((item) => !item.closed);
+  const today = isoDay(0);
+  const nextWeek = isoDay(7);
   const mine = open.filter((item) => item.assigneeIds.includes(user.id));
-  const mineLate = mine.filter((item) => item.dueOn && item.dueOn < todayIso).length;
-  const overviewMessage = mine.length
-    ? String(mine.length) + (mine.length === 1 ? " thing is yours" : " things are yours") +
-      (mineLate ? ", " + mineLate + " of them late." : ". Nothing of yours is late.")
-    : open.length
-      ? "Nothing is assigned to you. " + open.length + " open across the squadron."
-      : "No open work is recorded yet. Start by assigning a real owner and due date.";
+  const myLate = mine.filter((item) => item.dueOn && item.dueOn < today);
+  const coming = open.filter((item) => item.dueOn && item.dueOn >= today)
+    .sort(byDueDate).slice(0, 5);
+  const overdue = open.filter((item) => item.dueOn && item.dueOn < today);
+  const unassigned = open.filter((item) => !item.assigneeIds.length);
+  const mineFirst = [...mine].sort(byDueDate).slice(0, 6);
+  const canEdit = user.globalRole !== "READ_ONLY";
+  const firstName = user.fullName.trim().split(/\s+/)[0] || "there";
 
   return (
-    <div className="home-dashboard">
+    <div className="ops-home">
       <style>{inlinePickerCss}</style>
-      <div className="home-primary">
-        <section className="welcome-hero command-brief-hero">
-          <div className="welcome-hero__shade" />
-          <div className="welcome-hero__content">
-            <p className="command-brief__eyebrow">TN-170 Operations Hub · Your day</p>
-            <h1>Squadron Overview</h1>
-            <p>{overviewMessage}</p>
-            <div className="hero-metrics" aria-label="Squadron work summary">
-              <HeroMetric icon={ClipboardList} label="Open work" value={open.length} tone="blue" />
-              <HeroMetric icon={CalendarDays} label="Due this week" value={dueThisWeek.length} tone="purple" />
-              <HeroMetric icon={AlertTriangle} label="Overdue" value={overdue.length} tone="orange" />
-              <HeroMetric icon={Users} label="Unassigned" value={unassigned.length} tone="green" />
-            </div>
-          </div>
-        </section>
+      <style>{dashboardExperienceCss}</style>
+      <header className="ops-intro">
+        <div>
+          <p className="ops-eyebrow">TN-170 · Your workspace</p>
+          <h1>Welcome, {firstName}.</h1>
+          <p>{mine.length
+            ? `You have ${mine.length} active ${mine.length === 1 ? "assignment" : "assignments"}${myLate.length ? `, including ${myLate.length} overdue` : ""}.`
+            : "Your assignments and squadron updates are all in one place."}</p>
+        </div>
+        <div className="ops-intro-actions">
+          <Link href="/tasks" className="ops-action ops-action--primary"><ClipboardCheck size={17} /> My work</Link>
+          <Link href="/calendar" className="ops-action"><CalendarDays size={17} /> Calendar</Link>
+        </div>
+      </header>
 
-        <OffersCard />
+      <section className="ops-kpis" aria-label="Squadron work at a glance">
+        <Metric href="/tasks" icon={ClipboardCheck} count={mine.length} label="Assigned to you" tone="blue" />
+        <Metric href="/tasks?due=next7&from=planner" icon={Clock3} count={open.filter((item) => item.dueOn && item.dueOn >= today && item.dueOn <= nextWeek).length} label="Squadron due in 7 days" tone="amber" />
+        <Metric href="/tasks?due=overdue&from=planner" icon={ShieldAlert} count={overdue.length} label="Squadron overdue" tone="red" />
+        <Metric href="/tasks?owner=none&from=command" icon={Users} count={unassigned.length} label="Without an owner" tone="mint" />
+      </section>
 
-        <DashboardCard title="Coming up" description="The next work with a date on it, soonest first." className="quick-actions-card">
-          {upcoming.length ? (
-            <div className="home-task-list">
-              {upcoming.map((item) => <TaskRow key={item.id} item={item} />)}
-            </div>
-          ) : (
-            <EmptyState text="Nothing with a due date is coming up." />
-          )}
-          <Link href="/calendar" className="see-all-link">Open the schedule <ArrowRight size={16} /></Link>
-        </DashboardCard>
+      <div className="ops-body">
+        <div className="ops-main-col">
+          <section className="ops-panel">
+            <PanelHead title="Your priorities" description="Open assignments, sorted by their due date." href="/tasks" linkLabel="All my work" />
+            {mineFirst.length ? (
+              <ul className="ops-tasks">{mineFirst.map((item) => (
+                <li className="ops-task" key={item.id}><TaskEntry item={item} canEdit={canEdit} /></li>
+              ))}</ul>
+            ) : <Empty text="No tasks are assigned to you right now. Check all squadron work or open your department." />}
+            <Link href="/tasks?scope=all&from=spaces" className="ops-footlink">Browse all squadron work <ArrowRight size={15} /></Link>
+          </section>
+          <section className="ops-panel">
+            <PanelHead title="Coming up" description="The next dated work across the squadron." href="/calendar" linkLabel="Full calendar" />
+            {coming.length ? (
+              <ul className="ops-tasks">{coming.map((item) => (
+                <li className="ops-task" key={item.id}><TaskEntry item={item} canEdit={canEdit} /></li>
+              ))}</ul>
+            ) : <Empty text="There are no upcoming tasks with due dates." />}
+          </section>
+          <OffersCard />
+        </div>
 
-        <DashboardCard title="Overdue" description="Past its due date and still open.">
-          {attention.length ? (
-            <div className="home-task-list">
-              {attention.map((item) => <TaskRow key={item.id} item={item} />)}
-            </div>
-          ) : (
-            <EmptyState text="Nothing is overdue." />
-          )}
-          <Link href="/dashboards" className="see-all-link">How is the squadron doing? Command dashboard <ArrowRight size={16} /></Link>
-        </DashboardCard>
+        <div className="ops-side-col">
+          <section className="ops-panel">
+            <PanelHead title="Quick access" description="Common destinations, always in the same place." />
+            <nav className="ops-quick-grid" aria-label="Useful destinations">
+              <QuickLink href="/spaces" icon={LayoutDashboard} label="Departments & lists" />
+              <QuickLink href="/documents" icon={FileText} label="Squadron files" />
+              <QuickLink href="/staff" icon={Users} label="People & positions" />
+              <QuickLink href="/dashboards" icon={ShieldAlert} label="Command overview" />
+              <QuickLink href="/agents" icon={Search} label="AI assistants" />
+              <QuickLink href="/calendar" icon={CalendarDays} label="Task calendar" />
+            </nav>
+          </section>
+
+          <section className="ops-panel">
+            <PanelHead title="Needs attention" description="Squadron-wide work that may require follow-up." href="/dashboards" linkLabel="Command view" />
+            {overdue.length ? (
+              <ul className="ops-tasks">{[...overdue].sort(byDueDate).slice(0, 4).map((item) => (
+                <li className="ops-task" key={item.id}><TaskEntry item={item} canEdit={canEdit} /></li>
+              ))}</ul>
+            ) : <Empty text="No overdue work is currently recorded." />}
+            {unassigned.length > 0 ? (
+              <Link href="/tasks?owner=none&from=command" className="ops-footlink">
+                <Users size={16} /> {unassigned.length} without an owner <ArrowRight size={15} />
+              </Link>
+            ) : null}
+          </section>
+        </div>
       </div>
-
     </div>
   );
 }
 
-function DashboardCard({ title, description, className = "", children }: { title: string; description: string; className?: string; children: ReactNode }) {
-  return <section className={"home-card " + className}><header><div><h2>{title}</h2><p>{description}</p></div></header>{children}</section>;
+function Metric({ href, icon: Icon, count, label, tone }: { href: string; icon: LucideIcon; count: number; label: string; tone: "blue" | "amber" | "red" | "mint" }) {
+  return <Link href={href} className={"ops-kpi ops-kpi--" + tone} aria-label={count + " " + label}>
+    <span className="ops-kpi-icon"><Icon size={21} aria-hidden="true" /></span>
+    <span className="ops-kpi-copy"><strong className="ops-kpi-value">{count}</strong><span className="ops-kpi-label">{label}</span></span>
+  </Link>;
 }
 
-function HeroMetric({ icon: Icon, label, value, tone }: { icon: LucideIcon; label: string; value: number; tone: string }) {
-  return <article><span className={"hero-metric-icon hero-metric-icon--" + tone}><Icon size={18} /></span><strong>{value}</strong><small>{label}</small></article>;
+function PanelHead({ title, description, href, linkLabel }: { title: string; description: string; href?: string; linkLabel?: string }) {
+  return <header className="ops-panel-head"><div><h2>{title}</h2><p>{description}</p></div>
+    {href && linkLabel ? <Link href={href}>{linkLabel}</Link> : null}
+  </header>;
 }
 
+function QuickLink({ href, icon: Icon, label }: { href: string; icon: LucideIcon; label: string }) {
+  return <Link className="ops-quick-link" href={href}><Icon size={20} aria-hidden="true" /> {label}</Link>;
+}
 
-function TaskRow({ item }: { item: DashboardItem }) {
-  return (
-    <div className="home-task-row home-task-row--wrap">
-      <Link className="home-task-link" href={"/lists/" + item.listId + "?item=" + item.id}>
-        <span className="task-checkbox" aria-hidden="true" />
-        <strong>{item.title}</strong>
-        <span className="task-due">{dueLabel(item.dueOn)}</span>
-        <span className="task-priority">{item.statusName || "No status"}</span>
-        <ArrowRight size={16} aria-hidden="true" />
-      </Link>
-      {/* Assigning something you have just been shown should not mean going to find it first. */}
-      <span className="home-task-controls">
-        <InlinePriority itemId={item.id} title={item.title} priority={(item.priority as ItemPriority | null) ?? null} canEdit />
-        <InlineAssignee
-          itemId={item.id}
-          title={item.title}
-          assignees={item.assigneeIds.map((id, index) => ({ id, fullName: item.assignees[index] ?? "Member" }))}
-          canEdit
-         
-        />
+function Empty({ text }: { text: string }) { return <p className="ops-empty">{text}</p>; }
+
+function TaskEntry({ item, canEdit }: { item: DashboardItem; canEdit: boolean }) {
+  const late = Boolean(item.dueOn && item.dueOn < isoDay(0));
+  return <>
+    <Link className="ops-task-open" href={"/lists/" + encodeURIComponent(item.listId) + "?item=" + encodeURIComponent(item.id)}>
+      <span className="ops-task-icon"><CheckCircle2 size={17} aria-hidden="true" /></span>
+      <span className="ops-task-info">
+        <span className="ops-task-title">{item.title}</span>
+        <span className={"ops-task-meta" + (late ? " is-late" : "")}>
+          {item.listName} · {dueLabel(item.dueOn)}
+        </span>
       </span>
-    </div>
-  );
+    </Link>
+    <span className="ops-inline">
+      <InlinePriority itemId={item.id} title={item.title} priority={(item.priority as ItemPriority | null) ?? null} canEdit={canEdit} />
+      <InlineAssignee itemId={item.id} title={item.title}
+        assignees={item.assigneeIds.map((id, index) => ({ id, fullName: item.assignees[index] ?? "Member" }))}
+        canEdit={canEdit} />
+    </span>
+  </>;
 }
 
-
-
-function EmptyState({ text }: { text: string }) {
-  return <p className="home-empty">{text}</p>;
+function byDueDate(left: DashboardItem, right: DashboardItem) {
+  return (left.dueOn ?? "9999-12-31").localeCompare(right.dueOn ?? "9999-12-31");
 }
-
-// Plain language beats a date nobody has to decode: "3 days late" reads faster than "Sep 13".
-function dueLabel(dueOn: string | null): string {
-  if (!dueOn) return "No due date";
-  const days = Math.round((new Date(dueOn + "T12:00:00").getTime() - new Date(today() + "T12:00:00").getTime()) / 86400000);
-  if (days < -1) return Math.abs(days) + " days late";
-  if (days === -1) return "1 day late";
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days <= 7) return "In " + days + " days";
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(new Date(dueOn + "T12:00:00"));
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function addDays(days: number) {
-  return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+function isoDay(offset: number) { return new Date(Date.now() + offset * 86400000).toISOString().slice(0, 10); }
+function dueLabel(date: string | null) {
+  if (!date) return "No date set";
+  const diff = Math.round((new Date(date + "T12:00:00").getTime() - new Date(isoDay(0) + "T12:00:00").getTime()) / 86400000);
+  if (diff < -1) return Math.abs(diff) + " days overdue";
+  if (diff === -1) return "1 day overdue";
+  if (diff === 0) return "Due today";
+  if (diff === 1) return "Due tomorrow";
+  if (diff <= 7) return "Due in " + diff + " days";
+  return "Due " + new Date(date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

@@ -29,23 +29,36 @@ export function UserAdministration({
   const router = useRouter();
   const [working, setWorking] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const visibleUsers = users.filter((user) => {
+    const q = search.trim().toLowerCase();
+    return (statusFilter === "ALL" || user.status === statusFilter) &&
+      (!q || [user.fullName, user.email, user.dutyTitle ?? "", user.globalRole]
+        .some((value) => value.toLowerCase().includes(q)));
+  });
 
   async function action(payload: Record<string, unknown>, key: string) {
     setWorking(key);
     setMessage(null);
-    const response = await fetch("/api/admin/users/action", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const result = (await response.json()) as { message?: string };
-    setMessage(result.message ?? "Account updated.");
-    setWorking(null);
-    if (response.ok) router.refresh();
+    try {
+      const response = await fetch("/api/admin/users/action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const result = (await response.json().catch(() => ({}))) as { message?: string };
+      setMessage(result.message ?? (response.ok ? "Account updated." : "The account could not be updated."));
+      if (response.ok) router.refresh();
+    } catch {
+      setMessage("The account could not be updated. Check the connection and try again.");
+    } finally {
+      setWorking(null);
+    }
   }
 
   return (
-    <div className="user-admin-stack">
+    <div className="user-admin-stack admin-experience">
       <style>{uaCss}</style>
       {message ? <div className="inline-notice" role="status">{message}</div> : null}
 
@@ -110,8 +123,23 @@ export function UserAdministration({
           <span className="count-badge">{users.length}</span>
         </header>
         <div className="section-card__body">
+          <div className="admin-user-finder">
+            <label htmlFor="admin-user-search">Find an account</label>
+            <input id="admin-user-search" type="search" value={search} placeholder="Search by name, email, duty or role"
+              onChange={(event) => setSearch(event.target.value)} />
+            <label htmlFor="admin-user-status">Account status</label>
+            <select id="admin-user-status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <option value="ALL">All accounts</option>
+              <option value="APPROVED">Approved</option>
+              <option value="PENDING">Pending</option>
+              <option value="SUSPENDED">Suspended</option>
+              <option value="RESTRICTED">Restricted</option>
+              <option value="CLOSED">Closed</option>
+            </select>
+            <span role="status">{visibleUsers.length} of {users.length} accounts</span>
+          </div>
           <div className="user-table">
-            {users.map((user) => (
+            {visibleUsers.map((user) => (
               <article key={user.id}>
                 <div className="user-table__person">
                   <span className="user-avatar">{initials(user.fullName)}</span>
@@ -123,7 +151,16 @@ export function UserAdministration({
                   <select
                     value={user.globalRole}
                     disabled={actor.globalRole !== "SYSTEM_OWNER" || working === user.id}
-                    onChange={(event) => action({ action: "SET_ROLE", targetId: user.id, role: event.target.value }, user.id)}
+                    onChange={(event) => {
+                      const nextRole = event.target.value as GlobalRole;
+                      if (nextRole === user.globalRole) return;
+                      const permission = roles.find((role) => role.value === nextRole);
+                      if (window.confirm("Change " + user.fullName + "'s role to " + (permission?.label ?? nextRole) + "? This changes what they can access and edit.")) {
+                        void action({ action: "SET_ROLE", targetId: user.id, role: nextRole }, user.id);
+                      } else {
+                        event.currentTarget.value = user.globalRole;
+                      }
+                    }}
                   >
                     {roles.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
                   </select>
@@ -138,6 +175,7 @@ export function UserAdministration({
                 {user.globalRole === "SYSTEM_OWNER" ? <span className="owner-marker"><Shield size={14} /> Full system owner</span> : null}
               </article>
             ))}
+            {!visibleUsers.length ? <p className="admin-user-empty">No accounts match these filters.</p> : null}
           </div>
         </div>
       </section>

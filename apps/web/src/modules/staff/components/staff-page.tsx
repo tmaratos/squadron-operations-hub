@@ -5,6 +5,7 @@ import { AlertCircle, BriefcaseBusiness, LoaderCircle, Plus, Star, Trash2, UserR
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
+import { staffExperienceCss } from "./staff-experience";
 import type { GlobalRole } from "@/lib/auth/types";
 import type { DutyAssignmentRecord } from "@/lib/operations/staff";
 import type { PersonnelCommitteeRecord, PersonnelMemberRecord, PersonnelPositionRecord } from "@/lib/operations/personnel";
@@ -48,6 +49,7 @@ export function StaffPage({
   const [editingMember, setEditingMember] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [memberSearch, setMemberSearch] = useState("");
   const formRef = useRef<HTMLFormElement | null>(null);
 
   // Opening a panel the member cannot see is the same as doing nothing, which is what this button appeared
@@ -70,6 +72,12 @@ export function StaffPage({
   const vacantPositions = positions.filter((position) => position.assignmentStatus === "VACANT");
   const actingPositions = positions.filter((position) => position.assignmentStatus === "ACTING");
   const membersOnLeave = personnelMembers.filter((member) => member.status === "LEAVE");
+  const matchingMembers = useMemo(() => {
+    const query = memberSearch.trim().toLowerCase();
+    return query ? members.filter((member) =>
+      [member.fullName, member.rank, member.statusNote ?? ""].some((value) => value.toLowerCase().includes(query))
+    ) : members;
+  }, [members, memberSearch]);
   const workload = useMemo(() => {
     return users
       .map((user) => ({ user, assignments: assignments.filter((item) => item.userId === user.id && isActive(item)) }))
@@ -220,7 +228,8 @@ export function StaffPage({
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack staff-experience">
+      <style>{staffExperienceCss}</style>
       <PageHeader
         eyebrow="Staff continuity"
         title="Squadron Personnel and Organization"
@@ -402,9 +411,15 @@ export function StaffPage({
         </SectionCard>
 
         <div className="personnel-directory-side">
-          <SectionCard title="Personnel directory" description={canManage ? "Press Change to mark somebody on leave or inactive, or to edit the note beside their name. Clearing the note removes it." : "Directory records exist independently of Hub login accounts."}>
+          <SectionCard title="Personnel directory" description={canManage ? "Find a member, view duty positions, or update their recorded status." : "Find a member and view their squadron duty positions."}>
+            <div className="staff-search">
+              <label htmlFor="staff-member-search">Search members</label>
+              <input id="staff-member-search" type="search" value={memberSearch} placeholder="Search by name, rank or note"
+                onChange={(event) => setMemberSearch(event.target.value)} />
+              <span aria-live="polite">{matchingMembers.length} of {members.length} members</span>
+            </div>
             <div className="personnel-member-list">
-              {members.map((member) => {
+              {matchingMembers.map((member) => {
                 const memberPositions = positions.filter((position) => position.incumbentId === member.id);
                 return (
                   <article key={member.id}>
@@ -449,6 +464,7 @@ export function StaffPage({
                   </article>
                 );
               })}
+              {!matchingMembers.length ? <p className="staff-search-empty">No matching members. Try a different name or rank.</p> : null}
             </div>
           </SectionCard>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { operationsExperienceCss } from "@/components/operations-experience";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -15,6 +15,7 @@ import {
   HelpCircle,
   Home,
   Inbox,
+  Users,
   LayoutDashboard,
   Bot,
   Target,
@@ -551,11 +552,12 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
   return (
     <div className="cu-shell">
       <style>{shellCss}</style>
+      <style>{operationsExperienceCss}</style>
 
       <header className="cu-topbar">
         <button className="cu-mobile" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={18} /></button>
         <Link href="/" className="cu-brand" aria-label="TN-170 Squadron Operations Hub home">
-          <Image src="/tn170-logo.png" alt="TN-170 emblem" width={30} height={30} priority />
+          <span className="cu-brand-mark" aria-hidden="true">TN</span>
           <span className="cu-brand-text"><strong>TN-170</strong><small>Operations Hub</small></span>
         </Link>
         <div className="cu-ws">
@@ -765,28 +767,39 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           <button className="cu-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={16} /></button>
         </div>
         <div className="cu-sidebar-body">
-          {/* On a phone the rail of section icons is not on screen, so without this the drawer shows only
-              the section you are already in and there is no way to reach another one. It switches which
-              section the menu is showing, exactly as pressing the rail does on a wider screen. */}
-          <div className="cu-sections" role="tablist" aria-label="Sections">
+          <p className="cu-side-label">Everyday</p>
+          <nav className="cu-shortcuts" aria-label="Main destinations">
+            {[
+              { href: "/", label: "Home", icon: Home },
+              { href: "/tasks", label: "My work", icon: ClipboardCheck },
+              { href: "/calendar", label: "Calendar", icon: CalendarDays },
+              { href: "/staff", label: "Squadron", icon: Grid3x3 },
+              { href: "/documents", label: "Documents", icon: FileText }
+            ].map((item) => {
+              const Icon = item.icon;
+              const isCurrent = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/"));
+              return <Link key={item.href} href={item.href} className={"cu-shortcut" + (isCurrent ? " is-active" : "")}
+                aria-current={isCurrent ? "page" : undefined} onClick={() => setMobileOpen(false)}>
+                <Icon size={18} aria-hidden="true" /><span>{item.label}</span>
+              </Link>;
+            })}
+          </nav>
+          <p className="cu-side-label">All areas and tools</p>
+          <div className="cu-section-list" aria-label="Operational areas">
             {sections.map((section) => {
               const Icon = section.icon;
-              return (
-                <button
-                  key={section.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={rail === section.key}
-                  className={"cu-section-chip" + (rail === section.key ? " is-active" : "")}
-                  onClick={() => setRail(section.key)}
-                >
-                  <Icon size={14} />
-                  <span>{section.label}</span>
-                </button>
-              );
+              return <button key={section.key} type="button" className={"cu-section-short" + (rail === section.key ? " is-active" : "")}
+                onClick={() => setRail(section.key)} aria-pressed={rail === section.key}>
+                <Icon size={16} aria-hidden="true" /><span>{section.label}</span>
+              </button>;
             })}
           </div>
-          {sectionMenu(rail)}
+          <div className="cu-current-section">
+            <div className="cu-current-section-head"><span>{sectionByKey(rail).label} tools</span>
+              <Link href={sectionByKey(rail).href} onClick={() => setMobileOpen(false)}>Open area</Link>
+            </div>
+            {sectionMenu(rail)}
+          </div>
         </div>
       </aside>
 
@@ -819,38 +832,27 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         {children}
       </main>
 
-      {/* Phone navigation: the four places members actually go, always within thumb reach. */}
-      {/* Personal quick access, not a second set of sections.
-          It used to be Home / My Tasks / Lists / Dashboard, which put "Dashboard" back on screen beside
-          the clearer "Command" and gave a phone three navigations at once: this bar, the section chips in
-          the drawer, and the drawer's own menu. Sections live in the drawer; this is only yours. */}
-      <nav className="cu-bottom" aria-label="Your quick access">
-        <span className="cu-bottom-label">You</span>
-        <Link href="/" className={"cu-bottom-item" + (pathname === "/" ? " is-active" : "")} aria-current={pathname === "/" ? "page" : undefined}>
-          <Home size={20} /><span>Home</span>
+      {/* Five destinations chosen for quick navigation; notifications and account remain in the header. */}
+      <nav className="cu-bottom" aria-label="Mobile navigation">
+        <Link href="/" className={"cu-bottom-item" + (pathname === "/" ? " is-active" : "")}
+          aria-current={pathname === "/" ? "page" : undefined}>
+          <Home size={21} /><span>Home</span>
         </Link>
-        <Link href="/tasks" className={"cu-bottom-item" + (pathname === "/tasks" && !search.includes("scope=all") ? " is-active" : "")} aria-current={pathname === "/tasks" ? "page" : undefined}>
-          <ClipboardCheck size={20} /><span>My tasks</span>
+        <Link href="/tasks" className={"cu-bottom-item" + (pathname === "/tasks" ? " is-active" : "")}
+          aria-current={pathname === "/tasks" ? "page" : undefined}>
+          <ClipboardCheck size={21} /><span>My work</span>
         </Link>
-        <Link href="/notifications" className={"cu-bottom-item" + (active("/notifications") ? " is-active" : "")} aria-current={active("/notifications") ? "page" : undefined}>
-          <Inbox size={20} /><span>Alerts</span>
+        <Link href="/calendar" className={"cu-bottom-item" + (active("/calendar") ? " is-active" : "")}
+          aria-current={active("/calendar") ? "page" : undefined}>
+          <CalendarDays size={21} /><span>Calendar</span>
         </Link>
-        <button
-          type="button"
-          className={"cu-bottom-item" + (mobileOpen ? " is-active" : "")}
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open sections"
-        >
-          <Menu size={20} /><span>Sections</span>
-        </button>
-        <button
-          type="button"
-          className={"cu-bottom-item" + (meOpen ? " is-active" : "")}
-          onClick={() => setMeOpen((was) => !was)}
-          aria-expanded={meOpen}
-        >
-          <span className="cu-bottom-avatar" aria-hidden="true">{initials(user.fullName)}</span>
-          <span>Me</span>
+        <Link href="/staff" className={"cu-bottom-item" + (active("/staff") ? " is-active" : "")}
+          aria-current={active("/staff") ? "page" : undefined}>
+          <Users size={21} /><span>Squadron</span>
+        </Link>
+        <button type="button" className={"cu-bottom-item" + (mobileOpen ? " is-active" : "")}
+          onClick={() => setMobileOpen(true)} aria-label="Open all features" aria-expanded={mobileOpen}>
+          <Menu size={21} /><span>More</span>
         </button>
       </nav>
     </div>
