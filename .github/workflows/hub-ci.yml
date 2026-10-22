@@ -47,7 +47,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: pnpm
@@ -71,6 +71,40 @@ jobs:
 
       - name: Build
         run: pnpm run build
+
+  # The build Cloudflare actually runs, then the result actually run. On 22 October 2026 a Next.js /
+  # OpenNext mismatch passed the typecheck, `next build`, the Cloudflare build and a wrangler dry run, and
+  # threw on every request in production. Only starting the built Worker and asking it for pages finds that.
+  worker:
+    name: Cloudflare build and run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: pnpm
+
+      - name: Install dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: Cloudflare build (OpenNext)
+        run: pnpm run cf:build
+
+      - name: Run the built Worker and load pages
+        run: bash scripts/smoke-built-worker.sh
 
   migrations:
     name: Migrations
