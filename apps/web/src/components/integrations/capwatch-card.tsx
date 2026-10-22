@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Database, RefreshCw } from "lucide-react";
 import type { CapwatchStatus } from "@/lib/capwatch/capwatch";
 
 // CAPWATCH, for the person whose job it is to keep it working.
@@ -46,6 +47,24 @@ export function CapwatchCard({ status: initial, mayManage }: {
    */
   const [showTyped, setShowTyped] = useState(false);
 
+  async function refreshStatus() {
+    setBusy("refresh");
+    setNote(null);
+    try {
+      const response = await fetch("/api/integrations/capwatch", { cache: "no-store" });
+      const result = (await response.json()) as { status?: CapwatchStatus; message?: string };
+      if (!response.ok || !result.status) throw new Error(result.message || "Status could not be refreshed.");
+      setStatus(result.status);
+      setFailed(false);
+      setNote("Connection status refreshed.");
+    } catch (error) {
+      setFailed(true);
+      setNote(error instanceof Error ? error.message : "Status could not be refreshed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** A real sync: downloads the extract and writes the roster. Separate endpoint, separate permission. */
   async function syncNow() {
     setBusy("sync");
@@ -59,6 +78,13 @@ export function CapwatchCard({ status: initial, mayManage }: {
       const data = (await response.json()) as { ok?: boolean; message?: string; skipped?: boolean };
       setNote(data.message ?? "Done.");
       setFailed(!response.ok && !data.skipped);
+      if (response.ok || data.skipped) {
+        const check = await fetch("/api/integrations/capwatch", { cache: "no-store" });
+        if (check.ok) {
+          const latest = (await check.json()) as { status?: CapwatchStatus };
+          if (latest.status) setStatus(latest.status);
+        }
+      }
     } catch {
       setNote("The sync could not be started.");
       setFailed(true);
@@ -100,13 +126,14 @@ export function CapwatchCard({ status: initial, mayManage }: {
   }
 
   const authFailed = status.lastSync?.status === "AUTH_FAILED";
+  const needsAttention = ["AUTH_FAILED", "DOWNLOAD_FAILED", "BAD_ARCHIVE", "ERROR"].includes(status.lastSync?.status ?? "");
 
   return (
-    <section className="cw">
+    <section className="cw cw-experience">
       <style>{cwCss}</style>
 
       <div className="cw-head">
-        <span className="cw-logo" aria-hidden="true">✈</span>
+        <span className="cw-logo" aria-hidden="true"><Database size={20} /></span>
         <div>
           <h2>CAPWATCH</h2>
           <p>
@@ -115,8 +142,8 @@ export function CapwatchCard({ status: initial, mayManage }: {
             anybody&rsquo;s computer.
           </p>
         </div>
-        <span className={"cw-pill" + (status.configured ? (authFailed ? " is-bad" : " is-ok") : "")}>
-          {status.configured ? (authFailed ? "Needs attention" : "Configured") : "Not configured"}
+        <span className={"cw-pill" + (status.configured ? (needsAttention ? " is-bad" : status.lastSync?.status === "OK" ? " is-ok" : "") : "")}>
+          {status.configured ? (needsAttention ? "Needs attention" : status.lastSync?.status === "OK" ? "Last sync successful" : "Configured") : "Not configured"}
         </span>
       </div>
 
@@ -144,6 +171,12 @@ export function CapwatchCard({ status: initial, mayManage }: {
       </dl>
 
       {note ? <p className={"cw-note" + (failed ? " is-bad" : "")} role="status">{note}</p> : null}
+      <div className="cw-status-actions">
+        <button type="button" className="cw-btn" disabled={busy !== null} onClick={() => void refreshStatus()}>
+          <RefreshCw size={16} aria-hidden="true" /> {busy === "refresh" ? "Refreshing…" : "Refresh status"}
+        </button>
+        <span>Shows the last recorded CAPWATCH connection and import result; it does not display any password.</span>
+      </div>
 
       {mayManage ? (
         <>
