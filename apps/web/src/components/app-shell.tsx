@@ -5,31 +5,23 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
-  Check,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   ClipboardCheck,
   Eye,
   FileText,
   Grid3x3,
-  HelpCircle,
   Home,
-  Inbox,
-  Users,
-  LayoutDashboard,
-  Bot,
-  Target,
   ListChecks,
   Menu,
   Moon,
-  NotebookTabs,
-  Plug,
-  ChevronsDownUp,
-  ChevronsUpDown,
   Plus,
-  Settings,
-  Star,
+  Sparkles,
   Sun,
+  Target,
+  Users,
   X
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -38,7 +30,8 @@ import { CommandPalette } from "@/components/command-palette";
 import { ConfirmButton } from "@/components/confirm-button";
 import { PulseWidget } from "@/components/assist/pulse-widget";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { breadcrumbFor, sectionByKey, sectionFor, sections, type SectionKey } from "@/lib/navigation";
+import { breadcrumbFor, sidebar, sidebarFooter, type SidebarEntry } from "@/lib/navigation";
+import { hubDesignCss } from "@/components/hub-design";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import type { SpaceNode } from "@/lib/work/types";
 
@@ -49,14 +42,6 @@ export interface WorkspaceSummary {
 }
 
 const defaultWorkspaces: WorkspaceSummary[] = [{ id: "tn-170", name: "TN-170 Oak Ridge", shortName: "170" }];
-
-type RailKey = SectionKey;
-
-const railItems = sections.map((section) => ({ key: section.key, label: section.label, href: section.href, icon: section.icon }));
-
-function railFor(pathname: string, search?: string): RailKey {
-  return sectionFor(pathname, search);
-}
 
 export function AppShell({ children, user, workspaces, spaces, agents }: {
   children: ReactNode;
@@ -70,7 +55,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
   const search = params.toString() ? "?" + params.toString() : "";
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
   const [meOpen, setMeOpen] = useState(false);
   // A task dragged from a list can be dropped on any other list here, which is the obvious way to move
   // something filed in the wrong place - and was the thing people reached for first.
@@ -209,7 +194,6 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
       window.setTimeout(() => setMoveNote(null), 4000);
     }
   }
-  const [rail, setRail] = useState<RailKey>(railFor(pathname, search));
   // Folded unless somebody opens it: a dozen agents must not push the squadron's lists off the screen.
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({ agents: true });
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -257,7 +241,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
   }, [menu]);
 
   useEffect(() => {
-    setRail(railFor(pathname));
+    setNewOpen(false);
     setMobileOpen(false);
     setMeOpen(false);
   }, [pathname]);
@@ -282,7 +266,6 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
     });
   }
   const active = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
-  const railTitle = railItems.find((item) => item.key === rail)?.label ?? "Home";
 
   const navLink = (href: string, label: string, icon: ReactNode, count?: number | string, listId?: string) => (
     <Link
@@ -311,10 +294,12 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
     </Link>
   );
 
+  // The squadron's own departments and lists, inside the Departments group. Dragging, dropping and the
+  // right-click menu are unchanged: they are how people tidy the structure and nobody should lose them.
   const spacesSection = (
-    <section className="cu-section">
-      <div className="cu-section-head">
-        <button type="button" onClick={() => toggle("spaces")}>Spaces</button>
+    <div className="hub-spaces">
+      <div className="hub-spaces-head">
+        <span>Departments</span>
         <span className="cu-head-actions">
           <button
             type="button"
@@ -345,261 +330,281 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           <button type="submit">Create</button>
         </form>
       ) : null}
-      {collapsed.spaces ? null : (
-        <>
-          {navLink("/tasks", "All Tasks", <ListChecks size={15} />)}
-          {spaceTree.map((space) => (
-            <div key={space.id}>
-              <button
-                type="button"
-                className={
-                  "cu-link cu-space" +
-                  (dropTarget === space.id ? " is-drop" : "") +
-                  (spaceDrop?.id === space.id ? (spaceDrop.below ? " is-order-after" : " is-order-before") : "")
-                }
-                onClick={() => toggle(space.id)}
-                onContextMenu={(event) => openMenu(event, "space", space.id, space.name)}
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData("application/x-hub-space", space.id);
-                  event.dataTransfer.setData("text/plain", space.name);
-                  event.dataTransfer.effectAllowed = "move";
-                }}
-                onDragEnd={() => setSpaceDrop(null)}
-                onDragOver={(event) => {
-                  const types = event.dataTransfer.types;
-                  if (types.includes("application/x-hub-space")) {
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                    // Which half of the row the pointer is over decides whether it lands above or below.
-                    const box = event.currentTarget.getBoundingClientRect();
-                    setSpaceDrop({ id: space.id, below: event.clientY > box.top + box.height / 2 });
-                    return;
-                  }
-                  if (!types.includes("application/x-hub-list")) return;
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = "move";
-                  setDropTarget(space.id);
-                }}
-                onDragLeave={() => {
-                  setDropTarget((current) => (current === space.id ? null : current));
-                  setSpaceDrop((current) => (current?.id === space.id ? null : current));
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  const movingSpace = event.dataTransfer.getData("application/x-hub-space");
-                  if (movingSpace) {
-                    const below = spaceDrop?.id === space.id ? spaceDrop.below : false;
-                    setSpaceDrop(null);
-                    if (movingSpace === space.id) return;
-                    const order = spaceTree.map((entry) => entry.id).filter((id) => id !== movingSpace);
-                    const at = order.indexOf(space.id);
-                    if (at < 0) return;
-                    order.splice(below ? at + 1 : at, 0, movingSpace);
-                    structure({ action: "reorder", kind: "space", ids: order }, "Order saved.");
-                    return;
-                  }
-                  setDropTarget(null);
-                  const listId = event.dataTransfer.getData("application/x-hub-list");
-                  if (!listId) return;
-                  if (space.lists.some((list) => list.id === listId)) return; // already filed here
-                  structure({ action: "move", kind: "list", id: listId, spaceId: space.id }, "Moved.");
-                }}
-              >
-                <span className="cu-space-avatar">{space.name.slice(0, 1).toUpperCase()}</span>
-                <span className="cu-link-label">{space.name}</span>
-                {collapsed[space.id] ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-              </button>
-              {collapsed[space.id] ? null : (
-                <div className="cu-tree">
-                  {space.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, list.id))}
-                  {space.folders.map((folder) => (
-                    <div key={folder.id}>
-                      <button type="button" className="cu-link" onClick={() => toggle(folder.id)}>
-                        <span className="cu-link-icon">{collapsed[folder.id] ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</span>
-                        <span className="cu-link-label">{folder.name}</span>
-                      </button>
-                      {collapsed[folder.id] ? null : (
-                        <div className="cu-tree">
-                          {folder.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, list.id))}
-                        </div>
-                      )}
+      {spaceTree.map((space) => (
+        <div key={space.id}>
+          <button
+            type="button"
+            className={
+              "cu-link cu-space" +
+              (dropTarget === space.id ? " is-drop" : "") +
+              (spaceDrop?.id === space.id ? (spaceDrop.below ? " is-order-after" : " is-order-before") : "")
+            }
+            onClick={() => toggle(space.id)}
+            onContextMenu={(event) => openMenu(event, "space", space.id, space.name)}
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData("application/x-hub-space", space.id);
+              event.dataTransfer.setData("text/plain", space.name);
+              event.dataTransfer.effectAllowed = "move";
+            }}
+            onDragEnd={() => setSpaceDrop(null)}
+            onDragOver={(event) => {
+              const types = event.dataTransfer.types;
+              if (types.includes("application/x-hub-space")) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                // Which half of the row the pointer is over decides whether it lands above or below.
+                const box = event.currentTarget.getBoundingClientRect();
+                setSpaceDrop({ id: space.id, below: event.clientY > box.top + box.height / 2 });
+                return;
+              }
+              if (!types.includes("application/x-hub-list")) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+              setDropTarget(space.id);
+            }}
+            onDragLeave={() => {
+              setDropTarget((current) => (current === space.id ? null : current));
+              setSpaceDrop((current) => (current?.id === space.id ? null : current));
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const movingSpace = event.dataTransfer.getData("application/x-hub-space");
+              if (movingSpace) {
+                const below = spaceDrop?.id === space.id ? spaceDrop.below : false;
+                setSpaceDrop(null);
+                if (movingSpace === space.id) return;
+                const order = spaceTree.map((entry) => entry.id).filter((id) => id !== movingSpace);
+                const at = order.indexOf(space.id);
+                if (at < 0) return;
+                order.splice(below ? at + 1 : at, 0, movingSpace);
+                structure({ action: "reorder", kind: "space", ids: order }, "Order saved.");
+                return;
+              }
+              setDropTarget(null);
+              const listId = event.dataTransfer.getData("application/x-hub-list");
+              if (!listId) return;
+              if (space.lists.some((list) => list.id === listId)) return; // already filed here
+              structure({ action: "move", kind: "list", id: listId, spaceId: space.id }, "Moved.");
+            }}
+          >
+            <span className="cu-space-avatar">{space.name.slice(0, 1).toUpperCase()}</span>
+            <span className="cu-link-label">{space.name}</span>
+            {collapsed[space.id] ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
+          </button>
+          {collapsed[space.id] ? null : (
+            <div className="cu-tree">
+              {space.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, list.id))}
+              {space.folders.map((folder) => (
+                <div key={folder.id}>
+                  <button type="button" className="cu-link" onClick={() => toggle(folder.id)}>
+                    <span className="cu-link-icon">{collapsed[folder.id] ? <ChevronRight size={13} /> : <ChevronDown size={13} />}</span>
+                    <span className="cu-link-label">{folder.name}</span>
+                  </button>
+                  {collapsed[folder.id] ? null : (
+                    <div className="cu-tree">
+                      {folder.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, list.id))}
                     </div>
-                  ))}
+                  )}
                 </div>
-              )}
+              ))}
             </div>
-          ))}
-          {spaceTree.length === 0 ? <p className="cu-empty">No spaces yet.</p> : null}
-        </>
-      )}
-    </section>
+          )}
+        </div>
+      ))}
+      {spaceTree.length === 0 ? <p className="cu-empty">No departments yet.</p> : null}
+    </div>
   );
 
-  // Agents live in the sidebar the way people do, but folded away by default: a squadron with a dozen of
-  // them should not lose its lists behind a wall of faces.
-  // Folded by default in the sidebar, but never on the AI rail: opening AI to be shown a heading and
-  // nothing else is the whole point of that rail missed.
-  const agentsFolded = rail !== "ai" && (collapsed.agents ?? true);
+  // The squadron's agents, inside the AI Assistant group.
   const agentsSection = agents && agents.length ? (
-    <section className="cu-section">
-      <div className="cu-section-head">
-        <button type="button" onClick={() => toggle("agents")}>Agents</button>
-        <span className="cu-head-actions">
-          <Link href="/agents" aria-label="Manage agents" title="Manage agents"><Plus size={14} /></Link>
-        </span>
-      </div>
-      {agentsFolded ? null : (
-        <>
-          {agents.map((agent) => (
-            <Link
-              key={agent.id}
-              href={"/?agent=" + agent.id}
-              className="cu-link cu-agent"
-              title={agent.purpose ?? agent.name}
-            >
-              <span className="cu-agent-face" aria-hidden="true">
-                {agent.emoji}
-                <i className="cu-agent-dot" />
-              </span>
-              <span className="cu-link-label cu-agent-name">{agent.name}</span>
-              {agent.shared ? null : <span className="cu-agent-tag" title="Yours only">you</span>}
-            </Link>
-          ))}
-          <Link href="/agents" className="cu-link cu-link--quiet"><span className="cu-link-icon">⚙</span><span className="cu-link-label">Manage agents</span></Link>
-        </>
-      )}
-    </section>
+    <div className="hub-spaces">
+      {agents.map((agent) => (
+        <Link
+          key={agent.id}
+          href={"/?agent=" + agent.id}
+          className="cu-link cu-agent"
+          title={agent.purpose ?? agent.name}
+        >
+          <span className="cu-agent-face" aria-hidden="true">
+            {agent.emoji}
+            <i className="cu-agent-dot" />
+          </span>
+          <span className="cu-link-label cu-agent-name">{agent.name}</span>
+          {agent.shared ? null : <span className="cu-agent-tag" title="Yours only">you</span>}
+        </Link>
+      ))}
+    </div>
   ) : null;
 
-  /**
-   * A section's own menu, drawn from the one map.
-   *
-   * Every group opens in place with a chevron, so its contents can be seen without first navigating into a
-   * page and finding a second menu there. What is open is remembered, and the group holding the current
-   * page is opened whether or not it was.
-   */
-  const sectionMenu = (key: SectionKey) => {
-    const section = sectionByKey(key);
-    return (
-      <>
-        <p className="cu-blurb">{section.blurb}</p>
-        {section.groups.map((group) => {
-          const groupKey = "grp-" + key + "-" + group.label;
-          const holdsCurrent = group.items.some((item) => item.href.split("?")[0] === pathname);
-          const folded = (collapsed[groupKey] ?? false) && !holdsCurrent;
-          return (
-            <section className="cu-section" key={groupKey}>
-              <div className="cu-section-head">
-                <button type="button" className="cu-group-toggle" onClick={() => toggle(groupKey)} aria-expanded={!folded}>
-                  {folded ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-                  <span>{group.label}</span>
-                </button>
-              </div>
-              {folded ? null : group.items.map((item) => {
-                const Icon = item.icon;
-                const here = item.href.split("?")[0] === pathname && (!item.href.includes("?") || item.href.slice(item.href.indexOf("?")) === search);
-                return (
-                  <Link
-                    key={item.href + item.label}
-                    href={item.href}
-                    className={"cu-link cu-nav-item" + (here ? " is-active" : "")}
-                    aria-current={here ? "page" : undefined}
-                  >
-                    <span className="cu-link-icon">{Icon ? <Icon size={15} /> : null}</span>
-                    <span className="cu-nav-text">
-                      <span className="cu-link-label">{item.label}</span>
-                      {item.hint ? <small>{item.hint}</small> : null}
-                    </span>
-                  </Link>
-                );
-              })}
-            </section>
-          );
-        })}
-        {section.dynamic === "spaces" ? spacesSection : null}
-        {section.dynamic === "agents" ? agentsSection : null}
+  const itemHere = (href: string) => {
+    const [path, query] = href.split("#")[0].split("?");
+    if (path !== pathname) return false;
+    return !query || "?" + query === search;
+  };
 
-        {/* Home keeps the departments and lists.
-            Stripping them off it was an over-correction: one canonical name and address per capability is
-            what stops people getting lost, and the list tree is neither - it is the squadron's own work,
-            and the everyday landing page is exactly where somebody expects to find it. Favourites too. */}
-        {key === "home" ? (
-          <>
-            <section className="cu-section">
-              <div className="cu-section-head">
-                <button type="button" className="cu-group-toggle" onClick={() => toggle("favorites")} aria-expanded={!collapsed.favorites}>
-                  {collapsed.favorites ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-                  <span>Favourites</span>
-                </button>
-              </div>
-              {collapsed.favorites ? null : (
-                <>
-                  {navLink("/dashboards", "Command dashboard", <LayoutDashboard size={15} />)}
-                  {spaceTree[0]?.lists[0]
-                    ? navLink("/lists/" + spaceTree[0].lists[0].id, spaceTree[0].lists[0].name, <Star size={15} />, spaceTree[0].lists[0].openItems)
-                    : null}
-                </>
-              )}
-            </section>
-            {spacesSection}
-          </>
+  /**
+   * One line of the sidebar: a plain destination, or a group that opens in place.
+   *
+   * A group holding the page somebody is on opens by itself, so the way back is always in sight; after
+   * that it opens and folds as they choose, and the choice is remembered.
+   */
+  const sidebarEntry = (entry: SidebarEntry) => {
+    const Icon = entry.icon;
+    if (entry.href) {
+      const here = active(entry.href);
+      return (
+        <Link
+          key={entry.key}
+          href={entry.href}
+          className={"hub-nav" + (here ? " is-active" : "")}
+          aria-current={here ? "page" : undefined}
+          onClick={() => setMobileOpen(false)}
+        >
+          <Icon size={18} aria-hidden="true" />
+          <span>{entry.label}</span>
+        </Link>
+      );
+    }
+    const holds = (entry.items ?? []).some((item) => itemHere(item.href))
+      || (entry.dynamic === "spaces" && pathname.startsWith("/lists/"));
+    const choice = collapsed["nav-" + entry.key];
+    const open = choice === undefined ? holds : !choice;
+    return (
+      <div key={entry.key} className={"hub-group" + (open ? " is-open" : "")}>
+        <button
+          type="button"
+          className={"hub-nav" + (holds ? " is-within" : "")}
+          aria-expanded={open}
+          onClick={() => setCollapsed((current) => ({ ...current, ["nav-" + entry.key]: open }))}
+        >
+          <Icon size={18} aria-hidden="true" />
+          <span>{entry.label}</span>
+          <ChevronRight size={15} className="hub-chevron" aria-hidden="true" />
+        </button>
+        {open ? (
+          <div className="hub-sub">
+            {entry.action === "assistant" ? (
+              <button
+                type="button"
+                className="cu-link cu-nav-item"
+                onClick={() => { setMobileOpen(false); window.dispatchEvent(new CustomEvent("hub:ask")); }}
+              >
+                <span className="cu-link-icon"><Sparkles size={15} /></span>
+                <span className="cu-nav-text"><span className="cu-link-label">Ask the assistant</span><small>Tasks, people, documents</small></span>
+              </button>
+            ) : null}
+            {(entry.items ?? []).map((item) => {
+              const ItemIcon = item.icon;
+              const here = itemHere(item.href);
+              return (
+                <Link
+                  key={item.href + item.label}
+                  href={item.href}
+                  className={"cu-link cu-nav-item" + (here ? " is-active" : "")}
+                  aria-current={here ? "page" : undefined}
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <span className="cu-link-icon">{ItemIcon ? <ItemIcon size={15} /> : null}</span>
+                  <span className="cu-nav-text">
+                    <span className="cu-link-label">{item.label}</span>
+                    {item.hint ? <small>{item.hint}</small> : null}
+                  </span>
+                </Link>
+              );
+            })}
+            {entry.dynamic === "spaces" ? spacesSection : null}
+            {entry.dynamic === "agents" ? agentsSection : null}
+          </div>
         ) : null}
-      </>
+      </div>
     );
   };
 
+  const allLists = spaceTree.flatMap((space) => [...space.lists, ...space.folders.flatMap((folder) => folder.lists)]);
+
   return (
-    <div className="cu-shell">
+    <div className="cu-shell hub-v3">
       <style>{shellCss}</style>
       <style>{operationsExperienceCss}</style>
+      <style>{hubDesignCss}</style>
+
+      <aside className={"cu-sidebar" + (mobileOpen ? " is-open" : "")} aria-label="Navigation">
+        <div className="hub-brand">
+          <Link href="/" className="hub-brand-link" aria-label="TN-170 Operations Hub home" onClick={() => setMobileOpen(false)}>
+            <HubMark />
+            <span className="hub-brand-text">
+              <strong>TN-170</strong>
+              <span>Operations Hub</span>
+              <small>{currentWorkspace.name}</small>
+            </span>
+          </Link>
+          <button className="cu-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={18} /></button>
+        </div>
+        <nav className="hub-nav-list" aria-label="Main">
+          {sidebar.map(sidebarEntry)}
+        </nav>
+        <nav className="hub-nav-foot" aria-label="Settings and help">
+          {sidebarFooter.map(sidebarEntry)}
+        </nav>
+      </aside>
 
       <header className="cu-topbar">
-        <button className="cu-mobile" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={18} /></button>
-        <Link href="/" className="cu-brand" aria-label="TN-170 Squadron Operations Hub home">
-          <span className="cu-brand-mark" aria-hidden="true">TN</span>
-          <span className="cu-brand-text"><strong>TN-170</strong><small>Operations Hub</small></span>
+        <button className="cu-mobile" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={20} /></button>
+        <Link href="/" className="hub-top-brand" aria-label="TN-170 Operations Hub home">
+          <HubMark />
+          <span><strong>TN-170</strong><small>Operations Hub</small></span>
         </Link>
-        <div className="cu-ws">
-          <button type="button" className="cu-ws-button" onClick={() => setWorkspaceMenuOpen((open) => !open)} aria-expanded={workspaceMenuOpen} aria-haspopup="menu">
-            <span className="cu-ws-avatar">{currentWorkspace.shortName}</span>
-            <strong>{currentWorkspace.name}</strong>
-            <ChevronDown size={14} />
-          </button>
-          {workspaceMenuOpen ? (
-            <div className="cu-menu" role="menu">
-              <p>Workspaces</p>
-              {workspaceList.map((workspace) => (
-                <Link key={workspace.id} href="/" role="menuitem" className="cu-menu-item" onClick={() => setWorkspaceMenuOpen(false)}>
-                  <span className="cu-ws-avatar cu-ws-avatar--sm">{workspace.shortName}</span>
-                  <span>{workspace.name}</span>
-                  {workspace.id === currentWorkspace.id ? <Check size={14} /> : null}
-                </Link>
-              ))}
-              <div className="cu-menu-divider" />
-              <Link href="/integrations" role="menuitem" className="cu-menu-item" onClick={() => setWorkspaceMenuOpen(false)}><Plug size={14} /><span>Integrations</span></Link>
-              <Link href="/settings" role="menuitem" className="cu-menu-item" onClick={() => setWorkspaceMenuOpen(false)}><Settings size={14} /><span>Settings</span></Link>
-            </div>
-          ) : null}
-        </div>
-        <CommandPalette lists={spaceTree.flatMap((space) => [...space.lists, ...space.folders.flatMap((folder) => folder.lists)]).map((list) => ({ id: list.id, name: list.name, openItems: list.openItems }))} />
-        {/* Opened from the widget in the corner now, which is where people were already going. */}
+        <CommandPalette lists={allLists.map((list) => ({ id: list.id, name: list.name, openItems: list.openItems }))} />
+        {/* Opened from the sidebar, the home page and the widget in the corner. */}
         <AssistantPanel hideLauncher />
         <div className="cu-top-actions">
-          <button type="button" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
-            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          <div className="hub-new">
+            <button
+              type="button"
+              className="hub-new-button"
+              aria-haspopup="menu"
+              aria-expanded={newOpen}
+              onClick={() => { setNewOpen((open) => !open); setMeOpen(false); }}
+            >
+              <Plus size={17} aria-hidden="true" /><span>New</span>
+            </button>
+            {newOpen ? (
+              <div className="cu-menu hub-new-menu" role="menu">
+                {/* A task always lives in a list, so "new task" means choosing which one. */}
+                <p>Add a task to</p>
+                {allLists.slice(0, 6).map((list) => (
+                  <Link key={list.id} href={"/lists/" + list.id} role="menuitem" className="cu-menu-item" onClick={() => setNewOpen(false)}>
+                    <ListChecks size={14} /><span>{list.name}</span>
+                  </Link>
+                ))}
+                {allLists.length > 6 ? (
+                  <Link href="/spaces" role="menuitem" className="cu-menu-item" onClick={() => setNewOpen(false)}><Grid3x3 size={14} /><span>Every list…</span></Link>
+                ) : null}
+                <div className="cu-menu-divider" />
+                <Link href="/spaces" role="menuitem" className="cu-menu-item" onClick={() => setNewOpen(false)}><Grid3x3 size={14} /><span>Department or list</span></Link>
+                <Link href="/documents" role="menuitem" className="cu-menu-item" onClick={() => setNewOpen(false)}><FileText size={14} /><span>Document</span></Link>
+                <Link href="/staff" role="menuitem" className="cu-menu-item" onClick={() => setNewOpen(false)}><Users size={14} /><span>Person</span></Link>
+                <Link href="/goals" role="menuitem" className="cu-menu-item" onClick={() => setNewOpen(false)}><Target size={14} /><span>Goal</span></Link>
+              </div>
+            ) : null}
+          </div>
+          <button type="button" className="hub-theme" onClick={toggleTheme} aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+            {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
           </button>
           <NotificationBell />
           <div className="cu-me">
             <button
               type="button"
-              className="cu-avatar"
+              className="hub-me"
               title={user.fullName}
               aria-haspopup="menu"
               aria-expanded={meOpen}
-              onClick={() => setMeOpen(!meOpen)}
+              onClick={() => { setMeOpen(!meOpen); setNewOpen(false); }}
             >
-              {initials(user.fullName)}
+              <span className="cu-avatar" aria-hidden="true">{initials(user.fullName)}</span>
+              <span className="hub-me-text"><strong>{user.fullName}</strong><small>{roleLabel(user)}</small></span>
+              <ChevronDown size={15} className="hub-me-chevron" aria-hidden="true" />
             </button>
             {meOpen ? (
               <div className="cu-me-menu" role="menu">
@@ -609,6 +614,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
                 </div>
                 <Link href="/connections" role="menuitem" className="cu-menu-item" onClick={() => setMeOpen(false)}>My connections</Link>
                 <Link href="/notifications" role="menuitem" className="cu-menu-item" onClick={() => setMeOpen(false)}>Notifications</Link>
+                <Link href="/settings" role="menuitem" className="cu-menu-item" onClick={() => setMeOpen(false)}>Settings</Link>
                 {/* A real form post, so signing out works the same whether or not JavaScript is having a good day. */}
                 <form method="post" action="/api/auth/logout">
                   <button type="submit" role="menuitem" className="cu-menu-item cu-menu-item--danger">Sign out</button>
@@ -666,7 +672,19 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
               Copy link to this page
             </button>
           )}
-          <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => { setPageMenu(null); setAddingSpace(true); }}>New department</button>
+          <button
+            type="button"
+            role="menuitem"
+            className="cu-ctx-item"
+            onClick={() => {
+              setPageMenu(null);
+              // The form lives in the Departments group, so open it where it can be seen.
+              setCollapsed((current) => ({ ...current, "nav-departments": false }));
+              setAddingSpace(true);
+            }}
+          >
+            New department
+          </button>
           <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => { setPageMenu(null); router.refresh(); }}>Refresh</button>
         </div>
       ) : null}
@@ -733,76 +751,6 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         </div>
       ) : null}
 
-      <nav className="cu-rail" aria-label="Apps">
-        {railItems.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.key}
-              href={item.href}
-              className={"cu-rail-item" + (rail === item.key ? " is-active" : "")}
-              aria-current={rail === item.key ? "page" : undefined}
-              onClick={() => setRail(item.key)}
-            >
-              <span className="cu-rail-icon"><Icon size={18} /></span>
-              <span>{item.label}</span>
-            </Link>
-          );
-        })}
-      </nav>
-
-      <aside className={"cu-sidebar" + (mobileOpen ? " is-open" : "")}>
-        <div className="cu-sidebar-head">
-          <h2>{railTitle}</h2>
-          {sectionByKey(rail).create ? (
-            <Link
-              href={sectionByKey(rail).create!.href}
-              className="cu-new"
-              aria-label={sectionByKey(rail).create!.label}
-              title={sectionByKey(rail).create!.label}
-            >
-              <Plus size={14} />
-            </Link>
-          ) : null}
-          <button className="cu-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={16} /></button>
-        </div>
-        <div className="cu-sidebar-body">
-          <p className="cu-side-label">Everyday</p>
-          <nav className="cu-shortcuts" aria-label="Main destinations">
-            {[
-              { href: "/", label: "Home", icon: Home },
-              { href: "/tasks", label: "My work", icon: ClipboardCheck },
-              { href: "/calendar", label: "Calendar", icon: CalendarDays },
-              { href: "/staff", label: "Squadron", icon: Grid3x3 },
-              { href: "/documents", label: "Documents", icon: FileText }
-            ].map((item) => {
-              const Icon = item.icon;
-              const isCurrent = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/"));
-              return <Link key={item.href} href={item.href} className={"cu-shortcut" + (isCurrent ? " is-active" : "")}
-                aria-current={isCurrent ? "page" : undefined} onClick={() => setMobileOpen(false)}>
-                <Icon size={18} aria-hidden="true" /><span>{item.label}</span>
-              </Link>;
-            })}
-          </nav>
-          <p className="cu-side-label">All areas and tools</p>
-          <div className="cu-section-list" aria-label="Operational areas">
-            {sections.map((section) => {
-              const Icon = section.icon;
-              return <button key={section.key} type="button" className={"cu-section-short" + (rail === section.key ? " is-active" : "")}
-                onClick={() => setRail(section.key)} aria-pressed={rail === section.key}>
-                <Icon size={16} aria-hidden="true" /><span>{section.label}</span>
-              </button>;
-            })}
-          </div>
-          <div className="cu-current-section">
-            <div className="cu-current-section-head"><span>{sectionByKey(rail).label} tools</span>
-              <Link href={sectionByKey(rail).href} onClick={() => setMobileOpen(false)}>Open area</Link>
-            </div>
-            {sectionMenu(rail)}
-          </div>
-        </div>
-      </aside>
-
       {mobileOpen ? <button className="cu-backdrop" onClick={() => setMobileOpen(false)} aria-label="Close navigation" /> : null}
       <main className="cu-main">
         {/* Say it, rather than letting somebody wonder why their buttons are missing.
@@ -840,7 +788,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         </Link>
         <Link href="/tasks" className={"cu-bottom-item" + (pathname === "/tasks" ? " is-active" : "")}
           aria-current={pathname === "/tasks" ? "page" : undefined}>
-          <ClipboardCheck size={21} /><span>My work</span>
+          <ClipboardCheck size={21} /><span>My Work</span>
         </Link>
         <Link href="/calendar" className={"cu-bottom-item" + (active("/calendar") ? " is-active" : "")}
           aria-current={active("/calendar") ? "page" : undefined}>
@@ -857,6 +805,33 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
       </nav>
     </div>
   );
+}
+
+/** The Hub's own mark: an aircraft seen from above. Not an insignia, and not anybody else's logo. */
+function HubMark() {
+  return (
+    <span className="hub-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="22" height="22">
+        <path
+          fill="currentColor"
+          d="M12 1.8c.9 0 1.5 1.3 1.5 3.2v4.1l8.1 4.6v2.1l-8.1-2.4v4.5l2.3 1.7V21L12 20.1 8.2 21v-1.4l2.3-1.7v-4.5l-8.1 2.4v-2.1l8.1-4.6V5c0-1.9.6-3.2 1.5-3.2Z"
+        />
+      </svg>
+    </span>
+  );
+}
+
+/** What somebody does here, under their name: their duty title if the roster has one, else their access. */
+function roleLabel(user: AuthenticatedUser): string {
+  if (user.dutyTitle?.trim()) return user.dutyTitle.trim();
+  const labels: Record<AuthenticatedUser["globalRole"], string> = {
+    SYSTEM_OWNER: "Hub owner",
+    ACCOUNT_APPROVER: "Account approver",
+    ADMINISTRATOR: "Administrator",
+    STAFF_MEMBER: "Staff member",
+    READ_ONLY: "Read only"
+  };
+  return labels[user.globalRole] ?? "Member";
 }
 
 const shellCss = [
