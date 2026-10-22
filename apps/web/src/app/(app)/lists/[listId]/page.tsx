@@ -17,10 +17,13 @@ export default async function ListPage({ params, searchParams }: { params: Promi
 
   return (
     <div className="page-stack">
-      <nav style={{ fontSize: 13, opacity: 0.75 }}>
-        <Link href="/spaces">{list.spaceName}</Link>
-        {list.folderName ? " / " + list.folderName : ""}
-        {" / " + list.name}
+      {/* The whole way here in one line. The shell's own trail is left off list pages, because it can
+          only say "Squadron" - this one can say which department, and which folder. */}
+      <nav className="cu-crumbs" aria-label="Breadcrumb">
+        <span><Link href="/staff">Squadron</Link><i aria-hidden="true">/</i></span>
+        <span><Link href="/spaces">{list.spaceName}</Link><i aria-hidden="true">/</i></span>
+        {list.folderName ? <span>{list.folderName}<i aria-hidden="true">/</i></span> : null}
+        <span><strong aria-current="page">{list.name}</strong></span>
       </nav>
       <ListWorkspace list={list} initialItems={items} people={people} canEdit={user.globalRole !== "READ_ONLY"} initialOpenId={item && items.some((entry) => entry.id === item) ? item : null} />
     </div>

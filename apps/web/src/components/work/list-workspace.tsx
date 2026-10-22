@@ -5,6 +5,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { PeoplePicker } from "./people-picker";
 import { MentionBox, renderMentions, toStored } from "./mention-box";
 import { Dictate } from "@/components/dictate";
+import { listDesignCss } from "./list-design";
 import { RemindersPanel } from "@/components/work/reminders-panel";
 import { providerLabel } from "@/lib/ai/vendors";
 import { LinkPanel } from "./link-panel";
@@ -118,7 +119,17 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
     viewAction({ action: "update", id: view.id, config: next });
   }
   const [search, setSearch] = useState("");
-  const [searchOpen, setSearchOpen] = useState(false);
+  // The list's own builders - automations, fields, sections - live under one Customize menu: everyday
+  // members never need them, and the people who do find them in one place.
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  useEffect(() => {
+    if (!customizeOpen) return;
+    const close = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement | null)?.closest(".lw-customize")) setCustomizeOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [customizeOpen]);
   const [showClosed, setShowClosed] = useState(false);
 
   useEffect(() => {
@@ -448,10 +459,18 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
   return (
     <div className="lw">
       <style>{lwCss}</style>
+      <style>{listDesignCss}</style>
       <header className="lw-head">
         <span className="lw-space-badge">{list.spaceName.slice(0, 1).toUpperCase()}</span>
-        <h1>{list.name}</h1>
-        <span className="lw-head-count">{openCount} open</span>
+        <div className="lw-head-text">
+          <h1>{list.name}</h1>
+          <span className="lw-head-count">{list.spaceName} · {openCount} open</span>
+        </div>
+        {canEdit ? (
+          <button type="button" className="lw-primary lw-head-add" onClick={() => { setMode("list"); setAddingIn(visibleStatuses[0]?.id ?? null); }}>
+            + Add task
+          </button>
+        ) : null}
       </header>
 
       <div className="lw-views" role="tablist">
@@ -591,21 +610,38 @@ export function ListWorkspace({ list, initialItems, people, canEdit, initialOpen
               <option value="none">no date set</option>
             </select>
           </label>
-          <button className={"lw-chip" + (expandAll ? " lw-chip--on" : "")} onClick={() => setExpandAll(!expandAll)}>⑂ {expandAll ? "Expanded" : "Collapsed"}</button>
-          <button className={"lw-chip" + (showClosed ? " lw-chip--on" : "")} onClick={() => setShowClosed(!showClosed)}>✓ Closed</button>
+          <button type="button" className={"lw-chip" + (expandAll ? " lw-chip--on" : "")} aria-pressed={expandAll} onClick={() => setExpandAll(!expandAll)}>
+            {expandAll ? "Hide subtasks" : "Show subtasks"}
+          </button>
+          <button type="button" className={"lw-chip" + (showClosed ? " lw-chip--on" : "")} aria-pressed={showClosed} onClick={() => setShowClosed(!showClosed)}>
+            {showClosed ? "Hide finished" : "Show finished"}
+          </button>
         </div>
         <div className="lw-tools">
-          {searchOpen || search ? (
-            <input autoFocus className="lw-search" placeholder="Search tasks..." value={search} onChange={(event) => setSearch(event.target.value)} onBlur={() => setSearchOpen(false)} />
-          ) : (
-            <button className="lw-icon-btn" aria-label="Search tasks" onClick={() => setSearchOpen(true)}>
-              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.5" /></svg>
-            </button>
-          )}
-          {canEdit ? <button className="lw-ghost" onClick={() => setEditingAutomations(true)}>⚡ Automations</button> : null}
-          {canEdit ? <button className="lw-ghost" onClick={() => setEditingFields(true)}>⊞ Fields{list.fields.length ? " " + list.fields.length : ""}</button> : null}
-          {canEdit ? <button className="lw-ghost" onClick={() => setEditingStatuses(true)}>⚙ Sections</button> : null}
-          {canEdit ? <button className="lw-primary" onClick={() => { setMode("list"); setAddingIn(visibleStatuses[0]?.id ?? null); }}>+ Task</button> : null}
+          <label className="lw-searchbox">
+            <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m10.5 10.5 3 3" stroke="currentColor" strokeWidth="1.5" /></svg>
+            <input className="lw-search" placeholder="Search this list" aria-label="Search tasks" value={search} onChange={(event) => setSearch(event.target.value)} />
+          </label>
+          {canEdit ? (
+            <div className="lw-customize">
+              <button type="button" className="lw-ghost" aria-haspopup="menu" aria-expanded={customizeOpen} onClick={() => setCustomizeOpen(!customizeOpen)}>
+                Customize ▾
+              </button>
+              {customizeOpen ? (
+                <div className="lw-customize-menu" role="menu">
+                  <button type="button" role="menuitem" onClick={() => { setCustomizeOpen(false); setEditingStatuses(true); }}>
+                    <strong>Sections</strong><small>The stages work moves through, like To do and Done</small>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setCustomizeOpen(false); setEditingFields(true); }}>
+                    <strong>Fields{list.fields.length ? " (" + list.fields.length + ")" : ""}</strong><small>Extra details every task in this list records</small>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setCustomizeOpen(false); setEditingAutomations(true); }}>
+                    <strong>Automations</strong><small>Rules that act when something changes</small>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
       {error ? <p className="lw-error" role="alert">{error}</p> : null}
@@ -2015,10 +2051,9 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
               onComment={(body) => save({ comment: body })}
             />
 
-            {fields.length ? (
-              <section className="tp-section">
-                <h3 className="tp-h">Custom fields</h3>
-                <section className="tp-section">
+            {/* The description, for every task. It used to sit inside the custom-fields block, so on a list
+                with no custom fields - most of them - there was no way to see or write one. */}
+            <section className="tp-section">
               <h3 className="tp-h">
                 Description
                 {canEdit ? (
@@ -2045,7 +2080,10 @@ function ItemPanel({ itemId, statuses, fields, people, canEdit, onClose, onOpen,
               />
             </section>
 
-            <div className="tp-props">
+            {fields.length ? (
+              <section className="tp-section">
+                <h3 className="tp-h">Custom fields</h3>
+                <div className="tp-props">
                   {fields.map((field) => (
                     <div key={field.id + item.updatedAt} className="tp-prop">
                       <span className="tp-label" title={FIELD_TYPE_LABELS[field.type]}><i>⊞</i>{field.name}</span>

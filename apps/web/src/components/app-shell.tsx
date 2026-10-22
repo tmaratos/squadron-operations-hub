@@ -295,6 +295,10 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
     </Link>
   );
 
+  // Read-only members see the departments and open the lists, but are not offered renaming, removing or
+  // dragging: the server refused all of it anyway, so the controls only ever led to an error.
+  const canArrange = user.globalRole !== "READ_ONLY";
+
   // The squadron's own departments and lists, inside the Departments group. Dragging, dropping and the
   // right-click menu are unchanged: they are how people tidy the structure and nobody should lose them.
   const spacesSection = (
@@ -310,9 +314,11 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           >
             {everyCollapsed ? <ChevronsUpDown size={14} /> : <ChevronsDownUp size={14} />}
           </button>
-          <button type="button" aria-label="New department" title="New department" onClick={() => setAddingSpace((open) => !open)}>
-            <Plus size={14} />
-          </button>
+          {canArrange ? (
+            <button type="button" aria-label="New department" title="New department" onClick={() => setAddingSpace((open) => !open)}>
+              <Plus size={14} />
+            </button>
+          ) : null}
         </span>
       </div>
       {addingSpace ? (
@@ -341,8 +347,8 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
               (spaceDrop?.id === space.id ? (spaceDrop.below ? " is-order-after" : " is-order-before") : "")
             }
             onClick={() => toggle(space.id)}
-            onContextMenu={(event) => openMenu(event, "space", space.id, space.name)}
-            draggable
+            onContextMenu={canArrange ? (event) => openMenu(event, "space", space.id, space.name) : undefined}
+            draggable={canArrange}
             onDragStart={(event) => {
               event.dataTransfer.setData("application/x-hub-space", space.id);
               event.dataTransfer.setData("text/plain", space.name);
@@ -395,7 +401,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           </button>
           {collapsed[space.id] ? null : (
             <div className="cu-tree">
-              {space.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, list.id))}
+              {space.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, canArrange ? list.id : undefined))}
               {space.folders.map((folder) => (
                 <div key={folder.id}>
                   <button type="button" className="cu-link" onClick={() => toggle(folder.id)}>
@@ -404,7 +410,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
                   </button>
                   {collapsed[folder.id] ? null : (
                     <div className="cu-tree">
-                      {folder.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, list.id))}
+                      {folder.lists.map((list) => navLink("/lists/" + list.id, list.name, <ListChecks size={14} />, list.openItems, canArrange ? list.id : undefined))}
                     </div>
                   )}
                 </div>
@@ -704,7 +710,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
               Copy link to this page
             </button>
           )}
-          <button
+          {canArrange ? <button
             type="button"
             role="menuitem"
             className="cu-ctx-item"
@@ -716,7 +722,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
             }}
           >
             New department
-          </button>
+          </button> : null}
           <button type="button" role="menuitem" className="cu-ctx-item" onClick={() => { setPageMenu(null); router.refresh(); }}>Refresh</button>
         </div>
       ) : null}
@@ -798,7 +804,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           </p>
         ) : null}
         {/* Where you are, and the way back to the part of the app it belongs to. */}
-        {pathname !== "/" ? (
+        {pathname !== "/" && !pathname.startsWith("/lists/") ? (
           <nav className="cu-crumbs" aria-label="Breadcrumb">
             {breadcrumbFor(pathname, search).map((crumb, index, all) => (
               <span key={crumb.href + crumb.label}>
