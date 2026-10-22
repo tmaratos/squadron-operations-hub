@@ -82,7 +82,7 @@ export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
               <QuickLink href="/staff" icon={Users} label="People & positions" />
               <QuickLink href="/dashboards" icon={ShieldAlert} label="Command overview" />
               <QuickLink href="/agents" icon={Search} label="AI assistants" />
-              <QuickLink href="/calendar" icon={CalendarDays} label="Upcoming events" />
+              <QuickLink href="/calendar" icon={CalendarDays} label="Task calendar" />
             </nav>
           </section>
 
