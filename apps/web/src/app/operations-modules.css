@@ -141,3 +141,48 @@ html[data-theme=dark] .demo-disclosure{background:#3b2b1e;color:#f9dcab;border-c
 }
 :where(.fin-experience,.compliance-experience,.admin-experience,.readiness-experience) :where(button,a,input,select,textarea):focus-visible{outline:3px solid #548df0;outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.fin-experience *{scroll-behavior:auto}}
+
+
+/* CAPWATCH integration: equal accessibility for information and status controls. */
+.integrations-experience{max-width:1570px;margin:0 auto;gap:18px}
+.integrations-experience .cw{border:1px solid var(--border);border-radius:18px;background:var(--surface);padding:22px;gap:18px;box-shadow:var(--shadow)}
+html[data-theme=dark] .integrations-experience .cw{background:var(--surface);border-color:var(--border)}
+.integrations-experience .cw-head{align-items:center;gap:15px}
+.integrations-experience .cw-head>div{flex:1 1 260px}
+.integrations-experience .cw-head h2{font-size:19px;color:var(--text);letter-spacing:-.025em}
+.integrations-experience .cw-head p{font-size:13px;color:var(--muted-strong);line-height:1.6;opacity:1;max-width:74ch}
+.integrations-experience .cw-logo{width:44px;height:44px;background:#eaf1ff;color:#255abd;border-radius:13px}
+html[data-theme=dark] .integrations-experience .cw-logo{background:#2a4870;color:#bfd9ff}
+.integrations-experience .cw-pill{border-radius:10px;font-size:12px;font-weight:800;padding:8px 12px}
+.integrations-experience .cw-facts{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.integrations-experience .cw-facts>div{display:grid;gap:7px;align-content:start;padding:15px;border-radius:12px;border:1px solid var(--border);background:var(--surface-alt);min-width:0}
+.integrations-experience .cw-facts dt{font-size:11px;font-weight:800;color:var(--muted-strong);text-transform:uppercase;letter-spacing:.04em}
+.integrations-experience .cw-facts dd{font-size:13px;color:var(--text);font-weight:700;overflow-wrap:anywhere}
+.integrations-experience .cw-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.integrations-experience .cw-btn{display:inline-flex;justify-content:center;align-items:center;gap:8px;min-height:44px;padding:10px 15px;border-radius:11px;border:1px solid var(--border);background:var(--surface-alt);font-size:13px;font-weight:750;color:var(--text)}
+.integrations-experience .cw-btn--primary{background:#2459bd;color:#fff;border-color:#2459bd}
+.integrations-experience .cw-status-actions{display:flex;align-items:center;gap:13px;flex-wrap:wrap;border-top:1px solid var(--border-soft);padding-top:16px}
+.integrations-experience .cw-status-actions span{font-size:12px;line-height:1.55;color:var(--muted-strong);flex:1 1 260px}
+.integrations-experience .cw-fine{font-size:12px;line-height:1.55;color:var(--muted-strong)}
+.integrations-experience .cw-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;border:1px solid var(--border);border-radius:14px;background:var(--surface-alt);padding:17px}
+.integrations-experience .cw-form label{flex:1 1 200px;min-width:0;font-size:13px}
+.integrations-experience .cw-form input{min-height:45px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;padding:10px 12px;border-radius:10px}
+.integrations-experience .cw-peek{min-height:41px;border-radius:10px}
+.integrations-experience .cw-form .cw-fine{flex:1 1 100%}
+.integrations-experience :where(button,input,select):focus-visible{outline:3px solid #548df0;outline-offset:2px}
+@media(max-width:900px){.integrations-experience .cw-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){
+ .integrations-experience .cw{padding:14px;gap:13px;border-radius:14px}
+ .integrations-experience .cw-head{align-items:flex-start;gap:9px}
+ .integrations-experience .cw-logo{width:38px;height:38px;border-radius:11px}
+ .integrations-experience .cw-head h2{font-size:17px}
+ .integrations-experience .cw-head p{font-size:12px}
+ .integrations-experience .cw-pill{margin-top:6px}
+ .integrations-experience .cw-facts{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .integrations-experience .cw-facts>div{padding:10px;border-radius:10px}
+ .integrations-experience .cw-facts dt{font-size:10px}
+ .integrations-experience .cw-facts dd{font-size:12px}
+ .integrations-experience .cw-actions .cw-btn{flex:1 1 auto}
+ .integrations-experience .cw-form{padding:12px}
+ .integrations-experience .cw-status-actions .cw-btn{width:100%}
+}
