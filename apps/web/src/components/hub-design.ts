@@ -269,4 +269,18 @@ html:not([data-theme=dark]) .cu-shell.hub-v3 .nc-icon--warning { background: #b4
   .cu-shell.hub-v3 .cu-main .hub-card-head a { min-height: 40px; display: inline-flex; align-items: center; }
   .cu-shell.hub-v3 .cu-main .lw-caret { width: 36px; height: 36px; }
 }
+
+/* Dark mode, where older pages kept light-theme colours.
+   Found by checking every page in dark mode: tags drawn as pale text on a pale chip, and reds and greens
+   dark enough for a white page but lost on navy. */
+.cu-shell.hub-v3 .cu-main .org-position__body :is(.org-assist-role, .org-cadet) { font-size: 11px; padding: 3px 9px; }
+html[data-theme=dark] .cu-shell.hub-v3 .cu-main .org-assist-role { background: rgba(139, 123, 242, .25); color: #d4ccff; }
+html[data-theme=dark] .cu-shell.hub-v3 .cu-main .org-cadet { background: rgba(217, 119, 6, .22); color: #ffd28a; }
+html[data-theme=dark] .cu-shell.hub-v3 .cu-main :is(.org-status--filled, .personnel-state--active) { background: rgba(22, 163, 74, .2); color: #7fe0a3; }
+html[data-theme=dark] .cu-shell.hub-v3 .cu-main .org-status--acting { background: rgba(217, 119, 6, .22); color: #ffd28a; }
+html[data-theme=dark] .cu-shell.hub-v3 .cu-main .cw-pill.is-ok { background: rgba(22, 163, 74, .2); color: #7fe0a3; }
+html[data-theme=dark] .cu-shell.hub-v3 .cu-main .cw-pill.is-bad { background: rgba(220, 53, 69, .2); color: #ff9aa4; }
+html[data-theme=dark] .cu-shell.hub-v3 .cu-main :is(.hub-task-copy span.is-late, .hub-stat-copy small.is-bad) { color: #ff8a96; }
+html[data-theme=dark] .cu-shell.hub-v3 .cu-main .lw-ghost--danger { color: #ff8a96; }
+.cu-shell.hub-v3 .cu-main .nc-icon--warning { background: #b45309; }
 `;
