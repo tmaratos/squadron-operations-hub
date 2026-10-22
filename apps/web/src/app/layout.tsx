@@ -5,6 +5,7 @@ import "./dashboard-overrides.css";
 import "./clickup-theme.css";
 import "./redesign-public.css";
 import "./operations-modules.css";
+import "./experience-v2.css";
 
 export const metadata: Metadata = {
   title: {
