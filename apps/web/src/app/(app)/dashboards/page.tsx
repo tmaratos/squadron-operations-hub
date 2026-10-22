@@ -1,5 +1,4 @@
 import type { CSSProperties } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { DashboardEditor } from "@/components/work/dashboard-editor";
 import { requireUser } from "@/lib/auth/session";
@@ -201,7 +200,7 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
 
       <header className="cd-hero">
         <div className="cd-hero-brand">
-          <Image src="/tn170-logo.png" alt="TN-170 emblem" width={64} height={64} priority />
+          <span className="hub-neutral-mark" aria-hidden="true">TN</span>
           <div>
             <p className="cd-eyebrow">TN-170 Oak Ridge · Command view</p>
             <h1>{dashboard?.name ?? "Command dashboard"}</h1>
