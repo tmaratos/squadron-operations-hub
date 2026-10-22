@@ -2,6 +2,11 @@
 # Intentionally cannot run on main, and never builds/deploys against production.
 name: Refresh Next 16 lockfile
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - apps/web/package.json
+      - .github/workflows/refresh-next16-lock.yml
   push:
     branches:
       - fix/cloudflare-next16-supported-2026-10-22
@@ -15,12 +20,14 @@ permissions:
 jobs:
   refresh:
     name: Resolve and commit pnpm lockfile
+    if: github.event_name == 'push' || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/cloudflare-next16-supported-2026-10-22')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - name: Check out upgrade branch
         uses: actions/checkout@v4
         with:
+          ref: fix/cloudflare-next16-supported-2026-10-22
           persist-credentials: true
       - name: Install pnpm
         uses: pnpm/action-setup@v4
