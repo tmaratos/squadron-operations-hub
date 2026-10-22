@@ -799,30 +799,6 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
             </div>
             {sectionMenu(rail)}
           </div>
-          <div hidden>
-          {/* On a phone the rail of section icons is not on screen, so without this the drawer shows only
-              the section you are already in and there is no way to reach another one. It switches which
-              section the menu is showing, exactly as pressing the rail does on a wider screen. */}
-          <div className="cu-sections" role="tablist" aria-label="Sections">
-            {sections.map((section) => {
-              const Icon = section.icon;
-              return (
-                <button
-                  key={section.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={rail === section.key}
-                  className={"cu-section-chip" + (rail === section.key ? " is-active" : "")}
-                  onClick={() => setRail(section.key)}
-                >
-                  <Icon size={14} />
-                  <span>{section.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {sectionMenu(rail)}
-          </div>
         </div>
       </aside>
 
