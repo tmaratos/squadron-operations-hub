@@ -5,6 +5,7 @@ import { AlertCircle, BriefcaseBusiness, LoaderCircle, Plus, Star, Trash2, UserR
 import { MetricCard } from "@/components/metric-card";
 import { PageHeader } from "@/components/page-header";
 import { SectionCard } from "@/components/section-card";
+import { staffExperienceCss } from "./staff-experience";
 import type { GlobalRole } from "@/lib/auth/types";
 import type { DutyAssignmentRecord } from "@/lib/operations/staff";
 import type { PersonnelCommitteeRecord, PersonnelMemberRecord, PersonnelPositionRecord } from "@/lib/operations/personnel";
@@ -228,6 +229,7 @@ export function StaffPage({
 
   return (
     <div className="page-stack staff-experience">
+      <style>{staffExperienceCss}</style>
       <PageHeader
         eyebrow="Staff continuity"
         title="Squadron Personnel and Organization"
