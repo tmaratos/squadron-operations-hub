@@ -257,8 +257,11 @@ The scheduled worker removes expired authentication tokens and sessions each day
 After the Worker is verified at its `workers.dev` address, connect:
 
 ```text
-tn170adminhub.tristanmaratos.com
+tn170hub.faithbasedpilot.com
 ```
+
+The Hub moved here from `tn170adminhub.tristanmaratos.com` in October 2026; that address stays attached until
+the domain lapses in May 2027.
 
 The existing GitHub Pages deployment is only a temporary README landing page and should be removed after the Worker custom domain is active.
 

@@ -4,7 +4,7 @@ import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 // Command Intake, assigned to them. The code in the address is what proves the mail is theirs, so it is
 // private, and regenerating it immediately stops the old one working (see apps/email-intake).
 
-const DEFAULT_INTAKE_MAILBOX = "tasks@tristanmaratos.com";
+const DEFAULT_INTAKE_MAILBOX = "tasks@tn170hub.faithbasedpilot.com";
 const ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // no l/o/0/1: these get read aloud and written down
 
 function intakeMailbox(): string {
