@@ -261,7 +261,7 @@ export function FinanceTracker({ initial, years, canEdit, people, lists, initial
   ];
 
   return (
-    <div className="fin">
+    <div className="fin fin-experience">
       <style>{finCss}</style>
 
       <div className="fin-bar">
@@ -293,6 +293,16 @@ export function FinanceTracker({ initial, years, canEdit, people, lists, initial
       </p>
 
       {note ? <p className="fin-note" role="status">{note}</p> : null}
+
+      <div className="fin-tiles">
+        {tiles.map((tile) => (
+          <div className="fin-tile" key={tile.label}>
+            <span className="fin-tile-label">{tile.label}</span>
+            <strong>{tile.value}</strong>
+            <small>{tile.hint}</small>
+          </div>
+        ))}
+      </div>
 
       {state.summary.balanceCents === null && canEdit ? (
         <div className="fin-form fin-form--row">
@@ -463,16 +473,6 @@ export function FinanceTracker({ initial, years, canEdit, people, lists, initial
           ) : null}
         </section>
       ) : null}
-
-      <div className="fin-tiles">
-        {tiles.map((tile) => (
-          <div className="fin-tile" key={tile.label}>
-            <span className="fin-tile-label">{tile.label}</span>
-            <strong>{tile.value}</strong>
-            <small>{tile.hint}</small>
-          </div>
-        ))}
-      </div>
 
       {/* The automated half. Arithmetic on what is recorded, never an opinion about it. */}
       {state.findings.length ? (
