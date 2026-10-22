@@ -115,21 +115,45 @@ html[data-theme=dark] .hub-tag{background:rgba(37,99,235,.22);color:#8db4ff}
 }
 @media (max-width:900px){
   .hub-home{gap:14px}
-  .hub-hero{min-height:0;padding:22px 18px;border-radius:16px;flex-direction:column;align-items:flex-start;gap:10px}
-  .hub-hero-side{justify-items:start;text-align:left;gap:2px}
+  .hub-hero{min-height:0;padding:20px 18px;border-radius:16px;flex-direction:column;align-items:flex-start;gap:8px}
+  .hub-hero-copy h1{font-size:26px}
+  .hub-hero-copy p{margin-top:6px;font-size:14px}
+  .hub-hero-side{display:flex;flex-wrap:wrap;align-items:baseline;gap:0 8px;text-align:left}
+  .hub-hero-side strong,.hub-hero-side span{font-size:13px}
+  .hub-hero-side span::before{content:"·";margin-right:8px;opacity:.7}
   .hub-hero-side em{display:none}
-  .hub-stats{gap:10px}
-  .hub-stat{flex-direction:column;align-items:flex-start;gap:10px;padding:14px}
-  .hub-stat-icon{width:40px;height:40px}
-  .hub-stat-copy strong{font-size:26px}
-  .hub-stat-copy span{font-size:13px}
   .hub-row,.hub-row--wide{grid-template-columns:minmax(0,1fr)}
   .hub-card--actions .hub-actions{grid-template-columns:repeat(3,minmax(0,1fr))}
   .hub-task{flex-wrap:wrap}
   .hub-task-tools{padding:0 0 8px 42px}
 }
+/* A phone shows the four counts as small tiles - icon and number on one line, what it is under them, and at
+   most one line of detail - so the first screen reaches the work itself rather than stopping at numbers. */
+@media (max-width:700px){
+  .hub-stats{gap:10px}
+  .hub-stat{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;column-gap:10px;row-gap:4px;padding:12px 14px;border-radius:14px}
+  .hub-stat-copy{display:contents}
+  .hub-stat-icon{width:36px;height:36px}
+  .hub-stat-icon svg{width:18px;height:18px}
+  .hub-stat-copy strong{font-size:24px}
+  .hub-stat-copy span{grid-column:1/-1;font-size:13px;line-height:1.3}
+  .hub-stat-copy small{grid-column:1/-1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .hub-stat-copy small.is-bad{justify-self:start}
+  .hub-card-head{padding:16px 16px 8px}
+  .hub-tasks,.hub-events{padding:0 6px 6px}
+  .hub-task-open{padding:10px 8px;gap:10px}
+  .hub-task-copy strong{font-size:14.5px}
+  /* The title gets the whole width; priority and owner sit under it rather than squeezing it. */
+  .hub-task-open{flex:1 1 100%}
+  .hub-task-tools{margin-top:-8px;padding:0 0 8px 40px;gap:8px}
+  .hub-event{padding:10px 8px;gap:10px}
+  .hub-date{width:46px;height:50px}
+  .hub-date strong{font-size:19px}
+  .hub-tag{display:none}
+  .hub-snapshot{padding:4px 16px 16px}
+}
 @media (max-width:480px){
   .hub-card--actions .hub-actions{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .hub-stat-copy small{white-space:normal}
+  .hub-action{min-height:84px}
 }
 `;
