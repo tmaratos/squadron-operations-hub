@@ -120,11 +120,13 @@ export function DashboardEditor({ dashboardId, widgets, lists, tags, statusNames
 
   return (
     <>
+      {/* With the button, not inside the panel: drawn before the panel had ever opened, the button had none of
+          its own styling and came out as white text on a pale grey button. */}
+      <style>{deCss}</style>
       <button type="button" className="de-open" onClick={() => setOpen(true)}>✎ Customize</button>
       {open ? (
         <div className="de-overlay" onClick={() => { setOpen(false); setDraft(null); }}>
           <aside className="de-panel" onClick={(event) => event.stopPropagation()} aria-label="Customize dashboard">
-            <style>{deCss}</style>
             <header className="de-head">
               <strong>{draft ? (draft.id ? "Edit card" : "New card") : "Customize dashboard"}</strong>
               <button type="button" className="de-icon" onClick={() => { setOpen(false); setDraft(null); }} aria-label="Close">✕</button>

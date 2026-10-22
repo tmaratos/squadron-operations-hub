@@ -530,10 +530,10 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
       <style>{hubDesignCss}</style>
 
       <aside className={"cu-sidebar" + (mobileOpen ? " is-open" : "")} aria-label="Navigation">
-        <div className="hub-brand">
-          <Link href="/" className="hub-brand-link" aria-label="TN-170 Operations Hub home" onClick={() => setMobileOpen(false)}>
+        <div className="hub-logo">
+          <Link href="/" className="hub-logo-link" aria-label="TN-170 Operations Hub home" onClick={() => setMobileOpen(false)}>
             <HubMark />
-            <span className="hub-brand-text">
+            <span className="hub-logo-text">
               <strong>TN-170</strong>
               <span>Operations Hub</span>
               <small>{currentWorkspace.name}</small>
