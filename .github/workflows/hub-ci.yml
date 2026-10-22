@@ -72,6 +72,13 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Verify portable ChatGPT plugin package generator (no server call)
+        working-directory: .
+        run: |
+          node scripts/prepare-chatgpt-plugin.mjs https://tn170adminhub.tristanmaratos.com
+          node -e 'const fs=require("fs");const p="dist/tn170-operations-hub-plugin/";const a=JSON.parse(fs.readFileSync(p+"plugin.json"));const m=JSON.parse(fs.readFileSync(p+"mcp.json"));if(a.name!=="tn170-operations-hub"||m.mcpServers["tn170-hub"].type!=="streamable-http"||m.mcpServers["tn170-hub"].extensions["com.openai"].auth.type!=="api_key")process.exit(1);if(JSON.stringify(m).includes("tn170_mcp_"))process.exit(1);'
+
+
   cloudflare-adapter:
     name: Cloudflare OpenNext adapter
     runs-on: ubuntu-latest
