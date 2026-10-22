@@ -273,7 +273,7 @@ export function MyTasks({ items: initialItems, userId, filterLabel, showEveryone
                         aria-label={"Mark done: " + item.title}
                         title={canEdit ? "Mark done" : "You can read this but not change it"}
                       >
-                        <Check size={15} aria-hidden="true" />
+                        <span className="mt-ring" aria-hidden="true"><Check size={12} /></span>
                       </button>
                     )}
                     <Link className="mt-open" href={"/lists/" + item.listId + "?item=" + item.id}>
@@ -372,9 +372,11 @@ html[data-theme=dark] .mt-group--late .mt-n{background:rgba(220,53,69,.2);color:
 .mt-group li:first-child{border-radius:14px 14px 0 0}.mt-group li:last-child{border-radius:0 0 14px 14px}
 .mt-group li:hover{background:var(--surface-alt)}
 .mt-group li.is-picked{background:var(--cu-active)}
-.mt-done{flex:none;display:grid;place-items:center;width:30px;height:30px;margin:0 4px 0 0;border:2px solid #b8c4d6;border-radius:50%;background:var(--surface);color:transparent;cursor:pointer;transition:all .15s ease}
-.mt-done:hover:not(:disabled),.mt-done:focus-visible{border-color:#16a34a;color:#16a34a;background:#e6f7ec}
-.mt-group--late .mt-done{border-color:#e7a1aa}
+/* A small circle inside a larger, invisible button: easy to hit, quiet to look at. */
+.mt-done{flex:none;display:grid;place-items:center;width:34px;height:34px;margin:0;padding:0;border:0;border-radius:50%;background:none;cursor:pointer}
+.mt-ring{display:grid;place-items:center;width:20px;height:20px;border:2px solid #b8c4d6;border-radius:50%;background:var(--surface);color:transparent;transition:all .15s ease}
+.mt-done:hover:not(:disabled) .mt-ring,.mt-done:focus-visible .mt-ring{border-color:#16a34a;color:#16a34a;background:#e6f7ec}
+.mt-group--late .mt-ring{border-color:#e7a1aa}
 .mt-done:disabled{cursor:not-allowed;opacity:.5}
 .mt .mt-pick{flex:none;width:22px;height:22px;margin:0 8px 0 4px;accent-color:#2563eb}
 .mt-open{flex:1;min-width:0;display:grid;gap:4px;padding:12px 8px;color:var(--text);text-decoration:none}
@@ -402,7 +404,8 @@ html[data-theme=dark] .mt-empty-icon{background:rgba(22,163,74,.2);color:#6fdc98
   .mt-tab{flex:1;justify-content:center;min-height:44px;padding:0 6px;gap:6px;white-space:nowrap;font-size:13.5px}
   .mt-select{flex:1 1 100%;justify-content:center}
   .mt-group li{flex-wrap:wrap;padding:6px 10px}
-  .mt-done{width:36px;height:36px}
+  .mt-done{width:38px;height:38px}
+  .mt-ring{width:22px;height:22px}
   .mt-open{flex:1 1 calc(100% - 52px);padding:10px 4px}
   .mt-controls{flex:1 1 100%;justify-content:flex-end;padding:0 0 6px 46px}
   .mt-toast{bottom:calc(84px + env(safe-area-inset-bottom))}
