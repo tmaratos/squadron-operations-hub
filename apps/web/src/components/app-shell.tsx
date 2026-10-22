@@ -15,6 +15,7 @@ import {
   HelpCircle,
   Home,
   Inbox,
+  Users,
   LayoutDashboard,
   Bot,
   Target,
