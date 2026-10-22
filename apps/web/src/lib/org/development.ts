@@ -1,4 +1,7 @@
 import { getDatabase } from "@/lib/cloudflare";
+import { canonicalDevelopmentLevel } from "./development-levels";
+export { LEVELS, canonicalDevelopmentLevel } from "./development-levels";
+export type { Level } from "./development-levels";
 
 // Who holds what, how far along they are, and what would move them forward.
 //
@@ -8,17 +11,7 @@ import { getDatabase } from "@/lib/cloudflare";
 // the position and level are pasted in or set by hand, and the requirements come from the regulation in
 // the squadron's own Drive rather than from a model's recollection of CAP policy.
 
-// CAPWATCH stores the development level as LV1..LV5. Accept older roman forms
-// at API boundaries, but use one canonical code everywhere inside the Hub.
-export const LEVELS = ["LV1", "LV2", "LV3", "LV4", "LV5"] as const;
-const ROMAN_TO_LEVEL: Record<string, (typeof LEVELS)[number]> = {
-  I: "LV1", II: "LV2", III: "LV3", IV: "LV4", V: "LV5"
-};
-export function canonicalDevelopmentLevel(value: string | null | undefined): string | null {
-  if (!value) return null;
-  return ROMAN_TO_LEVEL[value] ?? value;
-}
-export type Level = (typeof LEVELS)[number];
+
 
 export interface MemberDevelopment {
   capid: string;
