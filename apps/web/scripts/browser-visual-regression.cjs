@@ -80,11 +80,18 @@ async function checkLogin(browser) {
       const hasGoogle = await page.getByRole("link", { name: /continue with google/i }).count();
       const hasPersonal = await page.getByRole("link", { name: /sign in with your personal email/i }).count();
       const badBrand = await page.locator('img[alt*="Air Force" i],img[alt*="USAF" i],img[src*="air-force" i]').count();
+      // The merged redesign's login-form.tsx specifies a text-only neutral TN mark.
+      // A live emblem here indicates deployment drift, even if its alt text is innocuous.
+      const neutralMark = page.locator(".auth-brand .hub-neutral-mark");
+      const matchesMergedBrand = await neutralMark.count() === 1 &&
+        (await neutralMark.innerText()).trim() === "TN";
       const status = response?.status() ?? 0;
-      const passed = status >= 200 && status < 400 && hasGoogle > 0 && hasPersonal > 0 && !badBrand && visual.overflow <= 3;
+      const passed = status >= 200 && status < 400 && hasGoogle > 0 && hasPersonal > 0 &&
+        !badBrand && matchesMergedBrand && visual.overflow <= 3;
       add("public-visual", v.name, "/login", passed,
-        passed ? "Rendered, both sign-in options visible, no horizontal overflow" : "Login render, branding or viewport check failed",
-        { httpStatus: status, overflowPx: visual.overflow, missingSignInLinks: hasGoogle < 1 || hasPersonal < 1, badBrandCount: badBrand });
+        passed ? "Sign-in, neutral mark and viewport checks passed" : "Login, branding parity or viewport check failed",
+        { httpStatus: status, overflowPx: visual.overflow, missingSignInLinks: hasGoogle < 1 || hasPersonal < 1,
+          badBrandCount: badBrand, neutralBrandMatch: matchesMergedBrand });
     } catch (error) {
       add("public-visual", v.name, "/login", false, "Browser render failed: " + String(error).slice(0, 220));
     } finally { await context.close(); }
