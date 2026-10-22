@@ -8,7 +8,16 @@ import { getDatabase } from "@/lib/cloudflare";
 // the position and level are pasted in or set by hand, and the requirements come from the regulation in
 // the squadron's own Drive rather than from a model's recollection of CAP policy.
 
-export const LEVELS = ["I", "II", "III", "IV", "V"] as const;
+// CAPWATCH stores the development level as LV1..LV5. Accept older roman forms
+// at API boundaries, but use one canonical code everywhere inside the Hub.
+export const LEVELS = ["LV1", "LV2", "LV3", "LV4", "LV5"] as const;
+const ROMAN_TO_LEVEL: Record<string, (typeof LEVELS)[number]> = {
+  I: "LV1", II: "LV2", III: "LV3", IV: "LV4", V: "LV5"
+};
+export function canonicalDevelopmentLevel(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return ROMAN_TO_LEVEL[value] ?? value;
+}
 export type Level = (typeof LEVELS)[number];
 
 export interface MemberDevelopment {
@@ -72,7 +81,7 @@ export async function listDevelopment(): Promise<MemberDevelopment[]> {
       positionSource: row.set_position ? ("SET" as const) : fromChart ? ("CHART" as const) : null,
       chartPosition: row.chart_position,
       ignoreSource,
-      pdLevel: row.pd_level,
+      pdLevel: canonicalDevelopmentLevel(row.pd_level),
       specialtyTrack: row.specialty_track,
       trackRating: row.track_rating
       };
@@ -128,7 +137,7 @@ export async function saveDevelopment(input: {
     .bind(
       input.capid,
       input.dutyPosition ?? null,
-      input.pdLevel ?? null,
+      canonicalDevelopmentLevel(input.pdLevel),
       input.specialtyTrack ?? null,
       input.trackRating ?? null,
       input.ignoreSource ? 1 : 0,
@@ -158,8 +167,8 @@ export async function listSteps(includeUnverified = true): Promise<DevelopmentSt
       .all<{ id: string; from_level: string; to_level: string; title: string; detail: string | null; source_citation: string | null; source_quote: string | null; confidence: DevelopmentStep["confidence"] }>();
     return rows.results.map((row) => ({
       id: row.id,
-      fromLevel: row.from_level,
-      toLevel: row.to_level,
+      fromLevel: canonicalDevelopmentLevel(row.from_level) ?? row.from_level,
+      toLevel: canonicalDevelopmentLevel(row.to_level) ?? row.to_level,
       title: row.title,
       detail: row.detail,
       sourceCitation: row.source_citation,
@@ -187,7 +196,7 @@ export async function saveStep(input: {
       "INSERT INTO development_steps (id, from_level, to_level, title, detail, source_citation, source_quote, confidence, active, created_by, created_at, updated_at) " +
       "VALUES (?, ?, ?, ?, ?, ?, NULL, 'CONFIRMED', 1, ?, ?, ?)"
     )
-    .bind(id, input.fromLevel, input.toLevel, input.title.trim(), input.detail?.trim() || null, input.sourceCitation?.trim() || null, input.userId, now, now)
+    .bind(id, canonicalDevelopmentLevel(input.fromLevel), canonicalDevelopmentLevel(input.toLevel), input.title.trim(), input.detail?.trim() || null, input.sourceCitation?.trim() || null, input.userId, now, now)
     .run();
   return id;
 }
@@ -206,7 +215,7 @@ export async function deleteStep(stepId: string): Promise<void> {
 /** What this member would do next. Empty when nobody has told the Hub their level, or recorded the ladder. */
 export function nextStepsFor(member: MemberDevelopment, steps: DevelopmentStep[]): DevelopmentStep[] {
   if (!member.pdLevel) return [];
-  return steps.filter((step) => step.confidence === "CONFIRMED" && step.fromLevel === member.pdLevel);
+  return steps.filter((step) => step.confidence === "CONFIRMED" && canonicalDevelopmentLevel(step.fromLevel) === canonicalDevelopmentLevel(member.pdLevel));
 }
 
 /**
