@@ -77,6 +77,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
         userId={user.id}
         filterLabel={filtered ? described.join(", ") : undefined}
         showEveryone={everybody}
+        canEdit={user.globalRole !== "READ_ONLY"}
       />
     </div>
   );
