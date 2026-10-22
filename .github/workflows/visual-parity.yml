@@ -34,17 +34,21 @@ jobs:
   public-browser:
     name: Chromium responsive and access smoke
     runs-on: ubuntu-latest
+    # The official image already has Chromium and its OS/font dependencies.
+    # Keep the image version matched to the locally installed Playwright npm package.
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble
+      options: --user 1001
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install isolated Chromium test dependencies
+      - name: Install Playwright test package (browser preinstalled in image)
         shell: bash
         run: |
           npm install --prefix "$RUNNER_TEMP/tn170-browser" --no-save --no-package-lock --silent playwright@1.56.1
-          "$RUNNER_TEMP/tn170-browser/node_modules/.bin/playwright" install --with-deps chromium
           echo "NODE_PATH=$RUNNER_TEMP/tn170-browser/node_modules" >> "$GITHUB_ENV"
       - name: Capture public desktop/mobile login and verify authorization
         env:
