@@ -199,4 +199,69 @@ html:not([data-theme=dark]) .cu-shell.hub-v3 .nc-icon--warning { background: #b4
 @media (prefers-reduced-motion: reduce) {
   .cu-shell.hub-v3 .cu-sidebar, .hub-nav, .hub-chevron { transition: none; }
 }
+
+/* Menus that open from the top bar.
+   An older rule draws every link and button in the top bar as a 36px square icon. It reached into the New
+   and account menus too, and on a phone squeezed each item into that square - names broken over three lines
+   with the icon printed across them. Items in those menus are rows, at every width. */
+.cu-shell.hub-v3 .cu-top-actions :is(.hub-new-menu, .cu-me-menu) :is(a, button).cu-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; height: auto; min-height: 42px; padding: 8px 12px;
+  border: 0; border-radius: 9px; background: none; color: var(--text); font: inherit; font-size: 14px; font-weight: 550;
+  text-align: left; place-items: initial; cursor: pointer;
+}
+.cu-shell.hub-v3 .cu-top-actions :is(.hub-new-menu, .cu-me-menu) :is(a, button).cu-menu-item:hover { background: var(--surface-alt); color: var(--text); }
+.cu-shell.hub-v3 .cu-top-actions :is(.hub-new-menu, .cu-me-menu) .cu-menu-item svg { flex: none; color: var(--muted); }
+.cu-shell.hub-v3 .cu-top-actions :is(.hub-new-menu, .cu-me-menu) .cu-menu-item span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cu-shell.hub-v3 .cu-top-actions .cu-me-menu :is(a, button).cu-menu-item.cu-menu-item--danger { color: #c2273d; font-weight: 650; }
+.cu-shell.hub-v3 :is(.hub-new-menu, .cu-me-menu) { background: var(--surface); border-color: var(--border); border-radius: 14px; box-shadow: 0 16px 40px rgba(9, 20, 44, .22); padding: 6px; }
+.cu-shell.hub-v3 .hub-new-menu p { margin: 8px 12px 4px; font-size: 11.5px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.cu-shell.hub-v3 .cu-me-who strong { color: var(--text); font-size: 14.5px; }
+.cu-shell.hub-v3 .cu-me-who small { color: var(--muted); font-size: 12.5px; }
+@media (max-width: 900px) {
+  /* On a phone both menus are a sheet under the top bar, the width of the screen. */
+  .cu-shell.hub-v3 :is(.hub-new-menu, .cu-me-menu) {
+    position: fixed; top: 66px; left: 8px; right: 8px; bottom: auto; width: auto; min-width: 0;
+    max-height: calc(100dvh - 160px); overflow-y: auto; z-index: 95;
+  }
+  .cu-shell.hub-v3 .cu-top-actions :is(.hub-new-menu, .cu-me-menu) :is(a, button).cu-menu-item { min-height: 48px; font-size: 15.5px; }
+}
+
+/* Fine print people can read.
+   The original dark design set dates, labels, roles and status tags at 7-10px across most pages. Fine print
+   now follows the text around it - a little smaller, never below 12px on a desktop or 13px on a phone. */
+.cu-shell.hub-v3 .cu-main :is(small, time, dt, legend),
+.cu-shell.hub-v3 .cu-main :is(.status-chip, .category-label, .owner-marker, .personnel-state, .sc-tag, .ac-on, .fin-tile-label, .cd-row-state, .cd-kpi-foot, .cd-strip-dow, .priority-table__header, .metric-card__detail),
+.cu-shell.hub-v3 .cu-main :is(.committee-list article span, .committee-list article b, .user-table em, .readiness-list__heading span, .readiness-list__details, .action-card small, .ma-fact em, .cw-facts dt, .integration-list span, .record-row__content small) {
+  font-size: max(12px, .86em);
+}
+.cu-shell.hub-v3 .cu-main .committee-list article span { grid-template-columns: 64px 1fr; font-size: 13px; }
+.cu-shell.hub-v3 .cu-main .committee-list article b { font-size: 11.5px; letter-spacing: .04em; }
+.cu-shell.hub-v3 .cu-main .status-chip { padding: 4px 9px; font-size: 11.5px; letter-spacing: .03em; }
+.cu-shell.hub-v3 .cu-main .committee-list article > strong { font-size: 15px; margin-bottom: 10px; }
+
+/* A person's duty on Members: the star, their name over their duty, then End and Delete side by side. Both
+   buttons used to share one grid cell, so the bin drew on top of End; and the name was 9px. */
+.cu-shell.hub-v3 .cu-main .staff-chip {
+  grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: none;
+  align-items: center; gap: 2px 8px; min-height: 52px; padding: 8px 10px 8px 12px; border-radius: 12px;
+}
+.cu-shell.hub-v3 .cu-main .staff-chip > svg { grid-column: 1; grid-row: 1 / 3; }
+.cu-shell.hub-v3 .cu-main .staff-chip b { grid-area: auto; grid-column: 2; grid-row: 1; font-size: 14px; color: var(--text); }
+.cu-shell.hub-v3 .cu-main .staff-chip small { grid-area: auto; grid-column: 2; grid-row: 2; font-size: 12.5px; color: var(--muted); }
+.cu-shell.hub-v3 .cu-main .staff-chip button { grid-area: auto; grid-column: 3; grid-row: 1 / 3; min-height: 36px; padding: 0 12px; border-radius: 9px; font-size: 13px; font-weight: 650; color: var(--accent); background: var(--surface); }
+.cu-shell.hub-v3 .cu-main .staff-chip .staff-chip__delete { grid-column: 4; width: 36px; padding: 0; display: grid; place-items: center; color: #c2273d; }
+
+@media (max-width: 900px) {
+  .cu-shell.hub-v3 .cu-main :is(small, time, dt, legend),
+  .cu-shell.hub-v3 .cu-main :is(.status-chip, .category-label, .owner-marker, .personnel-state, .sc-tag, .ac-on, .fin-tile-label, .cd-row-state, .cd-kpi-foot, .metric-card__detail),
+  .cu-shell.hub-v3 .cu-main :is(.committee-list article span, .user-table em, .readiness-list__heading span, .readiness-list__details, .action-card small, .ma-fact em, .cw-facts dt, .integration-list span, .record-row__content small) {
+    font-size: max(13px, .88em);
+  }
+  /* Things a finger has to hit. */
+  .cu-shell.hub-v3 .cu-main .ip-button { min-width: 40px; min-height: 40px; justify-content: center; }
+  .cu-shell.hub-v3 .cu-main .integrations__tabs button { min-height: 44px; padding: 0 14px; font-size: 14px; }
+  .cu-shell.hub-v3 .cu-main .dv-link { min-height: 40px; padding: 0 10px; font-size: 14px; }
+  .cu-shell.hub-v3 .cu-main .hub-card-head a { min-height: 40px; display: inline-flex; align-items: center; }
+  .cu-shell.hub-v3 .cu-main .lw-caret { width: 36px; height: 36px; }
+}
 `;

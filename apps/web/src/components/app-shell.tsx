@@ -653,6 +653,11 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
                 <Link href="/connections" role="menuitem" className="cu-menu-item" onClick={() => setMeOpen(false)}>My connections</Link>
                 <Link href="/notifications" role="menuitem" className="cu-menu-item" onClick={() => setMeOpen(false)}>Notifications</Link>
                 <Link href="/settings" role="menuitem" className="cu-menu-item" onClick={() => setMeOpen(false)}>Settings</Link>
+                {/* Here as well as in the top bar, because a phone has no room for the top-bar switch. */}
+                <button type="button" role="menuitem" className="cu-menu-item" onClick={() => { toggleTheme(); setMeOpen(false); }}>
+                  {theme === "dark" ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}
+                  <span>{theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}</span>
+                </button>
                 {/* A real form post, so signing out works the same whether or not JavaScript is having a good day. */}
                 <form method="post" action="/api/auth/logout">
                   <button type="submit" role="menuitem" className="cu-menu-item cu-menu-item--danger">Sign out</button>
