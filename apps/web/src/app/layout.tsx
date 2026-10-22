@@ -4,6 +4,7 @@ import "./globals.css";
 import "./dashboard-overrides.css";
 import "./clickup-theme.css";
 import "./redesign-public.css";
+import "./operations-modules.css";
 
 export const metadata: Metadata = {
   title: {
