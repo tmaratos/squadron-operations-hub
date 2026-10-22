@@ -91,7 +91,7 @@ export const sections: Section[] = [
         label: "Yours",
         items: [
           { label: "Overview", href: "/", icon: Home, hint: "What needs you today" },
-          { label: "My tasks", href: "/tasks", icon: ClipboardCheck, hint: "Everything assigned to you" },
+          { label: "My Work", href: "/tasks", icon: ClipboardCheck, hint: "Everything assigned to you" },
           { label: "Notifications", href: "/notifications", icon: Bell, hint: "What the Hub told you" },
           { label: "Start here", href: "/start-here", icon: Compass, hint: "New to the Hub" }
         ]

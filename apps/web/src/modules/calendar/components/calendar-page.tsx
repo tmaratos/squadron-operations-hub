@@ -264,6 +264,7 @@ html[data-theme=dark] .cx-state--done{color:#c3cedd;background:rgba(148,163,184,
 
 @media(max-width:1200px){.cx-layout{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:700px){
+  .calendar-experience .page-header__actions{display:none}
   .cx-summary{gap:8px}
   .cx-stat{flex-direction:column;align-items:flex-start;gap:8px;padding:12px}
   .cx-stat-icon{width:36px;height:36px}

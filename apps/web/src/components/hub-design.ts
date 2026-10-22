@@ -237,6 +237,7 @@ html:not([data-theme=dark]) .cu-shell.hub-v3 .nc-icon--warning { background: #b4
 .cu-shell.hub-v3 .cu-main .committee-list article span { grid-template-columns: 64px 1fr; font-size: 13px; }
 .cu-shell.hub-v3 .cu-main .committee-list article b { font-size: 11.5px; letter-spacing: .04em; }
 .cu-shell.hub-v3 .cu-main .status-chip { padding: 4px 9px; font-size: 11.5px; letter-spacing: .03em; }
+.cu-shell.hub-v3 .cu-main .member-workload-list b { font-size: 12px; }
 .cu-shell.hub-v3 .cu-main .committee-list article > strong { font-size: 15px; margin-bottom: 10px; }
 
 /* A person's duty on Members: the star, their name over their duty, then End and Delete side by side. Both
@@ -257,6 +258,10 @@ html:not([data-theme=dark]) .cu-shell.hub-v3 .nc-icon--warning { background: #b4
   .cu-shell.hub-v3 .cu-main :is(.committee-list article span, .user-table em, .readiness-list__heading span, .readiness-list__details, .action-card small, .ma-fact em, .cw-facts dt, .integration-list span, .record-row__content small) {
     font-size: max(13px, .88em);
   }
+  /* Labels the phone sweep still found at 11px. */
+  .cu-shell.hub-v3 .cu-main :is(.org-status, .count-badge, .fin-tab, .integration-status, .integration-card__meta, .mbx-fine) { font-size: 12.5px; }
+  .cu-shell.hub-v3 .cu-main .cx-day-count { font-size: 10.5px; }
+  .cu-shell.hub-v3 .cu-main .cx-weekday { font-size: 11px; }
   /* Things a finger has to hit. */
   .cu-shell.hub-v3 .cu-main .ip-button { min-width: 40px; min-height: 40px; justify-content: center; }
   .cu-shell.hub-v3 .cu-main .integrations__tabs button { min-height: 44px; padding: 0 14px; font-size: 14px; }
