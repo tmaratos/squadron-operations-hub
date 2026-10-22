@@ -105,3 +105,43 @@ html[data-theme=dark] .development-page-experience .dv-card{border-color:var(--b
  .development-page-experience .dv-next{grid-column:auto}.development-page-experience .dv-table .dv-btn{width:100%}
  .development-page-experience .dv-steps li{flex-wrap:wrap}.development-page-experience .dv-steps .dv-btn{margin-left:auto}
 }
+
+
+/* Command reporting keeps its interactive widgets and all existing links. */
+.command-experience{--cd-card:var(--surface);--cd-surface:var(--background);--cd-border:var(--border);--cd-muted:var(--muted-strong);--cd-accent:#2459bd;max-width:1600px;gap:18px}
+html[data-theme=dark] .command-experience{--cd-card:var(--surface);--cd-accent:#8ab5ff}
+.command-experience .cd-hero{background:linear-gradient(120deg,#153359 0%,#235282 58%,#326c92 100%);padding:24px;border-radius:19px;gap:17px;box-shadow:0 10px 30px rgba(12,42,79,.12)}
+.command-experience .cd-hero h1{font-size:clamp(23px,2.7vw,32px);line-height:1.25;letter-spacing:-.035em}
+.command-experience .cd-hero-brand{align-items:flex-start;gap:15px}
+.command-experience .cd-hero .cd-summary{font-size:13.5px;line-height:1.55}
+.command-experience .cd-date{font-size:12px}
+.command-experience .cd-card,.command-experience .cd-kpi{border-radius:17px;box-shadow:var(--shadow);background:var(--surface);border-color:var(--border)}
+.command-experience .cd-card{padding:19px}
+.command-experience .cd-kpi{padding:16px;min-height:125px}
+.command-experience .cd-kpi-value{font-size:clamp(30px,3vw,40px);font-weight:800;letter-spacing:-.04em;color:var(--text)}
+.command-experience .cd-kpi-label{font-size:12.5px;color:var(--muted-strong);font-weight:700}
+.command-experience .cd-row{min-height:50px;padding:11px 6px}
+.command-experience .cd-row-title{font-size:13.5px;font-weight:650;color:var(--text);white-space:normal;overflow-wrap:anywhere}
+.command-experience .cd-card-head h2{font-size:16px;font-weight:750;color:var(--text)}
+.command-experience .cd-link{color:var(--accent);font-size:12px;font-weight:700}
+.command-experience .cd-goal{border-radius:11px;border-color:var(--border);background:var(--surface-alt)}
+.command-experience .cd-goal:hover{border-color:var(--accent)}
+.command-experience .cd-bar-label{font-size:12px;color:var(--text);white-space:normal;overflow-wrap:anywhere}
+.command-experience .cd-quick-actions{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:9px}
+.command-experience .cd-quick-actions a{display:flex;justify-content:space-between;align-items:center;gap:7px;min-width:0;min-height:48px;padding:11px 13px;text-decoration:none;font-size:12.5px;font-weight:750;color:var(--text);border:1px solid var(--border);border-radius:12px;background:var(--surface)}
+.command-experience .cd-quick-actions a span{color:var(--accent);font-size:14px}
+.command-experience .cd-quick-actions a:hover{border-color:var(--accent);background:var(--surface-high)}
+.command-experience :where(a,button,select):focus-visible{outline:3px solid #528af0;outline-offset:2px}
+@media(max-width:1100px){.command-experience .cd-quick-actions{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){
+ .command-experience .cd-hero{padding:16px;border-radius:15px}
+ .command-experience .cd-hero-brand{gap:9px;align-items:flex-start}
+ .command-experience .cd-hero .hub-neutral-mark{width:43px;height:43px;font-size:15px;border-radius:10px}
+ .command-experience .cd-summary--health{font-size:12px}
+ .command-experience .cd-quick-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+ .command-experience .cd-quick-actions a{min-height:46px;padding:9px 11px;font-size:12px}
+ .command-experience .cd-kpi{padding:11px;border-radius:13px;min-height:100px}
+ .command-experience .cd-kpi-value{font-size:28px}
+ .command-experience .cd-card{padding:13px;border-radius:14px}
+ .command-experience .cd-row-main{min-width:0}
+}
