@@ -55,6 +55,8 @@ export function DevelopmentBoard() {
   const [paste, setPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [levelFilter, setLevelFilter] = useState("ALL");
   const [newStep, setNewStep] = useState({ fromLevel: "LV1", toLevel: "LV2", title: "", sourceCitation: "" });
 
   useEffect(() => {
@@ -71,6 +73,7 @@ export function DevelopmentBoard() {
     try {
       const response = await fetch("/api/development", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = (await response.json()) as { members?: Member[]; steps?: Step[]; message?: string; useChart?: boolean };
+      if (!response.ok) throw new Error(data.message || "The change could not be saved.");
       if (data.members) setMembers(data.members);
       if (data.steps) setSteps(data.steps);
       if (typeof data.useChart === "boolean") setUseChart(data.useChart);
@@ -85,9 +88,16 @@ export function DevelopmentBoard() {
   const known = members.filter((member) => member.pdLevel).length;
   const positioned = members.filter((member) => member.dutyPosition).length;
   const fromCap = known > 0 || positioned > 0;
+  const matchingMembers = members.filter((member) => {
+    const term = search.trim().toLocaleLowerCase("en-US");
+    const hasLevel = levelFilter === "ALL" || (levelFilter === "NONE" ? !member.pdLevel : member.pdLevel === levelFilter);
+    const matchesText = !term || [member.fullName, member.capid, member.dutyPosition ?? "", member.specialtyTrack ?? ""]
+      .some((value) => value.toLocaleLowerCase("en-US").includes(term));
+    return hasLevel && matchesText;
+  });
 
   return (
-    <div className="dv">
+    <div className="dv development-experience">
       <style>{dvCss}</style>
 
       <section className="dv-card">
@@ -173,10 +183,26 @@ export function DevelopmentBoard() {
         ) : null}
       </section>
 
-      <section className="dv-card">
-        <h2>Members</h2>
+      <section className="dv-card dv-members">
+        <h2>Member development</h2>
+        <p>Find a member's recorded development level and the next confirmed steps. Editing permissions remain unchanged.</p>
+        <div className="dv-filters">
+          <label htmlFor="dv-member-search">Find a member
+            <input id="dv-member-search" type="search" value={search}
+              placeholder="Name, CAPID, duty or specialty"
+              onChange={(event) => setSearch(event.target.value)} />
+          </label>
+          <label htmlFor="dv-level-filter">Development level
+            <select id="dv-level-filter" value={levelFilter} onChange={(event) => setLevelFilter(event.target.value)}>
+              <option value="ALL">All levels</option>
+              <option value="NONE">No level recorded</option>
+              {LEVELS.map((level) => <option key={level} value={level}>{levelName(level)}</option>)}
+            </select>
+          </label>
+          <span role="status" aria-live="polite">{loading ? "Loading members" : matchingMembers.length + " of " + members.length + " members"}</span>
+        </div>
         <div className="dv-table">
-          {members.map((member) => {
+          {matchingMembers.map((member) => {
             const next = steps.filter((step) => step.confidence === "CONFIRMED" && step.fromLevel === member.pdLevel);
             return (
               <article key={member.capid}>
@@ -250,6 +276,9 @@ export function DevelopmentBoard() {
               </article>
             );
           })}
+          {!loading && !matchingMembers.length ? (
+            <p className="dv-empty">{members.length ? "No members match those filters." : "No member development records are available yet."}</p>
+          ) : null}
         </div>
       </section>
 

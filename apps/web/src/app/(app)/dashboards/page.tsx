@@ -195,7 +195,7 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
   const hour = (new Date().getUTCHours() + 20) % 24;
 
   return (
-    <div className="cd">
+    <div className="cd command-experience">
       <style>{cdCss}</style>
 
       <header className="cd-hero">
@@ -236,6 +236,19 @@ export default async function DashboardsPage({ searchParams }: { searchParams: P
           ) : null}
         </div>
       </header>
+
+      <nav className="cd-quick-actions" aria-label="Related squadron work">
+        {[
+          { href: "/tasks?scope=all&from=command", label: "All tasks" },
+          { href: "/compliance", label: "Compliance" },
+          { href: "/staff", label: "Personnel" },
+          { href: "/calendar", label: "Task calendar" },
+          { href: "/documents", label: "Documents" },
+          { href: "/finance", label: "Finance" }
+        ].map((entry) => (
+          <Link key={entry.href} href={entry.href}>{entry.label}<span aria-hidden="true">↗</span></Link>
+        ))}
+      </nav>
 
       {!dashboard ? <div className="cd-card cd-empty">No dashboards yet.</div> : (
         <>

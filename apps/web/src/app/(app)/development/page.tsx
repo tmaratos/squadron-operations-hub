@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export default async function DevelopmentPage() {
   await requireUser();
   return (
-    <div className="page-stack">
+    <div className="page-stack development-page-experience">
       <PageHeader
         eyebrow="People"
         title="Professional development"
