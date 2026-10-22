@@ -72,6 +72,29 @@ jobs:
       - name: Build
         run: pnpm run build
 
+  cloudflare-adapter:
+    name: Cloudflare OpenNext build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install pinned dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+      - name: Verify actual Cloudflare adapter build (no remote migrations or deploy)
+        run: pnpm run cf:build
+
   migrations:
     name: Migrations
     runs-on: ubuntu-latest
