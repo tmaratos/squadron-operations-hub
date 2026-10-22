@@ -6,6 +6,7 @@ import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { notify } from "@/lib/notify/notifications";
 import { assertSameOrigin } from "@/lib/security/origin";
+import { appUrl } from "@/lib/app-url";
 
 // Giving several tasks an owner at once.
 //
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
           body: "In " + row.list_name + "." + (row.due_on ? " Due " + row.due_on + "." : ""),
           itemId: row.id,
           listId: row.list_id,
-          url: (process.env.APP_URL ?? "https://tn170adminhub.tristanmaratos.com") + "/lists/" + row.list_id + "?item=" + row.id,
+          url: appUrl() + "/lists/" + row.list_id + "?item=" + row.id,
           actorUserId: actor.id
         }))
       ).catch((error) => console.error(error));

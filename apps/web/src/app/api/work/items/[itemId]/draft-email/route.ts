@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { appUrl } from "@/lib/app-url";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { createGmailDraft } from "@/lib/google/gmail";
@@ -43,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ ite
     ];
     if (note) lines.push(note, "");
     if (item.description) lines.push(item.description.slice(0, 2000), "");
-    lines.push("Open it in the Hub: " + (process.env.APP_URL ?? "https://tn170adminhub.tristanmaratos.com") + "/lists/" + item.listId + "?item=" + item.id);
+    lines.push("Open it in the Hub: " + appUrl() + "/lists/" + item.listId + "?item=" + item.id);
     lines.push("", "— " + user.fullName);
 
     const draft = await createGmailDraft({
