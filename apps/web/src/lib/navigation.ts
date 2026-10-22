@@ -1,7 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import {
+  BarChart3,
   Bell,
   Bot,
+  Building2,
+  Contact,
   CalendarDays,
   ClipboardCheck,
   Compass,
@@ -13,13 +16,16 @@ import {
   Home,
   LayoutDashboard,
   Link2,
+  LifeBuoy,
   Plug,
   Settings,
   ShieldCheck,
+  Sparkles,
   Target,
   Truck,
   UserCog,
-  Users
+  Users,
+  Workflow
 } from "lucide-react";
 
 // The one map of the app.
@@ -95,7 +101,7 @@ export const sections: Section[] = [
   {
     key: "spaces",
     create: { label: "New department or list", href: "/spaces" },
-    label: "Spaces",
+    label: "Departments",
     icon: Grid3x3,
     href: "/spaces",
     blurb: "The squadron's work, by department and list.",
@@ -112,7 +118,7 @@ export const sections: Section[] = [
   },
   {
     key: "planner",
-    label: "Planner",
+    label: "Calendar",
     icon: CalendarDays,
     href: "/calendar",
     blurb: "When things happen, and what repeats.",
@@ -144,7 +150,7 @@ export const sections: Section[] = [
   {
     key: "ai",
     create: { label: "New agent", href: "/agents" },
-    label: "AI",
+    label: "AI Assistant",
     icon: Bot,
     href: "/agents",
     blurb: "Assistants the squadron keeps.",
@@ -159,7 +165,7 @@ export const sections: Section[] = [
   {
     key: "docs",
     create: { label: "New document", href: "/documents" },
-    label: "Docs",
+    label: "Documents",
     icon: FileText,
     href: "/documents",
     blurb: "How the squadron does things, and the papers it does them with.",
@@ -175,7 +181,7 @@ export const sections: Section[] = [
   },
   {
     key: "command",
-    label: "Command",
+    label: "Operations",
     icon: LayoutDashboard,
     href: "/dashboards",
     blurb: "How the squadron is doing, and whether it would pass.",
@@ -236,7 +242,7 @@ export const sections: Section[] = [
   },
   {
     key: "connect",
-    label: "Connect",
+    label: "Connections",
     icon: Plug,
     href: "/connections",
     blurb: "What the Hub is joined to.",
@@ -268,6 +274,115 @@ export const sections: Section[] = [
       }
     ]
   }
+];
+
+/**
+ * The sidebar, as the squadron sees it.
+ *
+ * The sections above still decide breadcrumbs and which part of the app a page belongs to. This is how they
+ * are laid out down the left: the everyday places first as plain links, then the larger areas as groups that
+ * open in place. Every destination in the sections appears here once - a group holds what used to be a
+ * section's own menu, so nothing became harder to reach when the second column went.
+ */
+export interface SidebarEntry {
+  key: string;
+  label: string;
+  icon: LucideIcon;
+  /** A plain destination. */
+  href?: string;
+  /** Or a group that opens in place. */
+  items?: NavigationItem[];
+  /** The squadron's own departments and lists, or its agents, grown from data. */
+  dynamic?: "spaces" | "agents";
+  /** Opens the assistant rather than going anywhere. */
+  action?: "assistant";
+}
+
+export const sidebar: SidebarEntry[] = [
+  { key: "home", label: "Home", icon: Home, href: "/" },
+  { key: "work", label: "My Work", icon: ClipboardCheck, href: "/tasks" },
+  {
+    key: "calendar",
+    label: "Calendar",
+    icon: CalendarDays,
+    items: [
+      { label: "Calendar", href: "/calendar", icon: CalendarDays, hint: "Work by date" },
+      { label: "Deadlines", href: "/tasks?due=next14&from=planner", icon: ClipboardCheck, hint: "Due in the next fortnight" },
+      { label: "Overdue", href: "/tasks?due=overdue&from=planner", icon: ClipboardCheck, hint: "Past its date and still open" }
+    ]
+  },
+  {
+    key: "squadron",
+    label: "Squadron",
+    icon: Users,
+    items: [
+      { label: "Who does what", href: "/duties", icon: ClipboardCheck, hint: "Recurring duties by role" },
+      { label: "Committees", href: "/staff#committees", icon: Users, hint: "Finance, awards, membership" },
+      { label: "Professional development", href: "/development", icon: Gauge, hint: "Levels and what comes next" },
+      { label: "Goals", href: "/goals", icon: Target, hint: "What the squadron is trying to achieve" }
+    ]
+  },
+  {
+    key: "departments",
+    label: "Departments",
+    icon: Building2,
+    dynamic: "spaces",
+    items: [
+      { label: "All tasks", href: "/tasks?scope=all&from=spaces", icon: ClipboardCheck, hint: "Everybody's work, every list" },
+      { label: "Departments and lists", href: "/spaces", icon: Grid3x3, hint: "Add, rename, reorganise" }
+    ]
+  },
+  { key: "members", label: "Members", icon: Contact, href: "/staff" },
+  { key: "documents", label: "Documents", icon: FileText, href: "/documents" },
+  {
+    key: "compliance",
+    label: "Compliance",
+    icon: ShieldCheck,
+    items: [
+      { label: "Requirements", href: "/compliance", icon: ShieldCheck, hint: "Requirements and the evidence for them" },
+      { label: "Readiness", href: "/readiness", icon: Gauge, hint: "How each functional area is scoring" },
+      { label: "CAP references", href: "/documents?folder=references", icon: FileText, hint: "Regulations and forms" }
+    ]
+  },
+  {
+    key: "operations",
+    label: "Operations",
+    icon: Workflow,
+    items: [
+      { label: "Announcements", href: "/communications", icon: Bell, hint: "What has been said to the squadron" },
+      { label: "Vehicles and equipment", href: "/assets", icon: Truck, hint: "Who has the van, and what is coming due" },
+      { label: "Ledger", href: "/finance?view=ledger", icon: Wallet, hint: "Everything in and out" },
+      { label: "Owed", href: "/finance?view=owed", icon: Wallet, hint: "Promised and not yet moved" },
+      { label: "Budget", href: "/finance?view=budget", icon: Gauge, hint: "Planned against actual" },
+      { label: "Finance committee", href: "/finance?view=committee", icon: ClipboardCheck, hint: "Whether it met, quarter by quarter" }
+    ]
+  },
+  { key: "reports", label: "Reports", icon: BarChart3, href: "/dashboards" },
+  {
+    key: "ai",
+    label: "AI Assistant",
+    icon: Sparkles,
+    action: "assistant",
+    dynamic: "agents",
+    items: [{ label: "Manage agents", href: "/agents", icon: Bot, hint: "Shared and personal" }]
+  }
+];
+
+export const sidebarFooter: SidebarEntry[] = [
+  {
+    key: "settings",
+    label: "Settings",
+    icon: Settings,
+    items: [
+      { label: "Settings", href: "/settings", icon: Settings, hint: "Preferences and behaviour" },
+      { label: "Members and access", href: "/admin/users", icon: UserCog, hint: "Who may sign in, and as what" },
+      { label: "My connections", href: "/connections", icon: Link2, hint: "Gmail, Drive, and what they are used for" },
+      { label: "Integrations", href: "/integrations", icon: Plug, hint: "What the squadron has switched on" },
+      { label: "History", href: "/audit", icon: History, hint: "What changed, and who changed it" },
+      { label: "Security controls", href: "/settings/security", icon: ShieldCheck, hint: "What was attested to CAP" }
+    ]
+  },
+  { key: "help", label: "Help & Support", icon: LifeBuoy, href: "/start-here" }
 ];
 
 /**
