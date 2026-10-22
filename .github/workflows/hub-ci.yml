@@ -72,6 +72,33 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      - name: Verify portable ChatGPT plugin package generator (no server call)
+        working-directory: .
+        run: |
+          node scripts/prepare-chatgpt-plugin.mjs https://tn170adminhub.tristanmaratos.com
+          node -e 'const fs=require("fs");const p="dist/tn170-operations-hub-plugin/";const a=JSON.parse(fs.readFileSync(p+"plugin.json"));const m=JSON.parse(fs.readFileSync(p+"mcp.json"));if(a.name!=="tn170-operations-hub"||m.mcpServers["tn170-hub"].type!=="streamable-http"||m.mcpServers["tn170-hub"].extensions["com.openai"].auth.type!=="api_key")process.exit(1);if(JSON.stringify(m).includes("tn170_mcp_"))process.exit(1);'
+
+
+  cloudflare-adapter:
+    name: Cloudflare OpenNext adapter
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - name: Install dependencies
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+      - name: Build Cloudflare Worker without deployment or D1 migration
+        run: pnpm run cf:build
+
   migrations:
     name: Migrations
     runs-on: ubuntu-latest
