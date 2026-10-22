@@ -16,7 +16,7 @@
     "check:chars": "node scripts/check-source-characters.mjs"
   },
   "dependencies": {
-    "@opennextjs/cloudflare": "^1.20.11",
+    "@opennextjs/cloudflare": "^1.20.13",
     "lucide-react": "^0.468.0",
     "next": "^16.4.2",
     "react": "^19.0.0",
