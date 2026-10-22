@@ -31,6 +31,8 @@ export function CompliancePage({
   canDelete: boolean;
 }) {
   const [requirements, setRequirements] = useState(initialRequirements);
+  const [search, setSearch] = useState("");
+  const [view, setView] = useState<"ALL" | "ACTIVE" | "OVERDUE" | "PAUSED" | "RETIRED">("ALL");
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -42,6 +44,20 @@ export function CompliancePage({
     const dueThisMonth = active.filter((item) => item.nextDueOn && item.nextDueOn >= today() && item.nextDueOn <= monthEnd()).length;
     return { active: active.length, overdue, dueThisMonth, paused: requirements.filter((item) => item.status === "PAUSED").length };
   }, [requirements]);
+
+  const visibleRequirements = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const now = today();
+    return requirements.filter((requirement) => {
+      if (view === "OVERDUE") {
+        if (requirement.status !== "ACTIVE" || !requirement.nextDueOn || requirement.nextDueOn >= now) return false;
+      } else if (view !== "ALL" && requirement.status !== view) return false;
+      if (!term) return true;
+      return [requirement.name, requirement.functionalAreaName, requirement.responsibleName ?? "",
+        requirement.governingSource ?? "", requirement.description ?? ""]
+        .some((value) => value.toLowerCase().includes(term));
+    });
+  }, [requirements, search, view]);
 
   async function createRequirement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -122,7 +138,7 @@ export function CompliancePage({
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack compliance-experience">
       <PageHeader
         eyebrow="Readiness engine"
         title="Compliance and Recurring Requirements"
@@ -155,10 +171,25 @@ export function CompliancePage({
         </SectionCard>
       ) : null}
 
-      <SectionCard title="Requirement register" description="Active requirements will create a task on their due date and then advance to the next recurrence.">
-        {requirements.length ? (
+      <SectionCard title="Requirement register" description="Find obligations by member, department, source, or status. Active requirements create tasks on their due dates.">
+        <div className="compliance-finder">
+          <label htmlFor="compliance-search">Search requirements</label>
+          <input id="compliance-search" type="search" value={search} placeholder="Search by name, department, owner or source"
+            onChange={(event) => setSearch(event.target.value)} />
+          <div className="compliance-filter-tabs" role="group" aria-label="Filter requirements">
+            {([
+              ["ALL", "All"], ["ACTIVE", "Active"], ["OVERDUE", "Overdue"],
+              ["PAUSED", "Paused"], ["RETIRED", "Retired"]
+            ] as const).map(([key, title]) => (
+              <button key={key} type="button" aria-pressed={view === key} className={view === key ? "is-selected" : ""}
+                onClick={() => setView(key)}>{title}</button>
+            ))}
+          </div>
+          <span role="status">{visibleRequirements.length} of {requirements.length} requirements</span>
+        </div>
+        {visibleRequirements.length ? (
           <div className="compliance-list">
-            {requirements.map((requirement) => {
+            {visibleRequirements.map((requirement) => {
               const tone = toneForRequirement(requirement);
               return (
                 <article className="compliance-row" key={requirement.id}>
@@ -171,8 +202,8 @@ export function CompliancePage({
                   </div>
                   <div className="compliance-row__due"><small>Next due</small><strong className={tone === "danger" ? "text-danger" : ""}>{requirement.nextDueOn ? formatDate(requirement.nextDueOn) : "Not scheduled"}</strong></div>
                   <div className="compliance-row__actions">
-                    {canEdit && requirement.status === "ACTIVE" ? <button title="Pause automation" disabled={busyId === requirement.id} onClick={() => setStatus(requirement, "PAUSED")}><Pause size={15} /></button> : null}
-                    {canEdit && requirement.status !== "ACTIVE" ? <button title="Activate automation" disabled={busyId === requirement.id} onClick={() => setStatus(requirement, "ACTIVE")}><Play size={15} /></button> : null}
+                    {canEdit && requirement.status === "ACTIVE" ? <button type="button" aria-label={"Pause " + requirement.name} disabled={busyId === requirement.id} onClick={() => setStatus(requirement, "PAUSED")}><Pause size={15} aria-hidden="true" /> Pause</button> : null}
+                    {canEdit && requirement.status !== "ACTIVE" ? <button type="button" aria-label={"Activate " + requirement.name} disabled={busyId === requirement.id} onClick={() => setStatus(requirement, "ACTIVE")}><Play size={15} aria-hidden="true" /> Activate</button> : null}
                     {canEdit && requirement.status !== "RETIRED" ? <button title="Retire requirement" disabled={busyId === requirement.id} onClick={() => setStatus(requirement, "RETIRED")}>Retire</button> : null}
                     {canDelete ? <ConfirmButton className="danger-action" title="Delete requirement" disabled={busyId === requirement.id} question="Delete it? Retiring keeps its configuration." onConfirm={() => removeRequirement(requirement)}><Trash2 size={15} /></ConfirmButton> : null}
                   </div>
@@ -180,7 +211,7 @@ export function CompliancePage({
               );
             })}
           </div>
-        ) : <div className="empty-state"><strong>No recurring requirements configured</strong><span>Add monthly, quarterly, annual, or local recurring work to activate the automation engine.</span></div>}
+        ) : <div className="empty-state"><strong>{requirements.length ? "No matching requirements" : "No recurring requirements configured"}</strong><span>{requirements.length ? "Change your filters or search to see other records." : "Add monthly, quarterly, annual, or local recurring work to activate the automation engine."}</span></div>}
       </SectionCard>
     </div>
   );
