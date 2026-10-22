@@ -79,10 +79,15 @@ export function CapwatchCard({ status: initial, mayManage }: {
       setNote(data.message ?? "Done.");
       setFailed(!response.ok && !data.skipped);
       if (response.ok || data.skipped) {
-        const check = await fetch("/api/integrations/capwatch", { cache: "no-store" });
-        if (check.ok) {
-          const latest = (await check.json()) as { status?: CapwatchStatus };
-          if (latest.status) setStatus(latest.status);
+        // A failed follow-up status read must not misreport a successful roster sync.
+        try {
+          const check = await fetch("/api/integrations/capwatch", { cache: "no-store" });
+          if (check.ok) {
+            const latest = (await check.json()) as { status?: CapwatchStatus };
+            if (latest.status) setStatus(latest.status);
+          }
+        } catch {
+          // Keep the sync endpoint's actual result; members can refresh status later.
         }
       }
     } catch {
