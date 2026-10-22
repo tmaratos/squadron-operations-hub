@@ -831,38 +831,27 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
         {children}
       </main>
 
-      {/* Phone navigation: the four places members actually go, always within thumb reach. */}
-      {/* Personal quick access, not a second set of sections.
-          It used to be Home / My Tasks / Lists / Dashboard, which put "Dashboard" back on screen beside
-          the clearer "Command" and gave a phone three navigations at once: this bar, the section chips in
-          the drawer, and the drawer's own menu. Sections live in the drawer; this is only yours. */}
-      <nav className="cu-bottom" aria-label="Your quick access">
-        <span className="cu-bottom-label">You</span>
-        <Link href="/" className={"cu-bottom-item" + (pathname === "/" ? " is-active" : "")} aria-current={pathname === "/" ? "page" : undefined}>
-          <Home size={20} /><span>Home</span>
+      {/* Five destinations chosen for quick navigation; notifications and account remain in the header. */}
+      <nav className="cu-bottom" aria-label="Mobile navigation">
+        <Link href="/" className={"cu-bottom-item" + (pathname === "/" ? " is-active" : "")}
+          aria-current={pathname === "/" ? "page" : undefined}>
+          <Home size={21} /><span>Home</span>
         </Link>
-        <Link href="/tasks" className={"cu-bottom-item" + (pathname === "/tasks" && !search.includes("scope=all") ? " is-active" : "")} aria-current={pathname === "/tasks" ? "page" : undefined}>
-          <ClipboardCheck size={20} /><span>My tasks</span>
+        <Link href="/tasks" className={"cu-bottom-item" + (pathname === "/tasks" ? " is-active" : "")}
+          aria-current={pathname === "/tasks" ? "page" : undefined}>
+          <ClipboardCheck size={21} /><span>My work</span>
         </Link>
-        <Link href="/notifications" className={"cu-bottom-item" + (active("/notifications") ? " is-active" : "")} aria-current={active("/notifications") ? "page" : undefined}>
-          <Inbox size={20} /><span>Alerts</span>
+        <Link href="/calendar" className={"cu-bottom-item" + (active("/calendar") ? " is-active" : "")}
+          aria-current={active("/calendar") ? "page" : undefined}>
+          <CalendarDays size={21} /><span>Calendar</span>
         </Link>
-        <button
-          type="button"
-          className={"cu-bottom-item" + (mobileOpen ? " is-active" : "")}
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open sections"
-        >
-          <Menu size={20} /><span>Sections</span>
-        </button>
-        <button
-          type="button"
-          className={"cu-bottom-item" + (meOpen ? " is-active" : "")}
-          onClick={() => setMeOpen((was) => !was)}
-          aria-expanded={meOpen}
-        >
-          <span className="cu-bottom-avatar" aria-hidden="true">{initials(user.fullName)}</span>
-          <span>Me</span>
+        <Link href="/staff" className={"cu-bottom-item" + (active("/staff") ? " is-active" : "")}
+          aria-current={active("/staff") ? "page" : undefined}>
+          <Users size={21} /><span>Squadron</span>
+        </Link>
+        <button type="button" className={"cu-bottom-item" + (mobileOpen ? " is-active" : "")}
+          onClick={() => setMobileOpen(true)} aria-label="Open all features" aria-expanded={mobileOpen}>
+          <Menu size={21} /><span>More</span>
         </button>
       </nav>
     </div>
