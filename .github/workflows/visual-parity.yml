@@ -1,0 +1,61 @@
+# Automated read-only browser checks; safe against the publicly accessible login.
+# Never uses account credentials or posts to production APIs.
+name: UI Visual & Feature Parity
+
+on:
+  pull_request:
+    paths:
+      - "apps/web/src/**"
+      - "apps/web/scripts/browser-visual-regression.cjs"
+      - "apps/web/scripts/verify-feature-parity.mjs"
+      - ".github/workflows/visual-parity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tn170-visual-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-parity:
+    name: Route and capability preservation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Audit source routes and feature entrypoints
+        run: node apps/web/scripts/verify-feature-parity.mjs
+
+  public-browser:
+    name: Chromium responsive and access smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install isolated Chromium test dependencies
+        shell: bash
+        run: |
+          npm install --prefix "$RUNNER_TEMP/tn170-browser" --no-save --no-package-lock --silent playwright@1.56.1
+          "$RUNNER_TEMP/tn170-browser/node_modules/.bin/playwright" install --with-deps chromium
+          echo "NODE_PATH=$RUNNER_TEMP/tn170-browser/node_modules" >> "$GITHUB_ENV"
+      - name: Capture public desktop/mobile login and verify authorization
+        env:
+          TN170_TEST_BASE_URL: https://tn170adminhub.tristanmaratos.com
+          TN170_VISUAL_OUTPUT: test-results/tn170-visual
+        run: node apps/web/scripts/browser-visual-regression.cjs
+      - name: Save public screenshots and sanitized regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tn170-public-visual-regression
+          path: test-results/tn170-visual/
+          retention-days: 14
+          if-no-files-found: warn
