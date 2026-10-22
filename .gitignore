@@ -17,3 +17,4 @@ coverage
 cloudflare/worker/wrangler.generated.jsonc
 cloudflare/worker/seed/bootstrap-owners.generated.sql
 cloudflare/worker/seed/member-emails.sql
+apps/web/wrangler.smoke.jsonc
