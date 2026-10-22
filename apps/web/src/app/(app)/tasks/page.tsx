@@ -2,6 +2,7 @@ import { MyTasks } from "@/components/work/my-tasks";
 import { PageHeader } from "@/components/page-header";
 import { requireUser } from "@/lib/auth/session";
 import { loadDashboardItems } from "@/lib/work/dashboards";
+import { doneAndOpenStatuses } from "@/lib/work/structure";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +62,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   const title = filtered
     ? "Tasks " + described.join(", ")
-    : everybody ? "All tasks" : "My tasks";
+    : everybody ? "All squadron work" : "My Work";
+  const statuses = await doneAndOpenStatuses(shown.map((item) => item.listId)).catch(() => ({}));
 
   const description = filtered
     ? openCount + " open, everybody's, not only yours."
@@ -71,13 +73,14 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="page-stack">
-      <PageHeader eyebrow="Work" title={title} description={description} />
+      <PageHeader title={title} description={description} />
       <MyTasks
         items={shown}
         userId={user.id}
         filterLabel={filtered ? described.join(", ") : undefined}
         showEveryone={everybody}
         canEdit={user.globalRole !== "READ_ONLY"}
+        statuses={statuses}
       />
     </div>
   );
