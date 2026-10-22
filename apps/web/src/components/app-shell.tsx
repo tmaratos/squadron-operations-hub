@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { operationsExperienceCss } from "@/components/operations-experience";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -551,11 +551,12 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
   return (
     <div className="cu-shell">
       <style>{shellCss}</style>
+      <style>{operationsExperienceCss}</style>
 
       <header className="cu-topbar">
         <button className="cu-mobile" onClick={() => setMobileOpen(true)} aria-label="Open navigation"><Menu size={18} /></button>
         <Link href="/" className="cu-brand" aria-label="TN-170 Squadron Operations Hub home">
-          <Image src="/tn170-logo.png" alt="TN-170 emblem" width={30} height={30} priority />
+          <span className="cu-brand-mark" aria-hidden="true">TN</span>
           <span className="cu-brand-text"><strong>TN-170</strong><small>Operations Hub</small></span>
         </Link>
         <div className="cu-ws">
@@ -765,6 +766,40 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
           <button className="cu-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={16} /></button>
         </div>
         <div className="cu-sidebar-body">
+          <p className="cu-side-label">Everyday</p>
+          <nav className="cu-shortcuts" aria-label="Main destinations">
+            {[
+              { href: "/", label: "Home", icon: Home },
+              { href: "/tasks", label: "My work", icon: ClipboardCheck },
+              { href: "/calendar", label: "Calendar", icon: CalendarDays },
+              { href: "/staff", label: "Squadron", icon: Grid3x3 },
+              { href: "/documents", label: "Documents", icon: FileText }
+            ].map((item) => {
+              const Icon = item.icon;
+              const isCurrent = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href + "/"));
+              return <Link key={item.href} href={item.href} className={"cu-shortcut" + (isCurrent ? " is-active" : "")}
+                aria-current={isCurrent ? "page" : undefined} onClick={() => setMobileOpen(false)}>
+                <Icon size={18} aria-hidden="true" /><span>{item.label}</span>
+              </Link>;
+            })}
+          </nav>
+          <p className="cu-side-label">All areas and tools</p>
+          <div className="cu-section-list" aria-label="Operational areas">
+            {sections.map((section) => {
+              const Icon = section.icon;
+              return <button key={section.key} type="button" className={"cu-section-short" + (rail === section.key ? " is-active" : "")}
+                onClick={() => setRail(section.key)} aria-pressed={rail === section.key}>
+                <Icon size={16} aria-hidden="true" /><span>{section.label}</span>
+              </button>;
+            })}
+          </div>
+          <div className="cu-current-section">
+            <div className="cu-current-section-head"><span>{sectionByKey(rail).label} tools</span>
+              <Link href={sectionByKey(rail).href} onClick={() => setMobileOpen(false)}>Open area</Link>
+            </div>
+            {sectionMenu(rail)}
+          </div>
+          <div hidden>
           {/* On a phone the rail of section icons is not on screen, so without this the drawer shows only
               the section you are already in and there is no way to reach another one. It switches which
               section the menu is showing, exactly as pressing the rail does on a wider screen. */}
@@ -787,6 +822,7 @@ export function AppShell({ children, user, workspaces, spaces, agents }: {
             })}
           </div>
           {sectionMenu(rail)}
+          </div>
         </div>
       </aside>
 
