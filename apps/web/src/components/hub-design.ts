@@ -49,17 +49,17 @@ html[data-theme=dark] .cu-shell.hub-v3 {
   --cu-active: rgba(37, 99, 235, .38); --cu-accent: #a9c6ff; --cu-border: rgba(255, 255, 255, .09);
   --cu-side: #0b1a33; --cu-bg: #12264a;
 }
-.hub-brand { display: flex; align-items: center; gap: 8px; padding: 20px 16px 18px 18px; }
-.hub-brand-link { display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; min-width: 0; flex: 1; }
+.hub-logo { display: flex; align-items: center; gap: 8px; padding: 20px 16px 18px 18px; }
+.hub-logo-link { display: flex; align-items: center; gap: 12px; color: #fff; text-decoration: none; min-width: 0; flex: 1; }
 .hub-mark {
   flex: none; width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
   color: #fff; background: linear-gradient(145deg, #2f6df0, #1a47b8);
   box-shadow: 0 6px 16px rgba(17, 60, 160, .35), inset 0 1px 0 rgba(255, 255, 255, .18);
 }
-.hub-brand-text { display: grid; gap: 1px; min-width: 0; line-height: 1.15; }
-.hub-brand-text strong { font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
-.hub-brand-text span { font-size: 10.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #c3d2ec; }
-.hub-brand-text small { font-size: 11px; color: #8fa1bf; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hub-logo-text { display: grid; gap: 1px; min-width: 0; line-height: 1.15; }
+.hub-logo-text strong { color: #fff; font-size: 19px; font-weight: 800; letter-spacing: -.01em; }
+.hub-logo-text span { font-size: 10.5px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #c3d2ec; }
+.hub-logo-text small { font-size: 11px; color: #8fa1bf; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hub-nav-list { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px; display: grid; align-content: start; gap: 2px;
   scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .15) transparent; }
 .hub-nav-foot { padding: 10px 12px 16px; border-top: 1px solid rgba(255, 255, 255, .08); display: grid; gap: 2px; max-height: 45vh; overflow-y: auto; }
@@ -103,6 +103,7 @@ html[data-theme=dark] .cu-shell.hub-v3 {
   background: var(--surface-alt); border: 1px solid var(--cu-border); color: var(--cu-muted); padding: 0 14px; gap: 10px;
 }
 .cu-shell.hub-v3 .cu-search:hover { border-color: #c9d6ea; }
+.cu-shell.hub-v3 .cu-search kbd { padding: 2px 7px; border-radius: 6px; border: 1px solid var(--cu-border); background: var(--surface); color: var(--muted-strong); font-size: 11px; }
 .cu-shell.hub-v3 .cu-top-actions { gap: 10px; margin-left: auto; }
 .cu-shell.hub-v3 .cu-top-actions > button, .cu-shell.hub-v3 .cu-top-actions > a,
 .cu-shell.hub-v3 .cu-top-actions .hub-theme { width: 42px; height: 42px; border-radius: 11px; color: var(--cu-muted); }
@@ -130,6 +131,19 @@ html[data-theme=dark] .cu-shell.hub-v3 {
 .cu-shell.hub-v3 .cu-crumbs a:hover { color: var(--cu-accent); }
 .cu-shell.hub-v3 .cu-link.is-drop { background: rgba(37, 99, 235, .3); outline-color: #6ea0ff; }
 .cu-shell.hub-v3 .cu-move-note { background: #2563eb; }
+
+/* Older pages were drawn for a dark background and kept pale text in places; on the light theme those
+   went nearly invisible. The light theme gets darker versions of the same colours. */
+html:not([data-theme=dark]) .cu-shell.hub-v3 {
+  --warning: #b45309; --success: #15803d; --danger: #c2273d; --info: #1d4ed8; --neutral: #5b6b84;
+}
+html:not([data-theme=dark]) .cu-shell.hub-v3 .member-avatar,
+html:not([data-theme=dark]) .cu-shell.hub-v3 .count-badge { background: #e6efff; color: #1d4ed8; }
+html:not([data-theme=dark]) .cu-shell.hub-v3 .status-chip--approved { background: #e3f4ea; color: #166534; }
+html:not([data-theme=dark]) .cu-shell.hub-v3 .status-chip--pending { background: #fdf0d9; color: #92400e; }
+html:not([data-theme=dark]) .cu-shell.hub-v3 .status-chip--archived { background: #eef1f5; color: #475569; }
+html:not([data-theme=dark]) .cu-shell.hub-v3 .owner-marker { color: #92400e; }
+html:not([data-theme=dark]) .cu-shell.hub-v3 .nc-icon--warning { background: #b45309; }
 
 @media (max-width: 900px) {
   .cu-shell.hub-v3 {
