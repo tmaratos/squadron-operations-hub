@@ -34,15 +34,15 @@ const schema = z.discriminatedUnion("action", [
     dutyPosition: z.string().trim().max(120).nullable().optional(),
     clearPosition: z.boolean().optional(),
     ignoreSource: z.boolean().optional(),
-    pdLevel: z.enum(["I", "II", "III", "IV", "V"]).nullable().optional(),
+    pdLevel: z.enum(["LV1", "LV2", "LV3", "LV4", "LV5", "I", "II", "III", "IV", "V"]).nullable().optional(),
     specialtyTrack: z.string().trim().max(120).nullable().optional(),
     trackRating: z.enum(["TECHNICIAN", "SENIOR", "MASTER"]).nullable().optional()
   }),
   z.object({ action: z.literal("positions"), text: z.string().min(5).max(200000) }),
   z.object({
     action: z.literal("step"),
-    fromLevel: z.enum(["I", "II", "III", "IV", "V"]),
-    toLevel: z.enum(["I", "II", "III", "IV", "V"]),
+    fromLevel: z.enum(["LV1", "LV2", "LV3", "LV4", "LV5", "I", "II", "III", "IV", "V"]),
+    toLevel: z.enum(["LV1", "LV2", "LV3", "LV4", "LV5", "I", "II", "III", "IV", "V"]),
     title: z.string().trim().min(3).max(200),
     detail: z.string().trim().max(1000).optional(),
     sourceCitation: z.string().trim().max(200).optional()
