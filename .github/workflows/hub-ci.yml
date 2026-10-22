@@ -66,6 +66,9 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      - name: Verify CAPWATCH development level compatibility
+        run: node --experimental-strip-types --test scripts/development-levels.test.mjs
+
       - name: Build
         run: pnpm run build
 

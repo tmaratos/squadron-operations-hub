@@ -1,4 +1,7 @@
 import { getDatabase } from "@/lib/cloudflare";
+import { canonicalDevelopmentLevel } from "./development-levels";
+export { LEVELS, canonicalDevelopmentLevel } from "./development-levels";
+export type { Level } from "./development-levels";
 
 // Who holds what, how far along they are, and what would move them forward.
 //
@@ -8,8 +11,7 @@ import { getDatabase } from "@/lib/cloudflare";
 // the position and level are pasted in or set by hand, and the requirements come from the regulation in
 // the squadron's own Drive rather than from a model's recollection of CAP policy.
 
-export const LEVELS = ["I", "II", "III", "IV", "V"] as const;
-export type Level = (typeof LEVELS)[number];
+
 
 export interface MemberDevelopment {
   capid: string;
@@ -72,7 +74,7 @@ export async function listDevelopment(): Promise<MemberDevelopment[]> {
       positionSource: row.set_position ? ("SET" as const) : fromChart ? ("CHART" as const) : null,
       chartPosition: row.chart_position,
       ignoreSource,
-      pdLevel: row.pd_level,
+      pdLevel: canonicalDevelopmentLevel(row.pd_level),
       specialtyTrack: row.specialty_track,
       trackRating: row.track_rating
       };
@@ -120,7 +122,7 @@ export async function saveDevelopment(input: {
       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(capid) DO UPDATE SET " +
       (input.clearPosition ? "duty_position = NULL, " : "duty_position = COALESCE(excluded.duty_position, member_development.duty_position), ") +
       (input.ignoreSource === undefined ? "" : "ignore_source = excluded.ignore_source, ") +
-      "pd_level = COALESCE(excluded.pd_level, member_development.pd_level), " +
+      (input.pdLevel === undefined ? "pd_level = member_development.pd_level, " : "pd_level = excluded.pd_level, ") +
       "specialty_track = COALESCE(excluded.specialty_track, member_development.specialty_track), " +
       "track_rating = COALESCE(excluded.track_rating, member_development.track_rating), " +
       "source = excluded.source, updated_by = excluded.updated_by, updated_at = excluded.updated_at"
@@ -128,7 +130,7 @@ export async function saveDevelopment(input: {
     .bind(
       input.capid,
       input.dutyPosition ?? null,
-      input.pdLevel ?? null,
+      canonicalDevelopmentLevel(input.pdLevel),
       input.specialtyTrack ?? null,
       input.trackRating ?? null,
       input.ignoreSource ? 1 : 0,
@@ -158,8 +160,8 @@ export async function listSteps(includeUnverified = true): Promise<DevelopmentSt
       .all<{ id: string; from_level: string; to_level: string; title: string; detail: string | null; source_citation: string | null; source_quote: string | null; confidence: DevelopmentStep["confidence"] }>();
     return rows.results.map((row) => ({
       id: row.id,
-      fromLevel: row.from_level,
-      toLevel: row.to_level,
+      fromLevel: canonicalDevelopmentLevel(row.from_level) ?? row.from_level,
+      toLevel: canonicalDevelopmentLevel(row.to_level) ?? row.to_level,
       title: row.title,
       detail: row.detail,
       sourceCitation: row.source_citation,
@@ -187,7 +189,7 @@ export async function saveStep(input: {
       "INSERT INTO development_steps (id, from_level, to_level, title, detail, source_citation, source_quote, confidence, active, created_by, created_at, updated_at) " +
       "VALUES (?, ?, ?, ?, ?, ?, NULL, 'CONFIRMED', 1, ?, ?, ?)"
     )
-    .bind(id, input.fromLevel, input.toLevel, input.title.trim(), input.detail?.trim() || null, input.sourceCitation?.trim() || null, input.userId, now, now)
+    .bind(id, canonicalDevelopmentLevel(input.fromLevel), canonicalDevelopmentLevel(input.toLevel), input.title.trim(), input.detail?.trim() || null, input.sourceCitation?.trim() || null, input.userId, now, now)
     .run();
   return id;
 }
@@ -206,7 +208,7 @@ export async function deleteStep(stepId: string): Promise<void> {
 /** What this member would do next. Empty when nobody has told the Hub their level, or recorded the ladder. */
 export function nextStepsFor(member: MemberDevelopment, steps: DevelopmentStep[]): DevelopmentStep[] {
   if (!member.pdLevel) return [];
-  return steps.filter((step) => step.confidence === "CONFIRMED" && step.fromLevel === member.pdLevel);
+  return steps.filter((step) => step.confidence === "CONFIRMED" && canonicalDevelopmentLevel(step.fromLevel) === canonicalDevelopmentLevel(member.pdLevel));
 }
 
 /**

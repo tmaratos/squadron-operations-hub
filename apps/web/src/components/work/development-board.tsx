@@ -147,7 +147,7 @@ export function DevelopmentBoard() {
             {steps.map((step) => (
               <li key={step.id}>
                 <span>
-                  <strong>Level {step.fromLevel} → {step.toLevel}:</strong> {step.title}
+                  <strong>{levelName(step.fromLevel)} → {levelName(step.toLevel)}:</strong> {step.title}
                   {step.sourceCitation ? <small>{step.sourceCitation}</small> : null}
                 </span>
                 {canEdit ? (
