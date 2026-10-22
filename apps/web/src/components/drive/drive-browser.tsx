@@ -16,6 +16,10 @@ export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [folderStack, setFolderStack] = useState<FolderLevel[]>([{ name: "TN 170 Command" }]);
   const [search, setSearch] = useState("");
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [folderName, setFolderName] = useState("");
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -43,9 +47,8 @@ export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
     [files]
   );
 
-  async function createFolder() {
-    const name = prompt("Folder name");
-    if (!name?.trim()) return;
+  async function createFolder(name: string) {
+    if (!name.trim()) return;
     const response = await fetch("/api/drive/files", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -53,7 +56,7 @@ export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
     });
     const result = (await response.json()) as { message?: string };
     if (!response.ok) setMessage(result.message ?? "Folder creation failed.");
-    else await load();
+    else { setFolderName(""); setCreatingFolder(false); await load(); }
   }
 
   async function upload(file: File) {
@@ -67,9 +70,8 @@ export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
     if (response.ok) await load();
   }
 
-  async function rename(file: DriveFile) {
-    const name = prompt("New name", file.name);
-    if (!name?.trim() || name === file.name) return;
+  async function rename(file: DriveFile, name: string) {
+    if (!name.trim() || name === file.name) { setRenamingId(null); return; }
     const response = await fetch(`/api/drive/files/${file.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -77,7 +79,7 @@ export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
     });
     const result = (await response.json()) as { message?: string };
     if (!response.ok) setMessage(result.message ?? "Rename failed.");
-    else await load();
+    else { setRenamingId(null); setRenameValue(""); await load(); }
   }
 
   async function remove(file: DriveFile) {
@@ -109,31 +111,56 @@ export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
         <label className="drive-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search this folder" /></label>
         <button className="icon-button" onClick={() => void load()} aria-label="Refresh Drive"><RefreshCw size={17} /></button>
         {!readOnly ? <>
-          <button className="button button--secondary" onClick={createFolder}><FolderPlus size={16} /> New folder</button>
+          <button type="button" className="button button--secondary" aria-expanded={creatingFolder} onClick={() => setCreatingFolder((open) => !open)}><FolderPlus size={16} /> New folder</button>
           <button className="button button--primary" onClick={() => fileInput.current?.click()}><Upload size={16} /> Upload</button>
           <input ref={fileInput} hidden type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void upload(file); event.currentTarget.value = ""; }} />
         </> : null}
       </div>
-      {message ? <div className="inline-notice">{message}</div> : null}
-      {loading ? <div className="drive-loading">Loading TN 170 Command…</div> : (
+      {creatingFolder && !readOnly ? (
+        <form className="dx-form" onSubmit={(event) => { event.preventDefault(); void createFolder(folderName.trim()); }}>
+          <label htmlFor="dx-new-folder">New folder name</label>
+          <input id="dx-new-folder" autoFocus required maxLength={120} value={folderName} placeholder="Example: Aerospace Education"
+            onChange={(event) => setFolderName(event.target.value)} />
+          <button type="submit" disabled={!folderName.trim()}>Create folder</button>
+          <button type="button" onClick={() => { setCreatingFolder(false); setFolderName(""); }}>Cancel</button>
+        </form>
+      ) : null}
+      {message ? <div className="inline-notice" role="status">{message}</div> : null}
+      {loading ? <div className="drive-loading" role="status">Loading squadron files…</div> : (
+        <>
+        <div className="dx-subtitle"><strong>{currentFolder.name}</strong><span>{sortedFiles.length} item{sortedFiles.length === 1 ? "" : "s"}</span></div>
         <div className="drive-file-list">
           {sortedFiles.length ? sortedFiles.map((file) => (
             <article key={file.id}>
-              <button className="drive-file-main" onClick={() => file.mimeType === FOLDER_MIME ? setFolderStack((levels) => [...levels, { id: file.id, name: file.name }]) : window.open(file.webViewLink, "_blank", "noopener,noreferrer") }>
-                <span className="drive-file-icon">{fileIcon(file)}</span>
-                <span><strong>{file.name}</strong><small>{file.mimeType === FOLDER_MIME ? "Folder" : fileTypeLabel(file.mimeType)} · {file.modifiedTime ? formatDate(file.modifiedTime) : "No modified date"}</small></span>
-              </button>
+              {renamingId === file.id ? (
+                <form className="dx-rename" onSubmit={(event) => { event.preventDefault(); void rename(file, renameValue.trim()); }}>
+                  <input aria-label={"New name for " + file.name} autoFocus required maxLength={250} value={renameValue}
+                    onChange={(event) => setRenameValue(event.target.value)} />
+                  <button type="submit" disabled={!renameValue.trim()}>Save name</button>
+                  <button type="button" onClick={() => setRenamingId(null)}>Cancel</button>
+                </form>
+              ) : (
+                <button type="button" className="drive-file-main"
+                  onClick={() => file.mimeType === FOLDER_MIME
+                    ? setFolderStack((levels) => [...levels, { id: file.id, name: file.name }])
+                    : file.webViewLink ? window.open(file.webViewLink, "_blank", "noopener,noreferrer") : setMessage("This file has no browser link. Try Download instead.")}
+                  aria-label={(file.mimeType === FOLDER_MIME ? "Open folder " : "Open file ") + file.name}>
+                  <span className="drive-file-icon">{fileIcon(file)}</span>
+                  <span><strong>{file.name}</strong><small>{file.mimeType === FOLDER_MIME ? "Folder" : fileTypeLabel(file.mimeType)} · {file.modifiedTime ? formatDate(file.modifiedTime) : "No modified date"}</small></span>
+                </button>
+              )}
               <div className="drive-file-actions">
-                {file.mimeType !== FOLDER_MIME ? <a className="icon-button" href={`/api/drive/download/${file.id}`} aria-label={`Download ${file.name}`}><Download size={16} /></a> : null}
-                {file.webViewLink ? <a className="icon-button" href={file.webViewLink} target="_blank" rel="noreferrer" aria-label={`Open ${file.name} in Google Drive`}><ExternalLink size={16} /></a> : null}
+                {file.mimeType !== FOLDER_MIME ? <a className="icon-button" href={`/api/drive/download/${file.id}`} aria-label={`Download ${file.name}`}><Download size={16} /><span>Download</span></a> : null}
+                {file.webViewLink ? <a className="icon-button" href={file.webViewLink} target="_blank" rel="noopener noreferrer" aria-label={`Open ${file.name} in Google Drive`}><ExternalLink size={16} /><span>Open</span></a> : null}
                 {!readOnly ? <>
-                  <button className="icon-button" onClick={() => void rename(file)} aria-label={`Rename ${file.name}`}><Pencil size={16} /></button>
-                  <button className="icon-button" onClick={() => void remove(file)} aria-label={`Trash ${file.name}`}><Trash2 size={16} /></button>
+                  <button type="button" className="icon-button" onClick={() => { setRenamingId(file.id); setRenameValue(file.name); }} aria-label={`Rename ${file.name}`}><Pencil size={16} /><span>Rename</span></button>
+                  <button type="button" className="icon-button dx-delete" onClick={() => void remove(file)} aria-label={`Move ${file.name} to trash`}><Trash2 size={16} /><span>Trash</span></button>
                 </> : null}
               </div>
             </article>
-          )) : <div className="empty-state"><Folder size={26} /><strong>This folder is empty</strong><span>Upload a file or create a folder to begin.</span></div>}
+          )) : <div className="empty-state"><Folder size={26} /><strong>{search.trim() ? "No matching files" : "This folder is empty"}</strong><span>{search.trim() ? "Try another search in this folder." : readOnly ? "There are no files in this folder." : "Upload a file or create a folder to begin."}</span></div>}
         </div>
+        </>
       )}
     </div>
   );
