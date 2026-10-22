@@ -19,7 +19,7 @@ import { InlineAssignee, InlinePriority, inlinePickerCss } from "@/components/wo
 import type { ItemPriority } from "@/lib/work/types";
 import type { AuthenticatedUser } from "@/lib/auth/types";
 import { loadDashboardItems, type DashboardItem } from "@/lib/work/dashboards";
-import { listRoster } from "@/lib/org/roster";
+import { listPersonnelMembers } from "@/lib/operations/personnel";
 import { dashboardExperienceCss } from "./dashboard-experience";
 
 // The squadron meets in Oak Ridge, so "today" and "good morning" are Eastern time whatever the server's clock says.
@@ -33,7 +33,9 @@ const ZONE = "America/New_York";
  * than a figure nobody can stand behind.
  */
 export async function CommandDashboard({ user }: { user: AuthenticatedUser }) {
-  const [items, roster] = await Promise.all([loadDashboardItems(), listRoster()]);
+  // The same people the Members page counts, so the two pages agree. This used to read the CAPID-linked
+  // roster instead, which held only the senior members pasted from eServices and showed no cadets at all.
+  const [items, roster] = await Promise.all([loadDashboardItems(), listPersonnelMembers().catch(() => [])]);
   const open = items.filter((item) => !item.closed);
   const today = isoDay(0);
   const nextWeek = isoDay(7);
