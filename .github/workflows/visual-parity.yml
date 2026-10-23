@@ -52,7 +52,7 @@ jobs:
           echo "NODE_PATH=$RUNNER_TEMP/tn170-browser/node_modules" >> "$GITHUB_ENV"
       - name: Capture public desktop/mobile login and verify authorization
         env:
-          TN170_TEST_BASE_URL: https://tn170adminhub.tristanmaratos.com
+          TN170_TEST_BASE_URL: https://tn170hub.faithbasedpilot.com
           TN170_VISUAL_OUTPUT: test-results/tn170-visual
         run: node apps/web/scripts/browser-visual-regression.cjs
       - name: Save public screenshots and sanitized regression report

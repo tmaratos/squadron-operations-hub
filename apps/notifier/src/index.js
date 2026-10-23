@@ -8,7 +8,7 @@
 import { generateDutyWork } from "./duty-work.js";
 import { generateRecurringWork } from "./recurring-work.js";
 
-const APP_URL = "https://tn170adminhub.tristanmaratos.com";
+const APP_URL = "https://tn170hub.faithbasedpilot.com";
 const BATCH = 200;
 
 export default {

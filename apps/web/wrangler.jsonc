@@ -14,6 +14,10 @@
   // The addresses the Hub answers on. tn170hub.faithbasedpilot.com is its home from October 2026;
   // tn170adminhub.tristanmaratos.com stays attached until that domain lapses (May 2027) so old links and
   // bookmarks keep working. Listed here so a deploy attaches them, rather than living only in the dashboard.
+  // Only the custom domains serve the Hub. The workers.dev addresses were open to anybody who found them;
+  // every page there still asked for sign-in, but there is no reason for a second front door.
+  "workers_dev": false,
+  "preview_urls": false,
   "routes": [
     { "pattern": "tn170hub.faithbasedpilot.com", "custom_domain": true },
     { "pattern": "tn170adminhub.tristanmaratos.com", "custom_domain": true }
@@ -40,9 +44,9 @@
   ],
   "vars": {
     "APP_NAME": "Squadron Operations Hub",
-    "APP_URL": "https://tn170adminhub.tristanmaratos.com",
+    "APP_URL": "https://tn170hub.faithbasedpilot.com",
     "SESSION_TTL_HOURS": "12",
-    "GOOGLE_REDIRECT_URI": "https://tn170adminhub.tristanmaratos.com/api/auth/google/callback",
+    "GOOGLE_REDIRECT_URI": "https://tn170hub.faithbasedpilot.com/api/auth/google/callback",
     "GOOGLE_SHARED_DRIVE_ID": "0ALYSj1KARR19Uk9PVA",
     "ALLOWED_EMAIL_DOMAINS": "cap.gov",
     // Cloudflare Access, for signing in with a personal address. Neither of these is a secret: the team
@@ -52,6 +56,6 @@
     "CF_ACCESS_TEAM_DOMAIN": "aviationministries.cloudflareaccess.com",
     "CF_ACCESS_AUD": "65355037e9680227c01d0d21c9e8adaeffb17c854c1c9daf94e64ccf73795d6a",
     "GOOGLE_DRIVE_MAX_UPLOAD_MB": "10",
-    "NOTIFY_FROM": "TN-170 Operations Hub <hub@tristanmaratos.com>"
+    "NOTIFY_FROM": "TN-170 Operations Hub <hub@tn170hub.faithbasedpilot.com>"
   }
 }
