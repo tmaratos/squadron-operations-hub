@@ -19,8 +19,8 @@ export function LoginForm({ error }: { error?: string }) {
         </div>
 
         <ul className="auth-assurance-list">
-          <li><Check size={16} /> Google-verified identity</li>
-          <li><Check size={16} /> Existing Shared Drive permissions</li>
+          <li><Check size={16} /> A one-time code to your own email</li>
+          <li><Check size={16} /> Your own Google Drive and mail, connected by you</li>
           <li><Check size={16} /> Hub-specific role controls</li>
         </ul>
 
@@ -35,10 +35,25 @@ export function LoginForm({ error }: { error?: string }) {
         <div className="auth-heading">
           <p className="auth-eyebrow">Member access</p>
           <h2>Welcome to the Hub</h2>
-          <p className="auth-description">Sign in with your CAP address, or with the Google account that can open the TN-170 Shared Drive.</p>
+          <p className="auth-description">Sign in with the email address command staff has on file for you - a personal address, or a CAP one such as 123456@tncap.us.</p>
         </div>
 
         {error ? <div className="auth-message" role="alert">{errorMessage(error)}</div> : null}
+
+        {/* The main door. Cloudflare emails a one-time code to the address; the Hub then checks that an
+            administrator has let that person in. No password, no Google account needed. */}
+        <a className="auth-access-button auth-access-button--primary" href="/api/auth/access/login">
+          <Mail size={18} />
+          <span>Sign in with your email</span>
+          <ExternalLink size={16} />
+        </a>
+        <p className="auth-access-hint">
+          You will be emailed a one-time code. If you are told you have not been let in yet, ask command staff
+          to add your address on the Member access page.
+        </p>
+
+        {/* Kept for the members who already sign in this way, until everybody has moved to their email. */}
+        <div className="auth-or"><span>or</span></div>
 
         <a className="auth-google-button" href="/api/auth/google/start">
           <GoogleMark />
@@ -46,22 +61,9 @@ export function LoginForm({ error }: { error?: string }) {
           <ExternalLink size={16} />
         </a>
 
-        {/* The second door. Both work; neither is going away until the first has been proved unnecessary. */}
-        <div className="auth-or"><span>or</span></div>
-
-        <a className="auth-access-button" href="/api/auth/access/login">
-          <Mail size={18} />
-          <span>Sign in with your personal email</span>
-          <ExternalLink size={16} />
-        </a>
-        <p className="auth-access-hint">
-          Cloudflare emails you a one-time code. Use this if your CAP Google account is unavailable &mdash; an
-          administrator has to have granted you access first.
-        </p>
-
         <div className="auth-access-note">
           <ShieldCheck size={18} />
-          <p><strong>Two ways in.</strong><span>A CAP address gets you in to read. Being on the squadron Shared Drive is what lets you change things — ask command staff to grant that, then sign in again.</span></p>
+          <p><strong>Your files and mail.</strong><span>Once you are in, connect your own Google Drive and mailboxes from My connections. Only you can use what you connect.</span></p>
         </div>
 
         <p className="auth-footer-copy">By continuing, you agree to use this system only for authorized Civil Air Patrol activities.</p>
@@ -83,7 +85,7 @@ function GoogleMark() {
 
 function errorMessage(error: string): string {
   if (error === "unverified") return "Google could not verify this account's email address.";
-  if (error === "drive_access") return "This account is neither a CAP address nor a member of the squadron Shared Drive. Sign in with your CAP address, or ask command staff to grant you Drive access.";
+  if (error === "drive_access") return "That Google account has not been let in. Sign in with your email instead, or ask command staff to add you on the Member access page.";
   if (error === "google_denied") return "Google sign-in was canceled or denied.";
   if (error === "configuration") return "Google sign-in is not configured.";
 

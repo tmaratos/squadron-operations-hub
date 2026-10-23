@@ -3,7 +3,6 @@ import {
   canAccessSharedDrive,
   exchangeGoogleCode,
   getGoogleProfile,
-  isAllowedEmailDomain,
   isVerifiedGoogleProfile,
   oauthPurpose,
   storeGoogleTokens
@@ -13,6 +12,8 @@ import { createSession, getCurrentUser, setSessionCookie } from "@/lib/auth/sess
 import { saveMailAccount } from "@/lib/google/mail-accounts";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { getRequestIp, hashIp } from "@/lib/security/crypto";
+import { getDatabase } from "@/lib/cloudflare";
+import { mayEnter } from "@/lib/members/access";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -53,8 +54,52 @@ export async function GET(request: Request) {
     }
     // Either door: on the squadron's Shared Drive, or holding a CAP address. The Drive is asked either
     // way, because the answer decides what somebody may do once inside and not only whether they get in.
+    if ((await oauthPurpose()) === "CONNECT") {
+      // Attaching Google to the member who is already signed in. Their Google address may be nothing like the
+      // one they signed in with - a personal Gmail holding the squadron Drive is common - and that is fine:
+      // this is their account now, and it is never used to decide who they are.
+      const signedIn = await getCurrentUser();
+      if (!signedIn) return loginRedirect(request, "invalid");
+      try {
+        await storeGoogleTokens({
+          userId: signedIn.id,
+          googleSubject: profile.sub,
+          accessToken: tokens.access_token,
+          refreshToken: tokens.refresh_token,
+          expiresIn: tokens.expires_in,
+          scopes: tokens.scope
+        });
+      } catch (error) {
+        // One Google account belongs to one member. Taking it over silently would leave the other member's
+        // Drive and Gmail pointing at the wrong person.
+        console.error(error);
+        return NextResponse.redirect(new URL("/connections?error=google_in_use#files", request.url));
+      }
+      const driveAccess = await canAccessSharedDrive(tokens.access_token).catch(() => false);
+      // Reaching the squadron Drive was always what let a member change things. An account the Hub itself
+      // limited to reading is lifted once its Drive is connected; one an administrator set stays as set.
+      if (driveAccess && signedIn.globalRole === "READ_ONLY") {
+        await getDatabase()
+          .prepare("UPDATE users SET global_role = 'STAFF_MEMBER', access_basis = 'DRIVE', updated_at = ? WHERE id = ? AND access_basis = 'DOMAIN'")
+          .bind(new Date().toISOString(), signedIn.id)
+          .run();
+      }
+      await recordAuditEvent({
+        actorUserId: signedIn.id,
+        action: "GOOGLE_CONNECTED",
+        entityType: "user",
+        entityId: signedIn.id,
+        summary: signedIn.fullName + " connected the Google account " + profile.email,
+        metadata: { email: profile.email, sharedDrive: driveAccess }
+      });
+      return NextResponse.redirect(new URL(driveAccess ? "/documents" : "/connections?notice=no_drive#files", request.url));
+    }
     const driveAccess = await canAccessSharedDrive(tokens.access_token);
-    if (!driveAccess && !isAllowedEmailDomain(profile.email)) {
+    // Google lets a member in if their account can open the squadron Shared Drive, or if an administrator has
+    // let that address in on the Member access page - the same rule as signing in with an email. It used to
+    // admit any @cap.gov Google account read-only; the Shared Drive check on every request then turned them
+    // away, and with that check gone a CAP member from anywhere could have read the squadron's records.
+    if (!driveAccess && !(await mayEnter(profile.email))) {
       return loginRedirect(request, "drive_access");
     }
 

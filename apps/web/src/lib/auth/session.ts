@@ -4,7 +4,6 @@ import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 import { createRandomToken, sha256 } from "@/lib/security/crypto";
 import { findUserById, toAuthenticatedUser } from "./repository";
 import type { AuthenticatedUser, GlobalRole } from "./types";
-import { canAccessSharedDrive, getUserGoogleAccessToken } from "./google-oauth";
 
 const PRODUCTION_COOKIE = "__Host-squadron_session";
 const DEVELOPMENT_COOKIE = "squadron_session";
@@ -87,12 +86,12 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   if (!session) return null;
   const user = await findUserById(session.user_id);
   if (!user || user.status !== "APPROVED") return null;
-  try {
-    const googleToken = await getUserGoogleAccessToken(user.id);
-    if (!(await canAccessSharedDrive(googleToken))) return null;
-  } catch {
-    return null;
-  }
+  // Who may use the Hub is decided on the Member access page, not by Google. Signing in used to require a
+  // Google token that could open the squadron Shared Drive, checked on every request - which shut out
+  // everybody who came in with a personal email, and anybody whose CAP address is not a Google account.
+  // The Drive is now something a member connects for the Documents page; a member an administrator has
+  // restricted is out at once, whatever their session says.
+  if (await restrictedMember(user.id)) return null;
 
   if (Date.now() - new Date(session.last_seen_at).getTime() > 15 * 60 * 1000) {
     await getDatabase()
@@ -102,6 +101,19 @@ export async function getCurrentUser(): Promise<AuthenticatedUser | null> {
   }
 
   return toAuthenticatedUser(user);
+}
+
+async function restrictedMember(userId: string): Promise<boolean> {
+  try {
+    const row = await getDatabase()
+      .prepare("SELECT 1 AS found FROM member_access WHERE user_id = ? AND status = 'RESTRICTED' LIMIT 1")
+      .bind(userId)
+      .first<{ found: number }>();
+    return Boolean(row);
+  } catch {
+    // A missing table must not lock everybody out; the users table above has already said yes.
+    return false;
+  }
 }
 
 export async function requireUser(): Promise<AuthenticatedUser> {

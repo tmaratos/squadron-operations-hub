@@ -4,12 +4,16 @@ import { getCloudflareEnv } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { createDriveFolder, isGoogleDriveConfigured, listDriveFiles, uploadDriveFile } from "@/lib/drive/google-drive";
 import { getCurrentUser } from "@/lib/auth/session";
+import { googleConnection } from "@/lib/auth/google-oauth";
 import { assertSameOrigin } from "@/lib/security/origin";
 
 export async function GET(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "Authentication required." }, { status: 401 });
   if (!isGoogleDriveConfigured()) return NextResponse.json({ configured: false, files: [] });
+  // The Drive is read with the member's own Google account. Until they have attached one, say so and offer
+  // the button, rather than failing with "could not be loaded".
+  if (!(await googleConnection(user.id))) return NextResponse.json({ configured: true, needsGoogle: true, files: [] });
 
   try {
     const url = new URL(request.url);

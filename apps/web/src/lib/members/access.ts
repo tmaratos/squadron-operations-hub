@@ -260,6 +260,8 @@ export async function grantAccess(input: {
 
   // Cloudflare is told after the Hub has decided, never before, and a failure here does not undo the
   // decision - it only means the door list is briefly behind.
+  await accountForMember(input.capid);
+
   const synced = await syncAccessList({ actorId: input.actorId });
   return {
     ok: true,
@@ -267,6 +269,56 @@ export async function grantAccess(input: {
       ? "Access granted."
       : "Access granted. " + synced.message + " They may not be able to sign in until that is fixed."
   };
+}
+
+/**
+ * The Hub account a member signs in to, found or made.
+ *
+ * Granting access is the administrator's decision that somebody may come in; making them type it twice - once
+ * here, once as an account - only meant that admitted members were turned away at the door with "no account".
+ * An account already tied to the CAPID or to the login address is used; otherwise one is made, approved, as an
+ * ordinary staff member with the roster's name for them. Returns the account's id, or null when the member
+ * has no login address to make it from.
+ */
+export async function accountForMember(capid: string): Promise<string | null> {
+  const db = getDatabase();
+  const row = await db
+    .prepare(
+      "SELECT a.login_email, a.user_id, p.full_name FROM member_access a " +
+      "LEFT JOIN personnel_members p ON p.capid = a.capid WHERE a.capid = ?"
+    )
+    .bind(capid)
+    .first<{ login_email: string | null; user_id: string | null; full_name: string | null }>();
+  if (!row?.login_email) return null;
+  if (row.user_id) return row.user_id;
+
+  const email = row.login_email.trim().toLowerCase();
+  const now = new Date().toISOString();
+  const existing = await db
+    .prepare(
+      "SELECT id, status FROM users WHERE (capid = ? OR lower(email) = ?) AND status NOT IN ('SUSPENDED','ARCHIVED','REJECTED') " +
+      "ORDER BY CASE WHEN capid = ? THEN 0 ELSE 1 END, created_at LIMIT 1"
+    )
+    .bind(capid, email, capid)
+    .first<{ id: string; status: string }>();
+
+  let userId = existing?.id ?? null;
+  if (existing && existing.status === "PENDING") {
+    await db.prepare("UPDATE users SET status = 'APPROVED', approved_at = COALESCE(approved_at, ?), updated_at = ? WHERE id = ?")
+      .bind(now, now, existing.id).run();
+  }
+  if (!userId) {
+    userId = crypto.randomUUID();
+    await db
+      .prepare(
+        "INSERT INTO users (id, email, full_name, capid, duty_title, status, global_role, created_at, updated_at, approved_at) " +
+        "VALUES (?, ?, ?, ?, NULL, 'APPROVED', 'STAFF_MEMBER', ?, ?, ?)"
+      )
+      .bind(userId, email, (row.full_name ?? "").trim() || email.split("@")[0], capid, now, now, now)
+      .run();
+  }
+  await db.prepare("UPDATE member_access SET user_id = ?, updated_at = ? WHERE capid = ?").bind(userId, now, capid).run();
+  return userId;
 }
 
 /**
