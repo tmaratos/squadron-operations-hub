@@ -14,7 +14,8 @@ const SCOPES = ["openid", "email", "profile", DRIVE_SCOPE];
 
 /** Whether the granted permissions include the full Drive scope, matched as a whole permission. */
 export function hasDriveScope(scopes: string | null | undefined): boolean {
-  return (scopes ?? "").split(/\s+/).includes(DRIVE_SCOPE);
+  // An exact comparison of each granted permission. Google returns them as a space-separated list.
+  return (scopes ?? "").split(/\s+/).some((scope) => scope === DRIVE_SCOPE);
 }
 
 // Asked for separately, only by members who want it, and only when they press the button. Drafting is
