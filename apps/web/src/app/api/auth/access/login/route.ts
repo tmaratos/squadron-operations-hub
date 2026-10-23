@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { AccessNotVerified, accessConfigured, identityFromRequest } from "@/lib/auth/cloudflare-access";
-import { accessForEmail } from "@/lib/members/access";
+import { accessForEmail, accountForMember } from "@/lib/members/access";
 import { createSession, setSessionCookie } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/cloudflare";
 import { recordAuditEvent } from "@/lib/db/audit";
@@ -49,14 +49,15 @@ export async function GET(request: Request) {
     return back(request, decision.status === "RESTRICTED" ? "access_restricted" : "access_not_granted");
   }
 
-  // The member is authorised but has never had an account row, so there is nothing to hold their work
-  // against. Rather than invent one here, this is reported: creating accounts is an administrator's act.
-  if (!decision.userId) return back(request, "access_no_account");
+  // Authorised members granted before accounts were made at grant time have none yet. The administrator has
+  // already decided they may come in, so the account is made now rather than turning them away.
+  const userId = decision.userId ?? await accountForMember(decision.capid);
+  if (!userId) return back(request, "access_no_account");
 
   const db = getDatabase();
   const user = await db
     .prepare("SELECT id, status FROM users WHERE id = ?")
-    .bind(decision.userId)
+    .bind(userId)
     .first<{ id: string; status: string }>();
 
   // Suspended in the Hub's own user table is a third refusal, independent of the other two. Three separate

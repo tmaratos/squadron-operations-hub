@@ -78,7 +78,7 @@ async function checkLogin(browser) {
       await page.screenshot({ path: path.join(resultsDir, "public-login-" + v.name + ".png"), fullPage: true, animations: "disabled" });
       const visual = await renderInfo(page);
       const hasGoogle = await page.getByRole("link", { name: /continue with google/i }).count();
-      const hasPersonal = await page.getByRole("link", { name: /sign in with your personal email/i }).count();
+      const hasPersonal = await page.getByRole("link", { name: /sign in with your (personal )?email/i }).count();
       const badBrand = await page.locator('img[alt*="Air Force" i],img[alt*="USAF" i],img[src*="air-force" i]').count();
       // Distinguish a working layout from deployment drift. A CAP squadron patch is
       // not automatically an Air Force logo or an authorization violation.

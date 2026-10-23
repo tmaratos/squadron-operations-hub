@@ -340,6 +340,8 @@ kbd { padding: 3px 7px; border: 1px solid var(--border); border-radius: 6px; bac
 .auth-access-button { min-height: 54px; padding: 0 18px; display: grid; grid-template-columns: 24px 1fr 18px; align-items: center; gap: 12px; border: 1px solid #cfd8e8; border-radius: 12px; color: #15213a; background: #fff; font-size: 14px; font-weight: 750; transition: 160ms ease; }
 .auth-access-button:hover { border-color: #9fb6e7; background: #f8faff; transform: translateY(-1px); box-shadow: 0 10px 24px rgba(29,51,88,.12); }
 .auth-access-button:focus-visible { outline: 3px solid rgba(79,130,255,.25); outline-offset: 2px; }
+.auth-access-button--primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+.auth-access-button--primary:hover { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
 .auth-access-hint { margin: 10px 2px 0; font-size: 12.5px; line-height: 1.55; color: #6b7a94; }
 .auth-google-button > svg:last-child { color: #8290a8; }
 .auth-google-mark { width: 22px; height: 22px; }

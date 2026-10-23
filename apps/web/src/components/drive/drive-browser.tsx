@@ -13,6 +13,7 @@ interface FolderLevel {
 
 export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [needsGoogle, setNeedsGoogle] = useState(false);
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [folderStack, setFolderStack] = useState<FolderLevel[]>([{ name: "TN 170 Command" }]);
   const [search, setSearch] = useState("");
@@ -33,9 +34,10 @@ export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
     if (currentFolder.id) params.set("parentId", currentFolder.id);
     if (search.trim()) params.set("search", search.trim());
     const response = await fetch(`/api/drive/files?${params}`);
-    const result = (await response.json()) as { configured?: boolean; files?: DriveFile[]; message?: string };
+    const result = (await response.json()) as { configured?: boolean; needsGoogle?: boolean; files?: DriveFile[]; message?: string };
     if (!response.ok) setMessage(result.message ?? "Drive could not be loaded.");
     setConfigured(result.configured ?? true);
+    setNeedsGoogle(Boolean(result.needsGoogle));
     setFiles(result.files ?? []);
     setLoading(false);
   }, [currentFolder.id, search]);
@@ -88,6 +90,20 @@ export function DriveBrowser({ readOnly = false }: { readOnly?: boolean }) {
     const result = (await response.json()) as { message?: string };
     if (!response.ok) setMessage(result.message ?? "Delete failed.");
     else await load();
+  }
+
+  if (needsGoogle) {
+    // Members sign in with their own email, so the Drive comes from a Google account they attach - often a
+    // personal Gmail the squadron Drive was shared with. One press, and Google asks which account.
+    return (
+      <div className="drive-not-configured drive-connect">
+        <Folder size={36} />
+        <h2>Connect your Google account to see the squadron files</h2>
+        <p>The TN 170 Command Shared Drive opens with the Google account it was shared with - your CAP Google
+          address or a personal Gmail. Connect it once and the files appear here.</p>
+        <a className="button button--primary" href="/api/auth/google/connect?scope=drive">Connect Google</a>
+      </div>
+    );
   }
 
   if (configured === false) {

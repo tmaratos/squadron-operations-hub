@@ -56,7 +56,16 @@ interface OAuthRow {
   token_expires_at: string;
 }
 
-export async function createGoogleAuthorizationUrl(extraScopes: string[] = [], purpose: "SIGN_IN" | "ADD_MAILBOX" = "SIGN_IN"): Promise<string> {
+/**
+ * What a round trip to Google is for.
+ *
+ * SIGN_IN finds or makes the account belonging to that Google address. CONNECT attaches the Google account to
+ * whoever is already signed in - however they signed in, and whatever their Google address is - so a member
+ * who came in with a personal email can bring their own Drive and Gmail. ADD_MAILBOX adds a second mailbox.
+ */
+export type OAuthPurpose = "SIGN_IN" | "ADD_MAILBOX" | "CONNECT";
+
+export async function createGoogleAuthorizationUrl(extraScopes: string[] = [], purpose: OAuthPurpose = "SIGN_IN"): Promise<string> {
   const env = await requiredOAuthEnv();
   const state = createRandomToken(32);
   const verifier = createRandomToken(64);
@@ -89,7 +98,7 @@ export async function createGoogleAuthorizationUrl(extraScopes: string[] = [], p
     // them to pick the account again is how people end up connecting the wrong one.
     // Adding a second mailbox has to offer the account chooser, or Google hands back the one already
     // signed in and the member adds the mailbox they already had.
-    prompt: purpose === "ADD_MAILBOX" ? "select_account consent" : extraScopes.length ? "consent" : "select_account"
+    prompt: purpose === "ADD_MAILBOX" || purpose === "CONNECT" ? "select_account consent" : extraScopes.length ? "consent" : "select_account"
   });
   return `${AUTHORIZATION_ENDPOINT}?${params}`;
 }
@@ -299,7 +308,21 @@ function base64UrlFromHex(hex: string): string {
 }
 
 /** What the round trip in progress is for, read by the callback. */
-export async function oauthPurpose(): Promise<"SIGN_IN" | "ADD_MAILBOX"> {
+export async function oauthPurpose(): Promise<OAuthPurpose> {
   const store = await cookies();
-  return store.get(oauthCookieName("purpose"))?.value === "ADD_MAILBOX" ? "ADD_MAILBOX" : "SIGN_IN";
+  const value = store.get(oauthCookieName("purpose"))?.value;
+  return value === "ADD_MAILBOX" || value === "CONNECT" ? value : "SIGN_IN";
+}
+
+/** Whether this member has a Google account attached, and with which permissions. */
+export async function googleConnection(userId: string): Promise<{ scopes: string; updatedAt: string } | null> {
+  try {
+    const row = await getDatabase()
+      .prepare("SELECT scopes, updated_at FROM user_google_oauth WHERE user_id = ?")
+      .bind(userId)
+      .first<{ scopes: string | null; updated_at: string }>();
+    return row ? { scopes: row.scopes ?? "", updatedAt: row.updated_at } : null;
+  } catch {
+    return null;
+  }
 }
