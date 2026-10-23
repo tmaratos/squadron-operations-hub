@@ -8,7 +8,9 @@ export function FilesCard({ google, error, notice }: {
   error?: string;
   notice?: string;
 }) {
-  const hasDrive = Boolean(google && google.scopes.includes("https://www.googleapis.com/auth/drive"));
+  // Matched as a whole permission, not as text inside the list - "drive" is also the start of narrower
+  // Drive permissions that cannot open the Shared Drive.
+  const hasDrive = Boolean(google && google.scopes.trim().split(/\s+/).includes("https://www.googleapis.com/auth/drive"));
   return (
     <section className="section-card" id="files">
       <header className="section-card__header">
