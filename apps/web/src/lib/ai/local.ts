@@ -1,26 +1,35 @@
-import { getCloudflareEnv } from "@/lib/cloudflare";
+import { getCloudflareEnv, getDatabase } from "@/lib/cloudflare";
 
-// Squadron AI: the Ollama server on the squadron's own hardware, reached through a Cloudflare Tunnel
-// that is locked behind a Cloudflare Access service token. Task data never goes to an outside AI company.
+// Squadron AI: Cloudflare Workers AI, in the same Cloudflare account that already holds the Hub and its data.
+// Task data never goes to an outside AI company.
+//
+// It used to be Ollama on the squadron's laptop server, reached through the tunnel. Two CPU cores read a
+// prompt at about nine tokens a second, so answers took one to five minutes and most of them timed out.
+// Workers AI answers in seconds with a far larger model.
 
-// qwen3:1.7b is the largest model that answers in reasonable time on the squadron server (2 CPU cores,
-// 5.7 GB RAM, no GPU). It is what anybody waiting for an answer gets.
-const DEFAULT_MODEL = "qwen3:1.7b";
+// Qwen3 30B (mixture of experts, about 3B active): the same family the laptop ran, at a size it never could.
+const DEFAULT_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 
-// Background work - reading a regulation - gets a bigger context window and much longer to answer, but the
-// same model. qwen3:4b was tried here and could not finish: on two cores it generates a few tokens a
-// second, so every chunk hit the time limit and produced nothing at all after half an hour. A model that
-// answers is worth more than a better model that does not, and what protects the quality of an extraction
-// is the quote check, not the size of the model.
-export const CAREFUL_MODEL = "qwen3:1.7b";
+// Background work - reading a regulation - passes this to be given more room to answer. It is the same model:
+// what protects the quality of an extraction is the quote check, not the size of the model.
+export const CAREFUL_MODEL = DEFAULT_MODEL;
 
-interface LocalAiEnv {
-  // Preferred: a private VPC Service binding that reaches Ollama through the hp-server tunnel. No keys, never public.
-  SQUADRON_AI?: { fetch: (input: string | Request, init?: RequestInit) => Promise<Response> };
-  LOCAL_AI_URL?: string;
-  LOCAL_AI_MODEL?: string;
-  LOCAL_AI_ACCESS_CLIENT_ID?: string;
-  LOCAL_AI_ACCESS_CLIENT_SECRET?: string;
+// Qwen3 reasons before it answers, and that is left on. With /no_think it read budget figures backwards and
+// followed instructions written into the data it was given. The reasoning comes back in its own field, is
+// never shown, and is why every request allows this many tokens beyond the answer itself.
+const REASONING_TOKENS = 1500;
+
+// It has to cost the squadron nothing, enforced rather than hoped for, exactly like dictation. Cloudflare gives
+// every account 10,000 Neurons a day; dictation keeps itself under about 7,400 of them. This is the rest,
+// with room to spare. A task summary or tag suggestion costs about 12 Neurons and a long chat 30 or 40, so
+// this is somewhere between fifty and a hundred and fifty answers a day.
+const DAILY_BUDGET_NEURONS = 2000;
+// Workers AI prices for this model, used when a response does not report what it cost.
+const NEURONS_PER_INPUT_TOKEN = 4625 / 1_000_000;
+const NEURONS_PER_OUTPUT_TOKEN = 30475 / 1_000_000;
+
+interface WorkersAiEnv {
+  AI?: { run: (model: string, input: Record<string, unknown>) => Promise<unknown> };
 }
 
 export class LocalAiNotConfiguredError extends Error {
@@ -29,14 +38,18 @@ export class LocalAiNotConfiguredError extends Error {
   }
 }
 
-function env(): LocalAiEnv {
-  return getCloudflareEnv() as unknown as LocalAiEnv;
+export class AiBudgetSpentError extends Error {
+  constructor() {
+    super("The squadron has used today's free AI. It resets overnight, or connect your own AI account in My connections.");
+  }
+}
+
+function env(): WorkersAiEnv {
+  return getCloudflareEnv() as unknown as WorkersAiEnv;
 }
 
 export function isLocalAiConfigured(): boolean {
-  const values = env();
-  if (values.SQUADRON_AI) return true;
-  return Boolean(values.LOCAL_AI_URL && values.LOCAL_AI_ACCESS_CLIENT_ID && values.LOCAL_AI_ACCESS_CLIENT_SECRET);
+  return Boolean(env().AI);
 }
 
 export interface ChatMessage {
@@ -44,45 +57,66 @@ export interface ChatMessage {
   content: string;
 }
 
-// Qwen3 models sometimes think out loud even when asked not to; the /no_think switch keeps replies short and direct.
-function withNoThink(messages: ChatMessage[]): ChatMessage[] {
-  return messages.map((message, index) => (index === messages.length - 1 && message.role === "user" ? { ...message, content: message.content + "\n/no_think" } : message));
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function neuronsUsedToday(): Promise<number> {
+  try {
+    const row = await getDatabase().prepare("SELECT chat_neurons FROM ai_usage WHERE day = ?").bind(today()).first<{ chat_neurons: number }>();
+    return row?.chat_neurons ?? 0;
+  } catch {
+    // No column means no migration yet. Counting nothing would make the budget meaningless, so this refuses.
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+async function addNeurons(neurons: number): Promise<void> {
+  try {
+    await getDatabase()
+      .prepare(
+        "INSERT INTO ai_usage (day, chat_neurons, updated_at) VALUES (?, ?, ?) " +
+        "ON CONFLICT(day) DO UPDATE SET chat_neurons = chat_neurons + excluded.chat_neurons, updated_at = excluded.updated_at"
+      )
+      .bind(today(), neurons, new Date().toISOString())
+      .run();
+  } catch { /* the budget is best effort; the daily check above is the stop */ }
+}
+
+interface Completion {
+  choices?: { message?: { content?: unknown }; finish_reason?: unknown }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number; neurons?: number };
+}
+
+/** What a response cost, erring upwards: the larger of what it reports and what its tokens price at. */
+function neuronsSpent(usage: Completion["usage"]): number {
+  const fromTokens = (usage?.prompt_tokens ?? 0) * NEURONS_PER_INPUT_TOKEN + (usage?.completion_tokens ?? 0) * NEURONS_PER_OUTPUT_TOKEN;
+  return Math.max(typeof usage?.neurons === "number" ? usage.neurons : 0, fromTokens, 1);
 }
 
 export async function localChat(messages: ChatMessage[], options: { json?: boolean; maxTokens?: number; model?: string } = {}): Promise<string> {
-  const values = env();
-  const usingBinding = Boolean(values.SQUADRON_AI);
-  if (!usingBinding && (!values.LOCAL_AI_URL || !values.LOCAL_AI_ACCESS_CLIENT_ID || !values.LOCAL_AI_ACCESS_CLIENT_SECRET)) throw new LocalAiNotConfiguredError();
+  const ai = env().AI;
+  if (!ai) throw new LocalAiNotConfiguredError();
+  if ((await neuronsUsedToday()) >= DAILY_BUDGET_NEURONS) throw new AiBudgetSpentError();
 
-  const url = usingBinding ? "http://squadron-ai/api/chat" : values.LOCAL_AI_URL!.replace(/\/+$/, "") + "/api/chat";
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (!usingBinding) {
-    headers["CF-Access-Client-Id"] = values.LOCAL_AI_ACCESS_CLIENT_ID!;
-    headers["CF-Access-Client-Secret"] = values.LOCAL_AI_ACCESS_CLIENT_SECRET!;
+  const careful = options.model === CAREFUL_MODEL;
+  const answerTokens = options.maxTokens ?? 300;
+  let result: Completion;
+  try {
+    result = (await ai.run(DEFAULT_MODEL, {
+      messages,
+      temperature: 0.2,
+      max_tokens: answerTokens + REASONING_TOKENS * (careful ? 2 : 1),
+      ...(options.json ? { response_format: { type: "json_object" } } : {})
+    })) as Completion;
+  } catch {
+    throw new Error("Squadron AI could not answer just now. Try again in a minute.");
   }
+  await addNeurons(neuronsSpent(result.usage));
 
-  const request = {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model: options.model || values.LOCAL_AI_MODEL || DEFAULT_MODEL,
-      messages: withNoThink(messages),
-      stream: false,
-      think: false,
-      keep_alive: "24h",
-      ...(options.json ? { format: "json" } : {}),
-      // A chunk of regulation plus the instructions is well past the default window, and Ollama silently
-      // drops what will not fit - so the careful model gets a window big enough to see what it was sent.
-      options: { temperature: 0.2, num_predict: options.maxTokens ?? 300, num_ctx: options.model ? 8192 : 4096 }
-    }),
-    // The careful model is slower on hardware without a GPU, so it is given longer before giving up.
-    signal: AbortSignal.timeout(options.model ? 420000 : 90000)
-  };
-
-  const response = usingBinding && values.SQUADRON_AI ? await values.SQUADRON_AI.fetch(url, request) : await fetch(url, request);
-  if (!response.ok) throw new Error("Squadron AI answered with an error (" + response.status + "). Try again in a minute.");
-  const data = (await response.json()) as { message?: { content?: string } };
-  return (data.message?.content ?? "").replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  const choice = result.choices?.[0];
+  const content = typeof choice?.message?.content === "string" ? choice.message.content : "";
+  return content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
 export function parseJsonReply<T>(reply: string, fallback: T): T {

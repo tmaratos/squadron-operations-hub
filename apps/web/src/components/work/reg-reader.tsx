@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 
 // Pointing the Hub at the squadron's own documents and letting it propose what they require.
 //
-// Documents are read one at a time so progress is visible, and because the squadron's own AI server is
-// small and takes a moment per document. Nothing it proposes counts until a person confirms it below.
+// Documents are read one at a time so progress is visible, and so one large document cannot use up the
+// squadron's daily AI allowance in a single burst. Nothing it proposes counts until a person confirms it below.
 
 interface DocumentRow {
   id: string;

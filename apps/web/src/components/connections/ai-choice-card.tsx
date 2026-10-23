@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { ProviderDefinition } from "@/lib/connections";
 
-// Which AI answers when a member asks the Hub for help. The squadron's own server is free and the default;
+// Which AI answers when a member asks the Hub for help. The squadron's own AI is free and the default;
 // anyone who has connected their own account can switch to it, and they pay for that themselves.
 export function AiChoiceCard({
   providers,
@@ -21,7 +21,7 @@ export function AiChoiceCard({
   const [busy, setBusy] = useState(false);
 
   const options = [
-    { id: "squadron-server", name: "The squadron's own AI", detail: squadronAvailable ? "Free, private, and runs on the squadron server. Nothing leaves the squadron." : "Not switched on yet. Ask your administrator." , usable: squadronAvailable },
+    { id: "squadron-server", name: "The squadron's own AI", detail: squadronAvailable ? "Free, and runs in the squadron's own Cloudflare account. No outside AI company sees your data." : "Not switched on yet. Ask your administrator." , usable: squadronAvailable },
     ...providers
       .filter((provider) => provider.category === "ai" && connected.includes(provider.id))
       .map((provider) => ({ id: provider.id, name: provider.name, detail: "Your own account. You are billed by " + provider.name.split(" (")[0] + ".", usable: true }))

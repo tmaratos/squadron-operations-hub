@@ -1,6 +1,6 @@
 interface CloudflareEnv {
   DB: D1Database;
-  /** Workers AI, used only for transcribing dictation, inside a budget the Hub enforces itself. */
+  /** Workers AI: dictation and the squadron's AI assistant, each inside a daily budget the Hub enforces itself. */
   AI?: { run: (model: string, input: Record<string, unknown>) => Promise<{ text?: string }> };
   // Reading mail from Outlook, Hotmail, Office 365 and @cap.gov, which is Microsoft rather than Google.
   // Registered once as an application; each member then connects their own mailbox to it.
@@ -24,11 +24,6 @@ interface CloudflareEnv {
   GOOGLE_TOKEN_ENCRYPTION_KEY?: string;
   GOOGLE_ROOT_FOLDER_ID?: string;
   GOOGLE_DRIVE_MAX_UPLOAD_MB?: string;
-  // Optional: the squadron's own Ollama server, reached through the Cloudflare Tunnel.
-  LOCAL_AI_URL?: string;
-  LOCAL_AI_MODEL?: string;
-  LOCAL_AI_ACCESS_CLIENT_ID?: string;
-  LOCAL_AI_ACCESS_CLIENT_SECRET?: string;
   // The mailbox that Email Routing delivers to, e.g. tasks@example.org. Members get tasks+code@ addresses from it.
   EMAIL_INTAKE_ADDRESS?: string;
   // Outgoing mail. NOTIFY_FROM is a plain var; the provider key is a secret.

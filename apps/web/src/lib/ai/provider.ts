@@ -1,11 +1,12 @@
 import { getDatabase } from "@/lib/cloudflare";
-import { isLocalAiConfigured, localChat, type ChatMessage } from "./local";
+import { AiBudgetSpentError, isLocalAiConfigured, LocalAiNotConfiguredError, localChat, type ChatMessage } from "./local";
 import { isVendorProvider, providerLabel, vendorChat } from "./vendors";
 
 export { providerLabel };
 
 // Where the Hub's intelligence comes from:
-// 1. The squadron's own AI server (Ollama on hp-server) - always free and private. This is the default for everyone.
+// 1. The squadron's own AI (Cloudflare Workers AI in the squadron's account) - free inside a daily budget the Hub
+//    enforces, and no outside AI company sees the data. This is the default for everyone.
 // 2. A member's own AI account (Claude, ChatGPT, Gemini, Mistral, OpenRouter, or any OpenAI-compatible service),
 //    chosen by that member in My connections and paid for by them.
 // The Hub never uses a paid service on the squadron's behalf.
@@ -13,8 +14,8 @@ export { providerLabel };
 export type AiSource = "squadron-server" | "none";
 
 export class AiUnavailableError extends Error {
-  constructor() {
-    super("The Hub assistant isn't switched on yet. Ask your administrator, or connect your own AI account in My connections.");
+  constructor(message = "The Hub assistant isn't switched on yet. Ask your administrator, or connect your own AI account in My connections.") {
+    super(message);
   }
 }
 
@@ -24,7 +25,12 @@ export function aiSource(): AiSource {
 
 export async function aiChat(messages: ChatMessage[], options: { json?: boolean; maxTokens?: number; model?: string } = {}): Promise<string> {
   if (!isLocalAiConfigured()) throw new AiUnavailableError();
-  return localChat(messages, options);
+  try {
+    return await localChat(messages, options);
+  } catch (error) {
+    if (error instanceof AiBudgetSpentError || error instanceof LocalAiNotConfiguredError) throw new AiUnavailableError(error.message);
+    throw error;
+  }
 }
 
 // Which service this member picked in My connections. "squadron-server" is the shared free one; anything else is their own account.

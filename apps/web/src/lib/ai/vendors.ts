@@ -28,7 +28,7 @@ export function providerLabel(providerId: string | null | undefined): string {
     case "mistral": return "your Mistral account";
     case "openrouter": return "your OpenRouter account";
     case "openai-compatible": return "your own AI service";
-    case "squadron-server": return "the squadron's own server";
+    case "squadron-server": return "the squadron's own AI";
     default: return "the assistant";
   }
 }

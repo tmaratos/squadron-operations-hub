@@ -6,7 +6,7 @@ import { isVendorProvider } from "@/lib/ai/vendors";
 import { listUserConnections } from "@/lib/connections";
 import { assertSameOrigin } from "@/lib/security/origin";
 
-// Which AI this member wants the Hub to use. The squadron server is free; their own account is theirs to pay for.
+// Which AI this member wants the Hub to use. The squadron's own AI is free; their own account is theirs to pay for.
 
 export async function GET() {
   try {
