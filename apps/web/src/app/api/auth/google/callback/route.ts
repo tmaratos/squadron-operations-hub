@@ -3,7 +3,6 @@ import {
   canAccessSharedDrive,
   exchangeGoogleCode,
   getGoogleProfile,
-  isAllowedEmailDomain,
   isVerifiedGoogleProfile,
   oauthPurpose,
   storeGoogleTokens
@@ -14,6 +13,7 @@ import { saveMailAccount } from "@/lib/google/mail-accounts";
 import { recordAuditEvent } from "@/lib/db/audit";
 import { getRequestIp, hashIp } from "@/lib/security/crypto";
 import { getDatabase } from "@/lib/cloudflare";
+import { mayEnter } from "@/lib/members/access";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -95,7 +95,11 @@ export async function GET(request: Request) {
       return NextResponse.redirect(new URL(driveAccess ? "/documents" : "/connections?notice=no_drive#files", request.url));
     }
     const driveAccess = await canAccessSharedDrive(tokens.access_token);
-    if (!driveAccess && !isAllowedEmailDomain(profile.email)) {
+    // Google lets a member in if their account can open the squadron Shared Drive, or if an administrator has
+    // let that address in on the Member access page - the same rule as signing in with an email. It used to
+    // admit any @cap.gov Google account read-only; the Shared Drive check on every request then turned them
+    // away, and with that check gone a CAP member from anywhere could have read the squadron's records.
+    if (!driveAccess && !(await mayEnter(profile.email))) {
       return loginRedirect(request, "drive_access");
     }
 
