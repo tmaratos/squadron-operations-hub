@@ -1,4 +1,5 @@
 import { CheckCircle2, Folder } from "lucide-react";
+import { hasDriveScope } from "@/lib/auth/google-oauth";
 
 // Where a member's files come from. Members sign in with their own email now, so the squadron Shared Drive is
 // reached through a Google account they attach here - whichever one the Drive was shared with.
@@ -8,9 +9,8 @@ export function FilesCard({ google, error, notice }: {
   error?: string;
   notice?: string;
 }) {
-  // Matched as a whole permission, not as text inside the list - "drive" is also the start of narrower
-  // Drive permissions that cannot open the Shared Drive.
-  const hasDrive = Boolean(google && google.scopes.trim().split(/\s+/).includes("https://www.googleapis.com/auth/drive"));
+  // Matched as a whole permission - "drive" also starts narrower Drive permissions that cannot open it.
+  const hasDrive = Boolean(google && hasDriveScope(google.scopes));
   return (
     <section className="section-card" id="files">
       <header className="section-card__header">

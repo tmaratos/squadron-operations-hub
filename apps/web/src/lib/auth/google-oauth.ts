@@ -9,7 +9,13 @@ const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const USERINFO_ENDPOINT = "https://openidconnect.googleapis.com/v1/userinfo";
 const DRIVE_API = "https://www.googleapis.com/drive/v3";
 const OAUTH_COOKIE_MAX_AGE = 10 * 60;
-const SCOPES = ["openid", "email", "profile", "https://www.googleapis.com/auth/drive"];
+export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
+const SCOPES = ["openid", "email", "profile", DRIVE_SCOPE];
+
+/** Whether the granted permissions include the full Drive scope, matched as a whole permission. */
+export function hasDriveScope(scopes: string | null | undefined): boolean {
+  return (scopes ?? "").split(/\s+/).includes(DRIVE_SCOPE);
+}
 
 // Asked for separately, only by members who want it, and only when they press the button. Drafting is
 // deliberately the limit: the Hub writes the message into their own Gmail drafts, and a person sends it.
